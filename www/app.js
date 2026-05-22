@@ -614,7 +614,6 @@ function saveSession() {
     sunAzimuth: parseFloat(document.getElementById('sl-sun-azimuth')?.value ?? 135),
     sunElevation: parseFloat(document.getElementById('sl-sun-elevation')?.value ?? 45),
     ambientIntensity: parseFloat(document.getElementById('sl-ambient-panel')?.value ?? 0.35),
-    keyIntensity: parseFloat(document.getElementById('sl-key-panel')?.value ?? 1.4),
     cameraFov: parseFloat(document.getElementById('sl-camera-fov')?.value ?? 45),
     dampingFactor: parseFloat(document.getElementById('sl-damping-panel')?.value ?? 0.5),
     bgType: document.getElementById('bg-type-select')?.value || 'solid',
@@ -706,7 +705,6 @@ async function loadSession(file) {
       };
       
       setSlider('sl-ambient-panel', 'sl-ambient-val', s.ambientIntensity, 'float');
-      setSlider('sl-key-panel', 'sl-key-val', s.keyIntensity, 'float');
       setSlider('sl-sun-azimuth', 'sl-sun-azimuth-val', s.sunAzimuth, 'degree');
       setSlider('sl-sun-elevation', 'sl-sun-elevation-val', s.sunElevation, 'degree');
       setSlider('sl-camera-fov', 'sl-camera-fov-val', s.cameraFov, 'degree');
@@ -1086,14 +1084,6 @@ function bindUI() {
     updateSliderFill(e.target);
     scene.traverse(child => {
       if (child.isAmbientLight) child.intensity = val;
-    });
-  });
-  document.getElementById('sl-key-panel').addEventListener('input', e => {
-    const val = parseFloat(e.target.value);
-    document.getElementById('sl-key-val').textContent = val.toFixed(2);
-    updateSliderFill(e.target);
-    scene.traverse(child => {
-      if (child.isDirectionalLight && child !== sunLight) child.intensity = val;
     });
   });
 
@@ -1760,7 +1750,12 @@ function bindUI() {
     e.preventDefault();
     const files = e.dataTransfer.files;
     if (files && files.length > 0) {
-      handleFile(files[0]);
+      const f = files[0];
+      if (f.name.toLowerCase().endsWith('.rhinoview')) {
+        loadSession(f);
+      } else {
+        handleFile(f);
+      }
     }
   });
 }
@@ -3581,7 +3576,6 @@ function resetSettingsToDefault() {
   
   // Reset range sliders
   resetSlider('sl-ambient-panel', 'sl-ambient-val', 0.35, 'float');
-  resetSlider('sl-key-panel', 'sl-key-val', 1.4, 'float');
   resetSlider('sl-sun-azimuth', 'sl-sun-azimuth-val', 135, 'degree');
   resetSlider('sl-sun-elevation', 'sl-sun-elevation-val', 45, 'degree');
   resetSlider('sl-camera-fov', 'sl-camera-fov-val', 45, 'degree');
@@ -3625,6 +3619,9 @@ function resetSettingsToDefault() {
     bgSel.value = 'solid';
     bgSel.dispatchEvent(new Event('change'));
   }
+
+  // Reset camera projection to perspective
+  switchToPersp();
 }
 
 // ── File upload ────────────────────────────────────────────────────────────
@@ -4074,7 +4071,18 @@ function applyDisplayMode() {
     switch (currentMode) {
 
       case 'wireframe':
-        child.material = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: true });
+        if (edgeOverlay) {
+          // True wireframe: invisible solid + colored edge lines
+          child.material = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: true });
+        } else {
+          // Edges off in wireframe → fall back to solid shaded so model stays visible
+          const base = child.userData.shadedMaterial || orig;
+          const m = base.clone();
+          m.polygonOffset = true;
+          m.polygonOffsetFactor = 1;
+          m.polygonOffsetUnits = 1;
+          child.material = m;
+        }
         if (edges) {
           edges.visible = edgeOverlay;
           const base = child.userData.shadedMaterial || orig;
@@ -4168,9 +4176,8 @@ function applyDisplayMode() {
           edges.renderOrder = 2;
           edges.material.depthWrite = false;
         }
-        if (edgeOverlay) {
-          addTechnicalOutline(child);
-        }
+        // Silhouette outline is always shown in technical mode regardless of edge toggle
+        addTechnicalOutline(child);
         break;
     }
   });
