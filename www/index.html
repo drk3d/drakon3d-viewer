@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>byRhinoView</title>
+  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/rhino3dm@8.0.1/rhino3dm.min.js"></script>
+</head>
+<body>
+
+  <div id="canvas-container"></div>
+
+  <!-- ── Top Bar ── -->
+  <header id="top-bar">
+    <div id="top-bar-main">
+      <span id="file-name-text">Open a 3D model…</span>
+
+      <!-- Left: File button -->
+      <div id="top-bar-left">
+        <button id="btn-file" class="dropdown-trigger-btn" title="File">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
+          </svg>
+          <span class="btn-label" data-i18n="toolbar.file">File</span>
+        </button>
+      </div>
+
+      <!-- Center: Mode, View, Turntable, Select, Tools -->
+      <div id="top-bar-center">
+
+        <!-- 1. Display Mode Dropdown -->
+        <div id="mode-wrap" class="dropdown-wrap">
+          <button id="btn-mode-dropdown" class="dropdown-trigger-btn" title="Display Mode">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/>
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+              <line x1="12" y1="22.08" x2="12" y2="12"/>
+            </svg>
+            <span class="btn-label" data-i18n="toolbar.mode">Mode</span>
+          </button>
+          <div id="mode-dropdown" class="dropdown-menu hidden">
+            <button class="dropdown-item active" data-mode="shaded">
+              <svg viewBox="0 0 16 16" fill="currentColor" stroke="none"><path d="M8 1L1 5v6l7 4 7-4V5z" opacity=".45"/><path d="M1 5l7 4 7-4M8 9v5" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
+              <span data-i18n="mode.shaded">Shaded</span>
+            </button>
+            <button class="dropdown-item" data-mode="wireframe">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M8 1L1 5v6l7 4 7-4V5z"/><path d="M1 5l7 4 7-4M8 9v5"/></svg>
+              <span data-i18n="mode.wireframe">Wireframe</span>
+            </button>
+            <button class="dropdown-item" data-mode="arctic">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><line x1="8" y1="1" x2="8" y2="15"/><line x1="1" y1="8" x2="15" y2="8"/><line x1="3" y1="3" x2="13" y2="13"/><line x1="13" y1="3" x2="3" y2="13"/></svg>
+              <span data-i18n="mode.arctic">Architecture</span>
+            </button>
+            <button class="dropdown-item" data-mode="rendered">
+              <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l1.5 4.5L14 8l-4.5 2.5L8 15l-1.5-4.5L2 8l4.5-2.5z"/></svg>
+              <span data-i18n="mode.rendered">Rendered</span>
+            </button>
+            <button class="dropdown-item" data-mode="technical">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="2" width="12" height="12" rx="1"/><line x1="2" y1="6" x2="14" y2="6"/><line x1="6" y1="6" x2="6" y2="14"/></svg>
+              <span data-i18n="mode.technical">Sketch</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 2. View Dropdown — View presets + Zoom + Show combined -->
+        <div id="view-wrap" class="dropdown-wrap">
+          <button id="btn-view-dropdown" class="dropdown-trigger-btn" title="View / Zoom / Show">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+            <span class="btn-label" data-i18n="toolbar.view">View</span>
+          </button>
+          <div id="view-dropdown" class="dropdown-menu hidden">
+            <!-- View presets -->
+            <button class="dropdown-item active" data-view="perspective">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M8 2L2 6v5l6 3 6-3V6z"/><path d="M2 6l6 3 6-3"/></svg>
+              <span data-i18n="view.perspective">Perspective</span>
+            </button>
+            <button class="dropdown-item" data-view="top">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="3" y="3" width="10" height="10"/><line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/></svg>
+              <span data-i18n="view.top">Top</span>
+            </button>
+            <button class="dropdown-item" data-view="front">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="3" y="4" width="10" height="8"/><line x1="3" y1="8" x2="13" y2="8"/></svg>
+              <span data-i18n="view.front">Front</span>
+            </button>
+            <button class="dropdown-item" data-view="right">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="4" y="4" width="8" height="8"/><line x1="8" y1="4" x2="8" y2="12"/></svg>
+              <span data-i18n="view.right">Right</span>
+            </button>
+            <!-- Named views -->
+            <div class="dropdown-divider"></div>
+            <div class="dropdown-subtitle" style="display:flex;align-items:center;justify-content:space-between;">
+              <span data-i18n="view.named_views">Named Views</span>
+              <button id="btn-save-named-view" class="icon-btn sm" title="Save Current View" style="width:20px;height:20px;border:1px solid var(--border);border-radius:4px;cursor:pointer;flex-shrink:0;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="11" height="11"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </button>
+            </div>
+            <div id="named-views-list" style="max-height:120px; overflow-y:auto;">
+              <span class="dropdown-empty-msg" data-i18n="view.no_named">No named views</span>
+            </div>
+            <!-- Zoom -->
+            <div class="dropdown-divider"></div>
+            <div class="dropdown-subtitle" data-i18n="toolbar.zoom">Zoom</div>
+            <button class="dropdown-item" id="btn-zoom-extents-drop">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><polyline points="10 2 14 2 14 6"/><polyline points="6 14 2 14 2 10"/><line x1="14" y1="2" x2="9" y2="7"/><line x1="2" y1="14" x2="7" y2="9"/></svg>
+              <span data-i18n="zoom.extents">Zoom Extents</span>
+            </button>
+            <button class="dropdown-item" id="btn-zoom-selected-drop">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="7" cy="7" r="4.5"/><line x1="11" y1="11" x2="14.5" y2="14.5"/><line x1="7" y1="5" x2="7" y2="9"/><line x1="5" y1="7" x2="9" y2="7"/></svg>
+              <span data-i18n="zoom.selected">Zoom Selected</span>
+            </button>
+            <!-- Show/Hide -->
+            <div class="dropdown-divider"></div>
+            <div class="dropdown-subtitle" data-i18n="toolbar.show">Show</div>
+            <button class="dropdown-item" id="btn-show-all-drop">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M1 8s3-5.5 7-5.5S15 8 15 8s-3 5.5-7 5.5S1 8 1 8z"/><circle cx="8" cy="8" r="2"/></svg>
+              <span data-i18n="show.all">Show All</span>
+            </button>
+            <button class="dropdown-item" id="btn-hide-selected-drop">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><line x1="2" y1="2" x2="14" y2="14"/><path d="M5.5 5.6A3.5 3.5 0 009 10.4M3.5 3.7C2.1 4.9 1 8 1 8s3 5.5 7 5.5c1.3 0 2.5-.4 3.5-1.1M8 2.5C11.5 2.5 15 8 15 8s-.6 1.1-1.5 2.3"/></svg>
+              <span data-i18n="show.hide_selected">Hide Selected</span>
+            </button>
+            <button class="dropdown-item" id="btn-isolate-selected-drop">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="2"/><line x1="8" y1="1" x2="8" y2="3.5"/><line x1="8" y1="12.5" x2="8" y2="15"/><line x1="1" y1="8" x2="3.5" y2="8"/><line x1="12.5" y1="8" x2="15" y2="8"/></svg>
+              <span data-i18n="show.isolate">Isolate</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 3. Turntable Dropdown -->
+        <div id="turntable-wrap" class="dropdown-wrap">
+          <button id="btn-turntable-dropdown" class="dropdown-trigger-btn" title="Turntable Auto-Rotate">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="23 4 23 10 17 10"/>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+            </svg>
+            <span class="btn-label" data-i18n="toolbar.turntable">Turn</span>
+          </button>
+          <div id="turntable-dropdown" class="dropdown-menu hidden tt-menu">
+            <div class="tt-row" style="justify-content:space-between; align-items:center;">
+              <span class="tt-label" data-i18n="turntable.continuous">Auto-Rotate</span>
+              <button id="btn-tt-toggle" class="tt-toggle-btn" data-i18n="turntable.off">Off</button>
+            </div>
+            <div class="tt-row">
+              <span class="tt-label" data-i18n="turntable.spring">Speed</span>
+              <input type="range" id="tt-spring-slider" min="-5" max="5" step="0.1" value="0">
+              <span id="tt-spring-val" class="tt-val">0.0</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. Select Dropdown -->
+        <div id="select-wrap" class="dropdown-wrap">
+          <button id="btn-select-dropdown" class="dropdown-trigger-btn" title="Selection Mode">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/>
+              <path d="M13 13l6 6"/>
+            </svg>
+            <span class="btn-label" data-i18n="toolbar.select">Select</span>
+          </button>
+          <div id="select-dropdown" class="dropdown-menu hidden">
+            <button class="dropdown-item" data-select="none">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="10" cy="10" r="5"/><line x1="7.5" y1="12.5" x2="12.5" y2="7.5"/></svg>
+              <span data-i18n="select.none">None</span>
+            </button>
+            <button class="dropdown-item active" data-select="single">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M3 1l9 7-4.5 1L6 14z"/></svg>
+              <span data-i18n="select.single">Single</span>
+            </button>
+            <button class="dropdown-item" data-select="multi">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2 1l7 5.5-3.5.8L4.5 13z"/><path d="M6 3.5l7 5.5-3.5.8L8.5 15.5z" opacity=".5"/></svg>
+              <span data-i18n="select.multi">Multi-Select</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 5. Tools Dropdown -->
+        <div id="tools-wrap" class="dropdown-wrap">
+          <button id="btn-tools-dropdown" class="dropdown-trigger-btn" title="Interactive Tools">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+            </svg>
+            <span class="btn-label" data-i18n="toolbar.tools">Tools</span>
+          </button>
+          <div id="tools-dropdown" class="dropdown-menu hidden">
+            <button class="dropdown-item" data-tool="distance" id="btn-tool-distance">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><line x1="2" y1="8" x2="14" y2="8"/><line x1="2" y1="5.5" x2="2" y2="10.5"/><line x1="14" y1="5.5" x2="14" y2="10.5"/><line x1="8" y1="7" x2="8" y2="9"/></svg>
+              <span data-i18n="tools.distance">Distance</span>
+            </button>
+            <button class="dropdown-item" data-tool="angle" id="btn-tool-angle">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2 14L7 2l7 7"/><path d="M7 6a4.5 4.5 0 012 5"/></svg>
+              <span data-i18n="tools.angle">Angle</span>
+            </button>
+            <button class="dropdown-item" data-tool="clipping" id="btn-tool-clipping">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="4" cy="4" r="2.2"/><circle cx="4" cy="12" r="2.2"/><line x1="6" y1="4.5" x2="14" y2="8"/><line x1="6" y1="11.5" x2="14" y2="8"/></svg>
+              <span data-i18n="tools.clipping">Clipping Plane</span>
+            </button>
+            <button class="dropdown-item" data-tool="find" id="btn-tool-find">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="6.5" cy="6.5" r="4.5"/><line x1="10" y1="10" x2="14.5" y2="14.5"/></svg>
+              <span data-i18n="tools.find">Find Object</span>
+            </button>
+            <button class="dropdown-item" data-tool="colorgrade" id="btn-tool-colorgrade">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="5.5" cy="10.5" r="2"/><line x1="7" y1="9" x2="14" y2="2"/><line x1="12" y1="1" x2="15" y2="4"/></svg>
+              <span data-i18n="tools.color_adj">Color Adjustment</span>
+            </button>
+          </div>
+        </div>
+
+      </div><!-- /#top-bar-center -->
+
+      <!-- Right: Layer, Settings -->
+      <div id="top-bar-right">
+        <!-- 6. Layer button (toggles right layer panel) -->
+        <button id="btn-layer-panel" class="dropdown-trigger-btn" title="Layer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+            <polyline points="2 17 12 22 22 17"/>
+            <polyline points="2 12 12 17 22 12"/>
+          </svg>
+          <span class="btn-label" data-i18n="toolbar.layer">Layer</span>
+        </button>
+
+        <!-- 7. Settings button (toggles right settings panel) -->
+        <button id="btn-settings-panel" class="dropdown-trigger-btn" title="Settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+          </svg>
+          <span class="btn-label" data-i18n="toolbar.settings">Settings</span>
+        </button>
+      </div><!-- /#top-bar-right -->
+    </div>
+  </header>
+
+  <!-- ── Left Sliding Sidebar Panel ── -->
+  <aside id="left-panel" class="left-sidebar hidden">
+    <div class="left-sidebar-header">
+      <h2 id="left-panel-title" data-i18n="panel.file">File</h2>
+      <button id="btn-close-menu" class="icon-btn sm" title="Close Panel">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    
+    <div id="left-panel-content" class="left-sidebar-content">
+      <!-- File Section -->
+      <div id="tab-file" class="tab-section">
+          <div class="file-actions-grid">
+            <button id="btn-open-panel" class="panel-action-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+              <span data-i18n="file.open">Open</span>
+            </button>
+            <button id="btn-save-panel" class="panel-action-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+              <span data-i18n="file.save">Save Session</span>
+            </button>
+            <button id="btn-save-glb" class="panel-action-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span data-i18n="file.save_glb">Save GLB</span>
+            </button>
+            <button id="btn-capture-panel" class="panel-action-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+              <span data-i18n="file.capture">Capture</span>
+            </button>
+            <button id="btn-close-panel" class="panel-action-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+              <span data-i18n="file.close">Close</span>
+            </button>
+          </div>
+        
+        <div class="panel-sub-card">
+          <div class="sub-card-title" data-i18n="file.info">File Info</div>
+          <div id="file-info-content" class="info-content-text"><span data-i18n="file.no_model">No model loaded.</span></div>
+        </div>
+      </div>
+      
+    </div>
+    <div class="left-sidebar-resizer" id="left-sidebar-resizer"></div>
+  </aside>
+
+  <!-- ── Right Panel: Layer ── -->
+  <aside id="layer-right-panel" class="right-panel">
+    <div class="right-panel-header">
+      <h2 data-i18n="panel.layer">Layer</h2>
+      <button id="btn-close-layer-panel" class="icon-btn sm" title="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="right-panel-content">
+      <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+        <button id="btn-toggle-all-layers-panel" class="text-btn" data-i18n="layer.toggle_all">Toggle All</button>
+      </div>
+      <div id="layer-list-panel">
+        <span class="dropdown-empty-msg" data-i18n="layer.no_layers">No layers</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── Right Panel: Settings ── -->
+  <aside id="settings-right-panel" class="right-panel">
+    <div class="right-panel-header">
+      <h2 data-i18n="panel.settings">Settings</h2>
+      <button id="btn-close-settings-panel" class="icon-btn sm" title="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="right-panel-content">
+      <div class="setting-group-card">
+        <div class="sub-card-title" data-i18n="bg.title">Background</div>
+        <select id="bg-type-select" class="panel-select">
+          <option value="solid" data-i18n="bg.solid">Solid</option>
+          <option value="gradient2" data-i18n="bg.gradient2">2-Color Gradient</option>
+          <option value="radial" data-i18n="bg.radial">Radial Gradient</option>
+          <option value="gradient4" data-i18n="bg.gradient4">4-Color Gradient</option>
+          <option value="hdr" data-i18n="bg.hdr">HDR Background</option>
+        </select>
+        <div id="bg-radial-section" class="hidden">
+          <div class="slider-row" style="margin-top:8px;">
+            <span class="slider-label" data-i18n="bg.spread">Spread</span>
+            <input type="range" id="bg-radial-spread" min="0.05" max="1" step="0.01" value="0.5">
+            <span id="bg-radial-spread-val" class="slider-val">50%</span>
+          </div>
+        </div>
+        <div id="bg-color-pickers-container" class="bg-color-row">
+          <div id="picker-c1" class="color-circle-wrap">
+            <div class="color-circle" id="bg-panel-swatch-c1" style="background:#2a2b2f" title="Color 1">
+              <input type="color" id="bg-panel-c1" value="#2a2b2f">
+            </div>
+          </div>
+          <div id="picker-c2" class="color-circle-wrap hidden">
+            <div class="color-circle" id="bg-panel-swatch-c2" style="background:#18181c" title="Color 2">
+              <input type="color" id="bg-panel-c2" value="#18181c">
+            </div>
+          </div>
+          <div id="picker-c3" class="color-circle-wrap hidden">
+            <div class="color-circle" id="bg-panel-swatch-c3" style="background:#2d3748" title="Color 3">
+              <input type="color" id="bg-panel-c3" value="#2d3748">
+            </div>
+          </div>
+          <div id="picker-c4" class="color-circle-wrap hidden">
+            <div class="color-circle" id="bg-panel-swatch-c4" style="background:#1a202c" title="Color 4">
+              <input type="color" id="bg-panel-c4" value="#1a202c">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="setting-group-card">
+        <div class="sub-card-title" data-i18n="env.title">Environment Lighting</div>
+        <select id="env-preset-select" class="panel-select" style="margin-bottom:8px;">
+          <option value="studio" data-i18n="env.studio">Studio</option>
+          <option value="neutral" data-i18n="env.neutral">Neutral</option>
+          <option value="sky" data-i18n="env.sky">Sky</option>
+          <option value="sunset" data-i18n="env.sunset">Sunset</option>
+          <option value="night" data-i18n="env.night">Night</option>
+          <option value="hdr-custom" data-i18n="env.custom" id="opt-hdr-custom" disabled>Custom HDR (No file)</option>
+        </select>
+        <input type="file" id="hdr-file-input" accept=".hdr,.exr">
+        <label for="hdr-file-input" class="hdr-upload-label" id="hdr-upload-trigger">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <span data-i18n="hdr.open_file">Open .hdr file</span>
+        </label>
+      </div>
+
+      <div class="setting-group-card">
+        <div class="sub-card-title" data-i18n="vis.title">Visibility</div>
+        <div class="toggles-grid">
+          <label class="setting-item-panel">
+            <span data-i18n="vis.edges">Edges</span>
+            <input type="checkbox" id="chk-edges-panel" checked>
+          </label>
+          <label class="setting-item-panel">
+            <span data-i18n="vis.annotations">Annotations</span>
+            <input type="checkbox" id="chk-annotations-panel" checked>
+          </label>
+          <label class="setting-item-panel">
+            <span data-i18n="vis.ground">Ground</span>
+            <input type="checkbox" id="chk-ground-panel">
+          </label>
+          <label class="setting-item-panel">
+            <span data-i18n="vis.shadows">Shadows</span>
+            <input type="checkbox" id="chk-shadows-panel">
+          </label>
+        </div>
+      </div>
+
+      <div class="setting-group-card">
+        <div class="sub-card-title" data-i18n="light.title">Lighting</div>
+        <div class="sliders-grid">
+          <div class="slider-row">
+            <span class="slider-label" data-i18n="light.ambient">Ambient</span>
+            <input type="range" id="sl-ambient-panel" min="0" max="2" step="0.05" value="0.3">
+            <span id="sl-ambient-val" class="slider-val">0.3</span>
+          </div>
+          <div class="slider-row">
+            <span class="slider-label" data-i18n="light.key">Key</span>
+            <input type="range" id="sl-key-panel" min="0" max="3" step="0.05" value="1.5">
+            <span id="sl-key-val" class="slider-val">1.5</span>
+          </div>
+        </div>
+        <!-- Sun -->
+        <div class="sun-section">
+          <label class="setting-item-panel" style="margin-top:8px;">
+            <span data-i18n="light.sun">Sun</span>
+            <input type="checkbox" id="chk-sun-panel" checked>
+          </label>
+          <div id="sun-controls" class="sliders-grid" style="margin-top:6px;">
+            <div class="slider-row">
+              <span class="slider-label" data-i18n="light.sun_azimuth">Azimuth</span>
+              <input type="range" id="sl-sun-azimuth" min="0" max="360" step="1" value="135">
+              <span id="sl-sun-azimuth-val" class="slider-val">135°</span>
+            </div>
+            <div class="slider-row">
+              <span class="slider-label" data-i18n="light.sun_elevation">Elevation</span>
+              <input type="range" id="sl-sun-elevation" min="5" max="85" step="1" value="45">
+              <span id="sl-sun-elevation-val" class="slider-val">45°</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="setting-group-card">
+        <div class="sub-card-title" data-i18n="camera.title">Camera</div>
+        <div class="sliders-grid">
+          <div class="slider-row" style="margin-bottom:10px;">
+            <span class="slider-label" data-i18n="camera.projection">Projection</span>
+            <select id="select-projection" class="panel-select" style="flex:1; min-width:0;">
+              <option value="perspective" data-i18n="camera.proj_persp">Perspective</option>
+              <option value="parallel" data-i18n="camera.proj_ortho">Parallel</option>
+            </select>
+          </div>
+          <div class="slider-row">
+            <span class="slider-label" data-i18n="camera.fov">Perspective (FOV)</span>
+            <input type="range" id="sl-camera-fov" min="10" max="100" step="1" value="45">
+            <span id="sl-camera-fov-val" class="slider-val">45°</span>
+          </div>
+          <div class="slider-row">
+            <span class="slider-label" data-i18n="camera.friction">Friction</span>
+            <input type="range" id="sl-damping-panel" min="0" max="1" step="0.02" value="0.5">
+            <span id="sl-damping-val" class="slider-val">0.5</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="setting-group-card">
+        <div class="sub-card-title" data-i18n="appearance.title">Appearance</div>
+        <div class="sliders-grid">
+          <div class="slider-row" style="margin-bottom:10px;">
+            <span class="slider-label" data-i18n="lang.label">Language</span>
+            <select id="lang-select" class="panel-select" style="flex:1; min-width:0;">
+              <option value="en">English</option>
+              <option value="ko">한국어</option>
+              <option value="fr">Français</option>
+              <option value="de">Deutsch</option>
+              <option value="es">Español</option>
+              <option value="it">Italiano</option>
+              <option value="ja">日本語</option>
+              <option value="zh-CN">中文 (简体)</option>
+              <option value="zh-TW">中文 (繁體)</option>
+              <option value="pt-BR">Português (BR)</option>
+              <option value="cs">Čeština</option>
+              <option value="pl">Polski</option>
+            </select>
+          </div>
+          <div class="slider-row">
+            <span class="slider-label" data-i18n="theme.label">Theme</span>
+            <select id="theme-select" class="panel-select" style="flex:1; min-width:0;">
+              <option value="system" data-i18n="theme.system">System</option>
+              <option value="dark" data-i18n="theme.dark">Dark</option>
+              <option value="light" data-i18n="theme.light">Light</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── Floating Tools Sub-Panels ── -->
+  <!-- Clipping Plane Settings Overlay -->
+  <div id="clipping-panel" class="cg-panel hidden" data-rot-x="0" data-rot-y="180">
+    <div class="cg-header">
+      <h3 data-i18n="clip.title">Clipping Plane</h3>
+      <button id="btn-close-clipping" class="icon-btn sm">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="cg-body">
+      <div class="cg-row">
+        <label class="setting-item-panel" style="width:100%; display:flex; justify-content:space-between;">
+          <span data-i18n="clip.enable">Enable Clipping</span>
+          <input type="checkbox" id="chk-clipping-enable">
+        </label>
+      </div>
+      <!-- Axis selector + Flip button -->
+      <div class="cg-row" style="gap:6px; flex-wrap:wrap;">
+        <span class="cg-label" data-i18n="clip.axis">Axis</span>
+        <div class="clip-axis-btns">
+          <button id="btn-clip-axis-z" class="clip-axis-btn active" data-axis="z">Z</button>
+          <button id="btn-clip-axis-y" class="clip-axis-btn" data-axis="y">Y</button>
+          <button id="btn-clip-axis-x" class="clip-axis-btn" data-axis="x">X</button>
+        </div>
+        <button id="btn-clip-flip" class="clip-flip-btn" data-i18n="clip.flip">Flip</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Find Objects Dialog -->
+  <div id="find-panel" class="cg-panel hidden">
+    <div class="cg-header">
+      <h3 data-i18n="find.title">Find Object</h3>
+      <button id="btn-close-find" class="icon-btn sm">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="cg-body" style="gap:10px;">
+      <div style="display:flex; gap:6px;">
+        <input type="text" id="find-search-input" data-i18n="find.placeholder" placeholder="Search by name..." style="flex:1; background:var(--surface-hi); border:1px solid var(--border); color:var(--text); border-radius:var(--r-sm); padding:6px 10px; outline:none; font-family:inherit; font-size:0.8rem;">
+        <button id="btn-find-search" class="text-btn" data-i18n="find.search">Search</button>
+      </div>
+      <div id="find-results-container" style="max-height:180px; overflow-y:auto; font-size:0.76rem; border-top:1px solid var(--border); padding-top:8px; display:flex; flex-direction:column; gap:4px;">
+        <span class="dropdown-empty-msg" style="padding:10px 0;" data-i18n="find.enter_name">Enter object name...</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Measurement List Panel ── -->
+  <div id="measurement-list-panel" class="measure-list-panel hidden">
+    <div class="measure-list-header">
+      <span data-i18n="measure.list">Measurements</span>
+      <button id="btn-measure-clear-all" class="text-btn" style="font-size:0.68rem" data-i18n="measure.clearAll">Clear All</button>
+    </div>
+    <div id="measurement-list-items"></div>
+    <div class="measure-list-hint" data-i18n="measure.hint">Click on surface to place points</div>
+  </div>
+
+  <!-- ── Properties Floating Panel ── -->
+  <div id="object-properties" class="prop-float-panel hidden">
+    <div class="prop-drag-handle" id="prop-drag-handle">
+      <h3 data-i18n="props.title">Properties</h3>
+      <button id="btn-close-props" class="icon-btn sm">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div id="prop-content"></div>
+  </div>
+
+  <!-- ── Color Grading / Adjustment Panel ── -->
+  <div id="color-panel" class="cg-panel hidden">
+    <div class="cg-header">
+      <h3 data-i18n="cg.title">Color Grading</h3>
+      <button id="btn-cg-reset" class="text-btn" data-i18n="cg.reset">Reset</button>
+      <button id="btn-close-color" class="icon-btn sm">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="cg-body">
+      <div class="cg-row">
+        <span class="cg-label" data-i18n="cg.exposure">Exposure</span>
+        <input type="range" id="cg-exposure" min="-1.5" max="1.5" step="0.05" value="0">
+        <span class="cg-val" id="cg-exposure-val">0.0</span>
+      </div>
+      <div class="cg-row">
+        <span class="cg-label" data-i18n="cg.contrast">Contrast</span>
+        <input type="range" id="cg-contrast" min="-1" max="1" step="0.05" value="0">
+        <span class="cg-val" id="cg-contrast-val">0.0</span>
+      </div>
+      <div class="cg-row">
+        <span class="cg-label" data-i18n="cg.saturation">Saturation</span>
+        <input type="range" id="cg-saturation" min="-1" max="1" step="0.05" value="0">
+        <span class="cg-val" id="cg-saturation-val">0.0</span>
+      </div>
+      <div class="cg-row">
+        <span class="cg-label" data-i18n="cg.temperature">Temperature</span>
+        <input type="range" id="cg-temperature" min="-1" max="1" step="0.05" value="0">
+        <span class="cg-val" id="cg-temperature-val">0.0</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Watermark ── -->
+  <div id="byrhinoview-watermark">byRhinoView</div>
+
+  <!-- ── Empty State ── -->
+  <div id="empty-state">
+    <div id="empty-icon">
+      <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M32 4L8 18v28l24 14 24-14V18z" stroke-opacity="0.5"/>
+        <path d="M32 4v42M8 18l24 14 24-14"/>
+      </svg>
+    </div>
+    <p class="empty-title" data-i18n="empty.title">No model loaded</p>
+    <p class="empty-sub" data-i18n="empty.sub">Open the FILE sidebar or drop a .3dm, .glb, .stp file here</p>
+  </div>
+  <div id="loading" class="hidden">
+    <div class="spinner"></div>
+    <p id="loading-text">Loading…</p>
+    <div id="progress-bar-container"><div id="progress-bar"></div></div>
+  </div>
+
+  <!-- Hidden File Inputs to prevent mobile WebView user gesture block -->
+  <input type="file" id="file-upload" style="display: none;" accept=".3dm,.glb,.gltf,.stp,.step,.iges,.igs,.stl,.3mf">
+  <input type="file" id="session-upload" style="display: none;" accept=".rhinoview">
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.169.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.169.0/examples/jsm/",
+        "three-mesh-bvh": "https://unpkg.com/three-mesh-bvh@0.8.4/build/index.module.js"
+      }
+    }
+  </script>
+  <!-- ── Save Named View Dialog ── -->
+  <div id="named-view-dialog" class="modal-overlay hidden">
+    <div class="modal-box" style="width:280px;">
+      <div class="modal-header">
+        <span data-i18n="view.save_view_title">Save Named View</span>
+        <button id="btn-close-named-view-dialog" class="icon-btn sm">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body" style="padding:16px;">
+        <label style="font-size:0.75rem;color:var(--text-2);display:block;margin-bottom:6px;" data-i18n="view.view_name_label">View Name</label>
+        <input type="text" id="input-named-view-name"
+          placeholder="e.g. Front Close-up"
+          style="width:100%;background:var(--surface-hi);border:1px solid var(--border);color:var(--text);border-radius:var(--r-sm);padding:7px 10px;font-size:0.8rem;outline:none;box-sizing:border-box;">
+        <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end;">
+          <button id="btn-cancel-named-view" class="panel-action-btn" style="font-size:0.75rem;padding:5px 14px;" data-i18n="common.cancel">Cancel</button>
+          <button id="btn-confirm-named-view" class="panel-action-btn btn-primary" style="font-size:0.75rem;padding:5px 14px;" data-i18n="common.save">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Capture Dialog ── -->
+  <div id="capture-dialog" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 data-i18n="capture.title">Save Capture</h3>
+        <button id="btn-close-capture-dialog" class="icon-btn sm">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <label class="modal-row">
+          <span data-i18n="capture.transparent">Transparent Background</span>
+          <input type="checkbox" id="capture-transparent" style="width:16px;height:16px;accent-color:var(--primary);">
+        </label>
+        <div class="modal-row">
+          <span data-i18n="capture.size">Image Size</span>
+          <select id="capture-size-select" class="panel-select" style="width:140px;">
+            <option value="1">Original (1×)</option>
+            <option value="2">Large (2×)</option>
+            <option value="4">Extra Large (4×)</option>
+          </select>
+        </div>
+        <div class="modal-row" style="gap:4px;">
+          <span data-i18n="capture.width">W</span>
+          <input type="number" id="capture-w" min="100" max="8000" style="width:70px; background:var(--surface-hi); border:1px solid var(--border); color:var(--text); border-radius:var(--r-sm); padding:4px 7px; font-size:0.75rem; outline:none; font-family:inherit;">
+          <span>×</span>
+          <input type="number" id="capture-h" min="100" max="8000" style="width:70px; background:var(--surface-hi); border:1px solid var(--border); color:var(--text); border-radius:var(--r-sm); padding:4px 7px; font-size:0.75rem; outline:none; font-family:inherit;">
+          <span style="font-size:0.68rem; color:var(--text-2)">px</span>
+        </div>
+        <button id="btn-capture-confirm" class="panel-action-btn" style="margin-top:8px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <span data-i18n="capture.save">Save Image</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="app.js?v=1.2.1"></script>
+</body>
+</html>

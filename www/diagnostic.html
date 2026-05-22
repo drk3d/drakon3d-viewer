@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>rhino3dm Diagnostic</title>
+  <script src="https://cdn.jsdelivr.net/npm/rhino3dm@8.0.1/rhino3dm.min.js"></script>
+  <style>
+    body { font-family: monospace; background: #1a1a1a; color: #e0e0e0; padding: 20px; }
+    h2 { color: #4fc3f7; }
+    h3 { color: #81c784; margin-top: 20px; }
+    .obj  { background: #2a2a2a; padding: 10px; margin: 8px 0; border-radius: 4px; border-left: 3px solid #4fc3f7; }
+    .warn { border-left-color: #ff9800; }
+    .err  { border-left-color: #ef5350; }
+    .ok   { border-left-color: #66bb6a; }
+    pre   { margin: 4px 0; font-size: 12px; white-space: pre-wrap; }
+    #drop-zone {
+      border: 2px dashed #4fc3f7; border-radius: 8px; padding: 30px;
+      text-align: center; margin-bottom: 20px; cursor: pointer; color: #4fc3f7;
+    }
+    #drop-zone:hover { background: rgba(79,195,247,0.1); }
+  </style>
+</head>
+<body>
+  <h2>🔬 rhino3dm API Diagnostic v2</h2>
+  <p>Drop a .3dm file to inspect objects. Tests SubD meshing methods and annotation detection.</p>
+  <div id="drop-zone" onclick="document.getElementById('file-in').click()">
+    📂 Drop .3dm file here or click to browse
+    <input type="file" id="file-in" accept=".3dm" style="display:none">
+  </div>
+  <div id="status">⏳ Loading rhino3dm WebAssembly...</div>
+  <div id="output"></div>
+
+  <script>
+    let rhino = null;
+    window.rhino3dm().then(r => { rhino = r; document.getElementById('status').textContent = '✅ rhino3dm loaded.'; })
+                     .catch(e => { document.getElementById('status').textContent = '❌ ' + e; });
+
+    const dropZone = document.getElementById('drop-zone');
+    const fileIn   = document.getElementById('file-in');
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.background='rgba(79,195,247,0.2)'; });
+    dropZone.addEventListener('dragleave', () => dropZone.style.background = '');
+    dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.style.background=''; if(e.dataTransfer.files[0]) process(e.dataTransfer.files[0]); });
+    fileIn.addEventListener('change', e => { if(e.target.files[0]) process(e.target.files[0]); });
+
+    async function process(file) {
+      const out = document.getElementById('output');
+      out.innerHTML = `<h3>File: ${file.name} (${(file.size/1024).toFixed(1)} KB)</h3>`;
+      if (!rhino) { out.innerHTML += '<div class="obj err"><pre>rhino3dm not loaded</pre></div>'; return; }
+
+      try {
+        const buf = await file.arrayBuffer();
+        const doc = rhino.File3dm.fromByteArray(new Uint8Array(buf));
+        if (!doc) { out.innerHTML += '<div class="obj err"><pre>Parse failed</pre></div>'; return; }
+
+        out.innerHTML += `<div class="obj ok"><pre>✅ Parsed OK — ${doc.objects().count} objects</pre></div>`;
+
+        // ── API Availability ────────────────────────────────────────────
+        out.innerHTML += '<h3>API Availability</h3>';
+        const apis = [
+          ['rhino.SubD', rhino.SubD],
+          ['rhino.Mesh.createFromSubDControlNet', rhino.Mesh?.createFromSubDControlNet],
+          ['rhino.Mesh.createFromSubD',           rhino.Mesh?.createFromSubD],
+          ['rhino.TextDot',       rhino.TextDot],
+          ['rhino.TextEntity',    rhino.TextEntity],
+          ['rhino.Dimension',     rhino.Dimension],
+          ['rhino.AnnotationBase',rhino.AnnotationBase],
+        ];
+        apis.forEach(([name, val]) => {
+          const t = typeof val;
+          out.innerHTML += `<div class="obj ${t !== 'undefined' ? 'ok' : 'warn'}"><pre>${name}: ${t}</pre></div>`;
+        });
+
+        // ── Object Scan ─────────────────────────────────────────────────
+        out.innerHTML += `<h3>Objects (${doc.objects().count})</h3>`;
+        const objects = doc.objects();
+        const count   = objects.count;
+        const summary = { subd:0, textdot:0, text:0, dim:0, annotBase:0, curve:0, mesh:0, brep:0, extrusion:0, other:0 };
+
+        for (let i = 0; i < count; i++) {
+          const modelObj = objects.get(i);
+          if (!modelObj) continue;
+          const geom = modelObj.geometry();
+          const attr = modelObj.attributes();
+          if (!geom) { modelObj.delete(); continue; }
+
+          const cn = geom.constructor.name;
+          let info = `[${i}] type="${cn}"`;
+          let cls  = 'obj';
+          let show = (i < 5); // always show first 5
+
+          // ── SubD ────────────────────────────────────────────────────
+          const isSubD = (rhino.SubD && geom instanceof rhino.SubD) || cn === 'SubD';
+          if (isSubD) {
+            summary.subd++; cls = 'obj ok'; show = true;
+            info += ' ← 🔶 SUBD';
+
+            // Test all known meshing methods
+            const meshMethods = [
+              ['Mesh.createFromSubDControlNet(geom)',       () => rhino.Mesh.createFromSubDControlNet(geom)],
+              ['Mesh.createFromSubDControlNet(geom,true)',  () => rhino.Mesh.createFromSubDControlNet(geom, true)],
+              ['Mesh.createFromSubD(geom,0)',               () => rhino.Mesh.createFromSubD && rhino.Mesh.createFromSubD(geom, 0)],
+              ['Mesh.createFromSubD(geom,3)',               () => rhino.Mesh.createFromSubD && rhino.Mesh.createFromSubD(geom, 3)],
+            ];
+            info += '\n  Mesh methods:';
+            meshMethods.forEach(([label, fn]) => {
+              try {
+                const m = fn();
+                if (m) {
+                  const g = m.vertices?.count ?? '?';
+                  const f = m.faces?.count ?? '?';
+                  info += `\n    ${label} → ✅ vertices:${g} faces:${f}`;
+                  m.delete();
+                } else {
+                  info += `\n    ${label} → null (method exists but returned null)`;
+                }
+              } catch(e) {
+                info += `\n    ${label} → ❌ ${e.message}`;
+              }
+            });
+
+            // Test SubD instance methods
+            const instMethods = ['getMesh', 'getMeshes', 'toNurbsSurface', 'faces', 'vertices'];
+            info += '\n  SubD properties:';
+            instMethods.forEach(m => {
+              const v = geom[m];
+              info += `\n    geom.${m}: ${typeof v}${typeof v === 'object' && v !== null ? ' count=' + (v.count ?? '?') : ''}`;
+            });
+          }
+
+          // ── TextDot ─────────────────────────────────────────────────
+          const isTextDot = (rhino.TextDot && geom instanceof rhino.TextDot) || cn === 'TextDot';
+          if (isTextDot) {
+            summary.textdot++; cls = 'obj ok'; show = true;
+            try { info += ` ← 🟦 TEXTDOT text="${geom.text}" point=${JSON.stringify(geom.point)}`; }
+            catch(e) { info += ' ← 🟦 TEXTDOT [prop err]'; }
+          }
+
+          // ── Text (by name — TextEntity class may be undefined) ───────
+          const isText = cn === 'TextEntity' || cn === 'Text';
+          if (isText) {
+            summary.text++; cls = 'obj ok'; show = true;
+            info += ' ← 📝 TEXT';
+            try {
+              if (geom.plainText !== undefined) info += ` plainText="${geom.plainText}"`;
+              if (geom.plane?.origin) info += ` origin=${JSON.stringify(geom.plane.origin)}`;
+            } catch(e) { info += ' [prop err]'; }
+          }
+
+          // ── Dimension (by name — Dimension class may be undefined) ───
+          const isDimByName = !isText && (cn === 'Dimension' || cn.includes('Dimension'));
+          if (isDimByName) {
+            summary.dim++; cls = 'obj ok'; show = true;
+            info += ' ← 📏 DIMENSION';
+            try {
+              if (geom.plainText !== undefined) info += ` plainText="${geom.plainText}"`;
+              else if (geom.text !== undefined) info += ` text="${geom.text}"`;
+              if (geom.plane?.origin) info += ` origin=${JSON.stringify(geom.plane.origin)}`;
+            } catch(e) { info += ' [prop err]'; }
+          }
+
+          // ── AnnotationBase fallback ──────────────────────────────────
+          const isAnnotBase = !isTextDot && !isText && !isDimByName &&
+                              (rhino.AnnotationBase && geom instanceof rhino.AnnotationBase);
+          if (isAnnotBase) {
+            summary.annotBase++; cls = 'obj ok'; show = true;
+            info += ` ← ✏️ ANNOTATIONBASE subclass (cn="${cn}")`;
+            try {
+              if (geom.plainText !== undefined) info += ` plainText="${geom.plainText}"`;
+              if (geom.plane?.origin) info += ` origin=${JSON.stringify(geom.plane.origin)}`;
+            } catch(e) { info += ' [prop err]'; }
+          }
+
+          // ── Standard types ───────────────────────────────────────────
+          const isCurve    = (rhino.Curve && geom instanceof rhino.Curve) || cn.includes('Curve');
+          const isMesh     = (rhino.Mesh  && geom instanceof rhino.Mesh)  || cn === 'Mesh';
+          const isBrep     = (rhino.Brep  && geom instanceof rhino.Brep)  || cn === 'Brep';
+          const isExtrusion = cn === 'Extrusion';
+
+          if (isCurve && !isSubD)    summary.curve++;
+          if (isMesh)                summary.mesh++;
+          if (isBrep)                summary.brep++;
+          if (isExtrusion)           summary.extrusion++;
+          if (!isSubD && !isTextDot && !isText && !isDimByName && !isAnnotBase && !isCurve && !isMesh && !isBrep && !isExtrusion)
+            summary.other++;
+
+          if (show) out.innerHTML += `<div class="${cls}"><pre>${info}</pre></div>`;
+
+          geom.delete();
+          if (attr) attr.delete();
+          modelObj.delete();
+        }
+
+        out.innerHTML += '<h3>Summary</h3>';
+        out.innerHTML += `<div class="obj ok"><pre>${JSON.stringify(summary, null, 2)}</pre></div>`;
+        doc.delete();
+      } catch(e) {
+        out.innerHTML += `<div class="obj err"><pre>ERROR: ${e.message}\n${e.stack}</pre></div>`;
+      }
+    }
+  </script>
+</body>
+</html>
