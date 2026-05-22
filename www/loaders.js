@@ -285,6 +285,18 @@ export async function preprocess3dm(file, skipLayerParse) {
       }
     } catch (e) { console.warn('[pre] layer copy err:', e); }
 
+    // Helper: extract per-object color if set to "by object" (colorSource === 1)
+    const getObjectColor = (a) => {
+      try {
+        if (!a) return null;
+        const src = a.colorSource ?? a.objectColorSource ?? -1;
+        if (src !== 1) return null;
+        const c = a.objectColor;
+        if (!c) return null;
+        return { r: c.r ?? 0, g: c.g ?? 0, b: c.b ?? 0 };
+      } catch { return null; }
+    };
+
     const objects = doc.objects();
     const count   = objects.count;
     let hasSubD = false, hasAnnotation = false;
@@ -333,7 +345,7 @@ export async function preprocess3dm(file, skipLayerParse) {
                 origin = [pt.x ?? pt[0] ?? origin[0], pt.y ?? pt[1] ?? origin[1], pt.z ?? pt[2] ?? origin[2]];
               }
             } catch {}
-            S.parsedAnnotations.push({ type: 'TextDot', text: textVal, position: origin, layerIndex: attr?.layerIndex ?? 0 });
+            S.parsedAnnotations.push({ type: 'TextDot', text: textVal, position: origin, layerIndex: attr?.layerIndex ?? 0, objectColor: getObjectColor(attr) });
           } catch (e) { console.warn('[pre] TextDot err:', e.message); }
 
         } else if (
@@ -363,7 +375,7 @@ export async function preprocess3dm(file, skipLayerParse) {
             };
 
             let textVal = getText(geom) || geomName;
-            let origin = [0,0,0], xAxis = [1,0,0];
+            let origin = [0,0,0], xAxis = [1,0,0], yAxis = [0,1,0], zAxis = [0,0,1];
             try {
               const bbox = geom.getBoundingBox();
               if (bbox?.isValid) origin = [bbox.center[0], bbox.center[1], bbox.center[2]];
@@ -375,9 +387,18 @@ export async function preprocess3dm(file, skipLayerParse) {
             if (pln) {
               try { origin = getPt(pln.origin, origin); } catch {}
               try { xAxis  = getPt(pln.xAxis,  xAxis);  } catch {}
+              try { yAxis  = getPt(pln.yAxis,  yAxis);  } catch {}
+              try { zAxis  = getPt(pln.zAxis,  zAxis);  } catch {}
             } else if (loc) {
               try { origin = getPt(loc, origin); } catch {}
             }
+            // Extract Rhino text height (in model units)
+            let textHeight = null;
+            try {
+              const h = geom.textHeight ?? geom.height ?? geom.fontHeight;
+              if (typeof h === 'number' && h > 0) textHeight = h;
+              else if (typeof h === 'function') { const v = h(); if (v > 0) textHeight = v; }
+            } catch {}
             let pt1 = null, pt2 = null;
             if (geomName.includes('Dimension')) {
               const tryPt = (g, ...props) => {
@@ -392,7 +413,7 @@ export async function preprocess3dm(file, skipLayerParse) {
               pt1 = tryPt(geom, 'defPt1', 'point1', 'startPoint', 'arrowPt1');
               pt2 = tryPt(geom, 'defPt2', 'point2', 'endPoint',   'arrowPt2');
             }
-            S.parsedAnnotations.push({ type: 'Text', geomType: geomName, text: textVal, position: origin, xAxis, pt1, pt2, layerIndex: attr?.layerIndex ?? 0 });
+            S.parsedAnnotations.push({ type: 'Text', geomType: geomName, text: textVal, position: origin, xAxis, yAxis, zAxis, textHeight, objectColor: getObjectColor(attr), pt1, pt2, layerIndex: attr?.layerIndex ?? 0 });
           } catch (e) { console.warn('[pre] Annotation err:', e.message); }
 
         } else {
