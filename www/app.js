@@ -614,12 +614,19 @@ function bindUI() {
 
   const setTurntable = (on) => {
     ttContinuous = on;
-    S.controls.autoRotate = on;
-    S.controls.autoRotateSpeed = on ? ttBaseSpeed : 0;
     if (ttToggleBtn) {
       ttToggleBtn.classList.toggle('active', on);
       ttToggleBtn.textContent = on ? t('turntable.on') : t('turntable.off');
     }
+    if (!on) {
+      // Turning off: reset slider and stop rotation
+      springSlider.value = 0;
+      springVal.textContent = '0.0';
+      updateSliderFill(springSlider);
+      S.controls.autoRotate = false;
+      S.controls.autoRotateSpeed = 0;
+    }
+    // Turning on: keep current slider value — speed 0 means no rotation yet
   };
   ttToggleBtn?.addEventListener('click', () => setTurntable(!ttContinuous));
 
@@ -627,20 +634,24 @@ function bindUI() {
     const speed = parseFloat(springSlider.value);
     springVal.textContent = (speed >= 0 ? '+' : '') + speed.toFixed(1);
     updateSliderFill(springSlider);
+    // Speed 0 always means no rotation, regardless of continuous state
     if (speed === 0) {
-      if (!ttContinuous) { S.controls.autoRotate = false; S.controls.autoRotateSpeed = 0; }
-      else               { S.controls.autoRotate = true;  S.controls.autoRotateSpeed = ttBaseSpeed; }
+      S.controls.autoRotate = false;
+      S.controls.autoRotateSpeed = 0;
     } else {
       S.controls.autoRotate = true;
-      S.controls.autoRotateSpeed = speed * 4.0;
+      S.controls.autoRotateSpeed = speed * 4.0; // negative = counter-clockwise
     }
   });
   const resetSpringSlider = () => {
+    // Continuous ON: keep the set speed (no spring-back)
+    if (ttContinuous) return;
+    // Continuous OFF: spring back to 0 and stop
     springSlider.value = 0;
     springVal.textContent = '0.0';
     updateSliderFill(springSlider);
-    S.controls.autoRotate      = ttContinuous;
-    S.controls.autoRotateSpeed = ttContinuous ? ttBaseSpeed : 0;
+    S.controls.autoRotate = false;
+    S.controls.autoRotateSpeed = 0;
   };
   springSlider.addEventListener('pointerup',     resetSpringSlider);
   springSlider.addEventListener('pointercancel', resetSpringSlider);

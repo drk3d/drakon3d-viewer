@@ -102,7 +102,7 @@ function makeTextDotSprite(text, layerColor, baseHeight) {
   const radius = canvasHeight / 2;
   ctx.beginPath();
   drawRoundedRect(ctx, 0, 0, canvasWidth, canvasHeight, radius);
-  ctx.fillStyle = 'rgba(24, 24, 28, 0.88)';
+  ctx.fillStyle = 'rgba(24, 24, 28, 1.0)';
   ctx.fill();
   ctx.lineWidth   = 4;
   ctx.strokeStyle = `#${layerColor.getHexString()}`;
@@ -140,7 +140,7 @@ function makeText3DPlaneMesh(text, layerColor, ann, baseHeight) {
   const r = canvasHeight * 0.45;
   ctx.beginPath();
   drawRoundedRect(ctx, 0, 0, canvasWidth, canvasHeight, r);
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.42)';
+  ctx.fillStyle = 'rgba(24, 24, 28, 0.92)';
   ctx.fill();
   ctx.fillStyle = '#ffffff';
   ctx.fillText(text, canvasWidth / 2, canvasHeight / 2);
