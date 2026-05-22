@@ -15,28 +15,28 @@ function loadFont() {
       'https://unpkg.com/three@0.169.0/examples/fonts/helvetiker_regular.typeface.json',
       font => { _fontCache = font; resolve(font); },
       undefined,
-      ()   => { console.warn('[annotations] font load failed, using sprite fallback'); resolve(null); }
+      () => { console.warn('[annotations] font load failed'); resolve(null); }
     );
   });
   return _fontPromise;
 }
 
-// ── Canvas helpers ────────────────────────────────────────────────────────────
+// ── Canvas helper ─────────────────────────────────────────────────────────────
 
-function drawRoundedRect(ctx, x, y, width, height, radius) {
+function drawRoundedRect(ctx, x, y, w, h, r) {
   if (typeof ctx.roundRect === 'function') {
-    ctx.roundRect(x, y, width, height, radius);
+    ctx.roundRect(x, y, w, h, r);
   } else {
     ctx.beginPath();
-    ctx.moveTo(x + radius, y);
-    ctx.lineTo(x + width - radius, y);
-    ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-    ctx.lineTo(x + width, y + height - radius);
-    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-    ctx.lineTo(x + radius, y + height);
-    ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-    ctx.lineTo(x, y + radius);
-    ctx.quadraticCurveTo(x, y, x + radius, y);
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
     ctx.closePath();
   }
 }
@@ -44,13 +44,9 @@ function drawRoundedRect(ctx, x, y, width, height, radius) {
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export async function createAnnotationSprites() {
-  // Clean up existing group
   if (S.annotationGroup) {
-    if (S.annotationGroup.parent) {
-      S.annotationGroup.parent.remove(S.annotationGroup);
-    } else {
-      S.scene.remove(S.annotationGroup);
-    }
+    if (S.annotationGroup.parent) S.annotationGroup.parent.remove(S.annotationGroup);
+    else S.scene.remove(S.annotationGroup);
     S.annotationGroup.traverse(child => {
       if (child.geometry) child.geometry.dispose();
       if (child.material) {
@@ -63,121 +59,113 @@ export async function createAnnotationSprites() {
 
   if (!S.parsedAnnotations.length) return;
 
-  const box     = new THREE.Box3().setFromObject(S.currentModel);
-  const size    = box.getSize(new THREE.Vector3());
-  const maxDim  = Math.max(size.x, size.y, size.z) || 100;
-  const baseHeight = Math.max(maxDim * 0.025, 0.5);
+  const box      = new THREE.Box3().setFromObject(S.currentModel);
+  const size     = box.getSize(new THREE.Vector3());
+  const maxDim   = Math.max(size.x, size.y, size.z) || 100;
+  const baseH    = Math.max(maxDim * 0.025, 0.5);
 
-  // Pre-load font for Text annotations
   const font = await loadFont();
 
   S.annotationGroup = new THREE.Group();
   S.annotationGroup.name = 'annotations-group';
 
-  const annotationsVisible = document.getElementById('chk-annotations-panel')?.checked ?? true;
+  const annVisible = document.getElementById('chk-annotations-panel')?.checked ?? true;
 
   S.parsedAnnotations.forEach(ann => {
     try {
       const layer     = S.parsedLayers.find(l => l.index === ann.layerIndex);
       const isVisible = layer ? layer.visible : true;
 
-      // Resolve color: objectColor first, then layer color, then white
+      // Resolve color: objectColor > layerColor > white
       let color = new THREE.Color(0xffffff);
       if (ann.objectColor) {
-        color = new THREE.Color(
-          ann.objectColor.r / 255,
-          ann.objectColor.g / 255,
-          ann.objectColor.b / 255
-        );
+        color.setRGB(ann.objectColor.r / 255, ann.objectColor.g / 255, ann.objectColor.b / 255);
       } else if (layer?.color) {
-        color = new THREE.Color(layer.color.r / 255, layer.color.g / 255, layer.color.b / 255);
+        color.setRGB(layer.color.r / 255, layer.color.g / 255, layer.color.b / 255);
       }
 
-      let obj3d = null;
       const textVal = String(ann.text || '');
-      const pos     = ann.position || [0, 0, 0];
+      let obj3d = null;
 
       if (ann.type === 'TextDot') {
-        obj3d = makeTextDotSprite(textVal, color, baseHeight);
-        if (obj3d) obj3d.position.set(pos[0], pos[1], pos[2]);
+        obj3d = makeTextDot(textVal, color, baseH);
+        if (obj3d) obj3d.position.set(...(ann.position || [0, 0, 0]));
 
-      } else if (ann.geomType && (ann.geomType.includes('Dimension') || ann.geomType === 'Leader')) {
-        obj3d = makeDimensionSprite(textVal, color, ann, baseHeight);
+      } else if (ann.geomType &&
+                 (ann.geomType.includes('Dimension') || ann.geomType === 'Leader')) {
+        obj3d = makeDimension(textVal, color, ann, baseH, font);
 
       } else {
-        // TextEntity / Text — use actual 3D font if available
+        // TextEntity / plain Text
         obj3d = font
-          ? makeTextShapeMesh(textVal, color, ann, baseHeight, font)
-          : makeText3DPlaneMesh(textVal, color, ann, baseHeight);
+          ? makeTextMesh(textVal, color, ann, baseH, font)
+          : makeTextSprite(textVal, color, ann, baseH);
       }
 
       if (obj3d) {
         obj3d.userData = { layerIndex: ann.layerIndex };
-        obj3d.visible  = isVisible && annotationsVisible;
+        obj3d.visible  = isVisible && annVisible;
         S.annotationGroup.add(obj3d);
       }
     } catch (err) {
-      console.warn('[annotations] Failed to render:', ann, err);
+      console.warn('[annotations] render failed:', ann, err);
     }
   });
 
-  if (S.currentModel) {
-    S.currentModel.add(S.annotationGroup);
-  } else {
-    S.scene.add(S.annotationGroup);
-  }
+  if (S.currentModel) S.currentModel.add(S.annotationGroup);
+  else S.scene.add(S.annotationGroup);
 }
 
-// ── TextDot sprite ────────────────────────────────────────────────────────────
+// ── TextDot ───────────────────────────────────────────────────────────────────
+// Rounded-pill sprite, background = objectColor/layerColor, auto-contrast text
 
-function makeTextDotSprite(text, layerColor, baseHeight) {
+function makeTextDot(text, bgColor, baseH) {
   const canvas = document.createElement('canvas');
   const ctx    = canvas.getContext('2d');
-  const fontSize = 32;
-  ctx.font = `600 ${fontSize}px 'Inter', -apple-system, sans-serif`;
-  const textWidth  = ctx.measureText(text).width;
-  const paddingX   = 24, paddingY = 16;
-  const canvasWidth  = textWidth + paddingX * 2;
-  const canvasHeight = fontSize  + paddingY * 2;
-  canvas.width  = canvasWidth;
-  canvas.height = canvasHeight;
-  ctx.font = `600 ${fontSize}px 'Inter', -apple-system, sans-serif`;
+  const fs = 32;
+  ctx.font = `700 ${fs}px 'Inter', -apple-system, sans-serif`;
+  const tw = ctx.measureText(text).width;
+  const px = 22, py = 14;
+  const cw = Math.ceil(tw + px * 2);
+  const ch = Math.ceil(fs + py * 2);
+  canvas.width  = cw;
+  canvas.height = ch;
+
+  ctx.clearRect(0, 0, cw, ch);          // transparent corners → enables round shape
+  ctx.font = `700 ${fs}px 'Inter', -apple-system, sans-serif`;
   ctx.textBaseline = 'middle';
   ctx.textAlign    = 'center';
-  const radius = canvasHeight / 2;
-  ctx.beginPath();
-  drawRoundedRect(ctx, 0, 0, canvasWidth, canvasHeight, radius);
-  // Background: use layerColor (which already incorporates objectColor from caller)
-  const bgHex = layerColor.getHexString();
-  ctx.fillStyle = `#${bgHex}`;
-  ctx.fill();
-  // Dark text for light backgrounds, white for dark
-  const lum = layerColor.r * 0.299 + layerColor.g * 0.587 + layerColor.b * 0.114;
-  ctx.fillStyle = lum > 0.5 ? '#111111' : '#ffffff';
-  ctx.fillText(text, canvasWidth / 2, canvasHeight / 2);
 
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.minFilter = THREE.LinearFilter;
-  texture.magFilter = THREE.LinearFilter;
-  const material = new THREE.SpriteMaterial({
-    map: texture, transparent: false, depthTest: true, depthWrite: false
-  });
-  const sprite = new THREE.Sprite(material);
-  const aspect = canvasWidth / canvasHeight;
-  sprite.scale.set(baseHeight * aspect, baseHeight, 1);
-  return sprite;
+  // Pill background
+  ctx.beginPath();
+  drawRoundedRect(ctx, 0, 0, cw, ch, ch / 2);
+  ctx.fillStyle = `#${bgColor.getHexString()}`;
+  ctx.fill();
+
+  // Auto-contrast text
+  const lum = bgColor.r * 0.299 + bgColor.g * 0.587 + bgColor.b * 0.114;
+  ctx.fillStyle = lum > 0.55 ? '#111111' : '#ffffff';
+  ctx.fillText(text, cw / 2, ch / 2);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.minFilter = tex.magFilter = THREE.LinearFilter;
+
+  // transparent: true is REQUIRED so rounded corners aren't filled as rectangle
+  const mat  = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: false });
+  const spr  = new THREE.Sprite(mat);
+  spr.renderOrder = 998;
+  spr.scale.set(baseH * (cw / ch), baseH, 1);
+  return spr;
 }
 
-// ── Text shape mesh (FontLoader + ShapeGeometry) ──────────────────────────────
+// ── Text mesh (FontLoader + ShapeGeometry) ────────────────────────────────────
+// Placed in the Rhino annotation plane: xAxis=right, yAxis=up
 
-function makeTextShapeMesh(text, color, ann, baseHeight, font) {
-  // Use Rhino textHeight (model units) if available, else fall back to baseHeight
-  const textH = (ann.textHeight && ann.textHeight > 0) ? ann.textHeight : baseHeight;
-
-  // Build geometry per line (handle newlines)
-  const lines     = String(text).split(/\r?\n/);
-  const group     = new THREE.Group();
-  const lineGap   = textH * 1.2;
+function makeTextMesh(text, color, ann, baseH, font, centerX = false) {
+  const textH  = (ann.textHeight && ann.textHeight > 0) ? ann.textHeight : baseH;
+  const lines  = String(text).split(/\r?\n/);
+  const lineGap = textH * 1.25;
+  const group  = new THREE.Group();
 
   lines.forEach((line, li) => {
     if (!line.trim()) return;
@@ -185,189 +173,219 @@ function makeTextShapeMesh(text, color, ann, baseHeight, font) {
     try { shapes = font.generateShapes(line, textH); }
     catch { return; }
 
-    const geometry = new THREE.ShapeGeometry(shapes);
-    geometry.computeBoundingBox();
+    const geo = new THREE.ShapeGeometry(shapes);
+    geo.computeBoundingBox();
 
-    const material = new THREE.MeshBasicMaterial({
-      color,
-      side: THREE.DoubleSide,
-      depthTest: false,
-      depthWrite: false,
-    });
-    const mesh = new THREE.Mesh(geometry, material);
+    if (centerX) {
+      const bb = geo.boundingBox;
+      geo.translate(-(bb.min.x + bb.max.x) / 2, 0, 0);
+    }
+
+    const mat  = new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide, depthTest: false, depthWrite: false });
+    const mesh = new THREE.Mesh(geo, mat);
     mesh.renderOrder = 997;
-    // Offset each line downward (Rhino text grows upward from origin)
     mesh.position.y = -li * lineGap;
     group.add(mesh);
   });
 
   if (!group.children.length) return null;
 
-  // Apply Rhino plane: xAxis = text-right, yAxis = text-up
+  // Apply Rhino plane
   const pos  = ann.position || [0, 0, 0];
   const xDir = new THREE.Vector3(...(ann.xAxis || [1, 0, 0])).normalize();
-  const yDir = new THREE.Vector3(...(ann.yAxis || [0, 1, 0])).normalize();
-  // Ensure orthogonality and compute normal
+  const yDir = ann.yAxis
+    ? new THREE.Vector3(...ann.yAxis).normalize()
+    : _perpToX(xDir);
   const zDir = new THREE.Vector3().crossVectors(xDir, yDir).normalize();
   if (zDir.lengthSq() < 0.001) zDir.set(0, 0, 1);
 
-  // ShapeGeometry is in XY plane (THREE +X = right, +Y = up)
-  // We need: THREE +X → xDir, THREE +Y → yDir, THREE +Z → zDir
-  const rotMat = new THREE.Matrix4().makeBasis(xDir, yDir, zDir);
-  group.quaternion.setFromRotationMatrix(rotMat);
+  group.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(xDir, yDir, zDir));
   group.position.set(pos[0], pos[1], pos[2]);
-
   return group;
 }
 
-// ── Text sprite fallback (used when font unavailable) ─────────────────────────
+// ── Text sprite fallback (no font) ────────────────────────────────────────────
 
-function makeText3DPlaneMesh(text, layerColor, ann, baseHeight) {
+function makeTextSprite(text, color, ann, baseH) {
   const canvas = document.createElement('canvas');
   const ctx    = canvas.getContext('2d');
-  const fontSize = 44;
-  const font   = `500 ${fontSize}px 'Inter', -apple-system, sans-serif`;
-  ctx.font = font;
-  const textWidth   = ctx.measureText(text).width;
-  const padX = 14, padY = 10;
-  const canvasWidth  = Math.ceil(textWidth + padX * 2);
-  const canvasHeight = Math.ceil(fontSize  + padY * 2);
-  canvas.width  = canvasWidth;
-  canvas.height = canvasHeight;
-  ctx.font = font;
-  ctx.textBaseline = 'middle';
-  ctx.textAlign    = 'center';
-  ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-  const r = canvasHeight * 0.45;
+  const fs = 44;
+  ctx.font = `500 ${fs}px 'Inter', -apple-system, sans-serif`;
+  const tw = ctx.measureText(text).width;
+  const px = 14, py = 10;
+  const cw = Math.ceil(tw + px * 2);
+  const ch = Math.ceil(fs + py * 2);
+  canvas.width = cw; canvas.height = ch;
+  ctx.font = `500 ${fs}px 'Inter', -apple-system, sans-serif`;
+  ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
+  ctx.clearRect(0, 0, cw, ch);
   ctx.beginPath();
-  drawRoundedRect(ctx, 0, 0, canvasWidth, canvasHeight, r);
-  ctx.fillStyle = 'rgba(24, 24, 28, 0.92)';
-  ctx.fill();
-  ctx.fillStyle = '#' + layerColor.getHexString();
-  ctx.fillText(text, canvasWidth / 2, canvasHeight / 2);
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.minFilter = THREE.LinearFilter;
-  texture.magFilter = THREE.LinearFilter;
-  const material = new THREE.SpriteMaterial({
-    map: texture, transparent: true, depthTest: true, depthWrite: false
-  });
-  const sprite = new THREE.Sprite(material);
-  const aspect = canvasWidth / canvasHeight;
-  sprite.scale.set(baseHeight * aspect * 1.1, baseHeight * 1.1, 1);
+  drawRoundedRect(ctx, 0, 0, cw, ch, ch * 0.45);
+  ctx.fillStyle = 'rgba(24,24,28,0.92)'; ctx.fill();
+  ctx.fillStyle = `#${color.getHexString()}`;
+  ctx.fillText(text, cw / 2, ch / 2);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.minFilter = tex.magFilter = THREE.LinearFilter;
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: false });
+  const spr = new THREE.Sprite(mat);
+  spr.renderOrder = 997;
+  spr.scale.set(baseH * (cw / ch) * 1.1, baseH * 1.1, 1);
   const pos = ann.position || [0, 0, 0];
-  sprite.position.set(pos[0], pos[1], pos[2]);
-  return sprite;
+  spr.position.set(pos[0], pos[1], pos[2]);
+  return spr;
 }
 
-// ── Dimension sprite ──────────────────────────────────────────────────────────
+// ── Dimension ─────────────────────────────────────────────────────────────────
+// Draws: dimension line + arrowheads + oriented text (3D font or sprite)
 
-function makeDimensionSprite(text, layerColor, ann, baseHeight) {
-  const group = new THREE.Group();
-  const pos   = ann.position || [0, 0, 0];
-  const col   = `#${layerColor.getHexString()}`;
-  const lineColor = layerColor.clone();
+function makeDimension(text, color, ann, baseH, font) {
+  const pos  = ann.position || [0, 0, 0];
 
-  let p1, p2;
+  // Annotation plane axes
+  const xDir = new THREE.Vector3(...(ann.xAxis || [1, 0, 0])).normalize();
+  const yDir = ann.yAxis
+    ? new THREE.Vector3(...ann.yAxis).normalize()
+    : _perpToX(xDir);
+
+  // ── Dimension endpoints ─────────────────────────────────────────────────────
+  // pt1/pt2 from Rhino = the measured points on the geometry.
+  // If they came back as [0,0,0] (default unset), treat as missing.
+  let p1 = null, p2 = null;
   if (ann.pt1 && ann.pt2) {
-    p1 = new THREE.Vector3(...ann.pt1);
-    p2 = new THREE.Vector3(...ann.pt2);
-  } else {
-    const origin  = new THREE.Vector3(...pos);
-    const xDir    = new THREE.Vector3(...(ann.xAxis || [1, 0, 0])).normalize();
+    const tp1 = new THREE.Vector3(...ann.pt1);
+    const tp2 = new THREE.Vector3(...ann.pt2);
+    if (tp1.distanceTo(tp2) > 1e-3) { p1 = tp1; p2 = tp2; }
+  }
+  if (!p1) {
+    // Estimate from origin + numeric value along xDir
+    const origin = new THREE.Vector3(...pos);
     const numVal  = parseFloat(text);
-    const halfLen = (!isNaN(numVal) && numVal > 0) ? numVal * 0.5 : baseHeight * 3;
+    const halfLen = (!isNaN(numVal) && numVal > 0) ? numVal * 0.5 : baseH * 3;
     p1 = origin.clone().addScaledVector(xDir, -halfLen);
     p2 = origin.clone().addScaledVector(xDir,  halfLen);
   }
 
   if (p1.distanceTo(p2) < 1e-6) {
-    const fallback = makeTextDotSprite(text, lineColor, baseHeight);
-    if (fallback) fallback.position.set(pos[0], pos[1], pos[2]);
-    return fallback;
+    // Truly degenerate — just render text
+    return font
+      ? makeTextMesh(text, color, ann, baseH, font)
+      : makeTextSprite(text, color, ann, baseH);
   }
 
-  const midPt  = p1.clone().add(p2).multiplyScalar(0.5);
-  const dimDir = p2.clone().sub(p1).normalize();
-  const worldUp = Math.abs(dimDir.dot(new THREE.Vector3(0, 1, 0))) < 0.9
-    ? new THREE.Vector3(0, 1, 0)
-    : new THREE.Vector3(0, 0, 1);
-  let perpDir = new THREE.Vector3().crossVectors(dimDir, worldUp).normalize();
-  if (perpDir.lengthSq() < 0.01) perpDir = new THREE.Vector3(0, 1, 0);
+  const group   = new THREE.Group();
+  const dimDir  = p2.clone().sub(p1).normalize();
+  const arrowSz = Math.min(baseH * 0.45, p1.distanceTo(p2) * 0.07);
 
-  const extLen    = baseHeight * 0.8;
-  const extOffset = baseHeight * 0.15;
-  const arrowSize = baseHeight * 0.35;
-  const lineMat   = new THREE.LineBasicMaterial({
-    color: lineColor, depthTest: false, depthWrite: false, transparent: true, opacity: 0.9
-  });
+  const lineMat = new THREE.LineBasicMaterial({ color, depthTest: false, depthWrite: false });
 
-  const addLine = (...pts) => {
-    const geo  = new THREE.BufferGeometry().setFromPoints(pts);
+  const addSeg = (a, b) => {
+    const geo  = new THREE.BufferGeometry().setFromPoints([a, b]);
     const line = new THREE.Line(geo, lineMat);
     line.renderOrder = 997;
     group.add(line);
   };
 
-  addLine(
-    p1.clone().addScaledVector(perpDir, extOffset),
-    p1.clone().addScaledVector(perpDir, extLen)
-  );
-  addLine(
-    p2.clone().addScaledVector(perpDir, extOffset),
-    p2.clone().addScaledVector(perpDir, extLen)
-  );
-  const dimLineStart = p1.clone().addScaledVector(perpDir, extLen);
-  const dimLineEnd   = p2.clone().addScaledVector(perpDir, extLen);
-  addLine(dimLineStart, dimLineEnd);
+  // ── Main dimension line ─────────────────────────────────────────────────────
+  addSeg(p1, p2);
 
-  const addArrow = (tip, dir, size) => {
-    const side = new THREE.Vector3().crossVectors(dir, perpDir).normalize();
-    const pts  = [
-      tip.clone().addScaledVector(dir.clone().negate(), size).addScaledVector(side,  size * 0.4),
-      tip.clone(),
-      tip.clone().addScaledVector(dir.clone().negate(), size).addScaledVector(side, -size * 0.4)
-    ];
-    const geo   = new THREE.BufferGeometry().setFromPoints(pts);
+  // ── Arrowheads (V shape in annotation plane) ────────────────────────────────
+  const addArrow = (tip, outDir) => {
+    // outDir = direction the arrow points away from dimension center
+    const back = outDir.clone().negate().multiplyScalar(arrowSz);
+    const w1 = tip.clone().add(back).addScaledVector(yDir,  arrowSz * 0.35);
+    const w2 = tip.clone().add(back).addScaledVector(yDir, -arrowSz * 0.35);
+    const geo   = new THREE.BufferGeometry().setFromPoints([w1, tip, w2]);
     const arrow = new THREE.Line(geo, lineMat);
     arrow.renderOrder = 997;
     group.add(arrow);
   };
-  addArrow(dimLineStart, dimDir.clone().negate(), arrowSize);
-  addArrow(dimLineEnd,   dimDir.clone(),          arrowSize);
+  addArrow(p1, dimDir.clone().negate()); // at p1, pointing away from p2
+  addArrow(p2, dimDir.clone());          // at p2, pointing away from p1
 
-  const canvas  = document.createElement('canvas');
-  const ctx     = canvas.getContext('2d');
-  const fontSize = 40;
-  const fontStr = `700 ${fontSize}px 'Inter', -apple-system, sans-serif`;
-  ctx.font = fontStr;
-  const tw = ctx.measureText(text).width;
-  const padX = 16, padY = 10;
-  canvas.width  = Math.ceil(tw + padX * 2);
-  canvas.height = Math.ceil(fontSize + padY * 2);
-  ctx.font = fontStr;
-  ctx.textBaseline = 'middle';
-  ctx.textAlign    = 'center';
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.beginPath();
-  drawRoundedRect(ctx, 0, 0, canvas.width, canvas.height, canvas.height / 2);
-  ctx.fillStyle = 'rgba(10, 16, 32, 0.92)';
-  ctx.fill();
-  ctx.lineWidth   = 2;
-  ctx.strokeStyle = col;
-  ctx.stroke();
-  ctx.fillStyle = '#ffffff';
-  ctx.fillText(text, canvas.width / 2, canvas.height / 2);
-  const tex      = new THREE.CanvasTexture(canvas);
-  tex.minFilter  = THREE.LinearFilter;
-  tex.magFilter  = THREE.LinearFilter;
-  const spriteMat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false });
-  const sprite    = new THREE.Sprite(spriteMat);
-  sprite.renderOrder = 998;
-  const aspect = canvas.width / canvas.height;
-  sprite.scale.set(baseHeight * aspect * 1.1, baseHeight * 1.1, 1);
-  sprite.position.copy(midPt.clone().addScaledVector(perpDir, extLen + baseHeight * 0.7));
-  group.add(sprite);
+  // ── Extension lines (when measured points differ from dim line) ─────────────
+  if (ann.pt1 && ann.pt2) {
+    // p1/p2 are measured points; dimension line is offset by yDir
+    // (This branch only runs if pt1/pt2 were valid non-zero)
+    const extLen = baseH * 0.6;
+    const extStart1 = p1.clone().addScaledVector(yDir,  baseH * 0.12);
+    const extEnd1   = p1.clone().addScaledVector(yDir,  extLen);
+    const extStart2 = p2.clone().addScaledVector(yDir,  baseH * 0.12);
+    const extEnd2   = p2.clone().addScaledVector(yDir,  extLen);
+    addSeg(extStart1, extEnd1);
+    addSeg(extStart2, extEnd2);
+    // Redraw dimension line at the extended position
+    addSeg(
+      p1.clone().addScaledVector(yDir, extLen),
+      p2.clone().addScaledVector(yDir, extLen)
+    );
+  }
 
-  group.position.set(0, 0, 0);
+  // ── Text: at annotation origin, oriented along dimension ────────────────────
+  const textPos = new THREE.Vector3(...pos);
+  const textH   = (ann.textHeight && ann.textHeight > 0) ? ann.textHeight : baseH * 0.7;
+
+  if (font) {
+    try {
+      const shapes = font.generateShapes(text, textH);
+      const geo    = new THREE.ShapeGeometry(shapes);
+      geo.computeBoundingBox();
+      const bb = geo.boundingBox;
+      // Center horizontally and vertically on the annotation origin
+      geo.translate(
+        -(bb.min.x + bb.max.x) / 2,
+        -(bb.min.y + bb.max.y) / 2,
+        0
+      );
+      const mat  = new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide, depthTest: false, depthWrite: false });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.renderOrder = 998;
+      // Orient: xDir = along dimension, yDir = perpendicular (up for text)
+      const zDir = new THREE.Vector3().crossVectors(dimDir, yDir).normalize();
+      mesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(dimDir, yDir, zDir));
+      mesh.position.copy(textPos);
+      group.add(mesh);
+    } catch (e) {
+      console.warn('[dim text]', e);
+    }
+  } else {
+    const spr = _makeLabelSprite(text, color, textH * 2);
+    spr.position.copy(textPos);
+    group.add(spr);
+  }
+
   return group;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function _perpToX(xDir) {
+  const worldUp = Math.abs(xDir.dot(new THREE.Vector3(0, 1, 0))) < 0.9
+    ? new THREE.Vector3(0, 1, 0)
+    : new THREE.Vector3(0, 0, 1);
+  const p = new THREE.Vector3().crossVectors(xDir, worldUp).normalize();
+  return p.lengthSq() > 0.001 ? p : new THREE.Vector3(0, 1, 0);
+}
+
+function _makeLabelSprite(text, color, fontSize) {
+  const canvas = document.createElement('canvas');
+  const ctx    = canvas.getContext('2d');
+  const fs = fontSize ?? 40;
+  ctx.font = `700 ${fs}px sans-serif`;
+  const tw = ctx.measureText(text).width;
+  const px = 12, py = 8;
+  canvas.width  = Math.ceil(tw + px * 2);
+  canvas.height = Math.ceil(fs + py * 2);
+  ctx.font = `700 ${fs}px sans-serif`;
+  ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = `#${color.getHexString()}`;
+  ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+  const tex  = new THREE.CanvasTexture(canvas);
+  tex.minFilter = tex.magFilter = THREE.LinearFilter;
+  const mat  = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false });
+  const spr  = new THREE.Sprite(mat);
+  spr.renderOrder = 998;
+  const baseH = fs / 40;  // normalise
+  spr.scale.set(baseH * (canvas.width / canvas.height), baseH, 1);
+  return spr;
 }
