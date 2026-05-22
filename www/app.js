@@ -2552,6 +2552,7 @@ function updateSunLight() {
 
   if (!enabled) {
     sunLight = null;
+    updateGroundAppearance();
     return;
   }
 
@@ -2603,6 +2604,7 @@ function updateSunLight() {
   // Force shadow map refresh on next frame
   if (sunLight.shadow.map) { sunLight.shadow.map.dispose(); sunLight.shadow.map = null; }
   sunLight.shadow.camera.updateProjectionMatrix();
+  updateGroundAppearance();
 }
 
 // ── Per-model shadow frustum setup (called on model load) ─────────────────
@@ -2627,7 +2629,50 @@ function updateShadowCasting() {
       child.receiveShadow = shadowsEnabled;
     }
   });
-  if (groundMesh) groundMesh.receiveShadow = shadowsEnabled;
+  if (groundMesh) updateGroundAppearance();
+}
+
+// ── Ground appearance (material + SSAO) based on sun/shadow/mode state ──────
+function updateGroundAppearance() {
+  if (!groundMesh) return;
+  const hasShadowCaster  = sunLight !== null && shadowsEnabled;
+  const useAmbientShadow = sunLight === null  && shadowsEnabled;
+  const maxDim      = modelShadowDims?.maxDim ?? 100;
+  const modeUsesSSAO = currentMode === 'arctic' || currentMode === 'rendered';
+
+  groundMesh.material.dispose();
+
+  if (currentMode === 'arctic') {
+    groundMesh.material = new THREE.MeshStandardMaterial({
+      color: 0xf5f5f5, roughness: 1.0, metalness: 0.0,
+      polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 2
+    });
+    groundMesh.receiveShadow = hasShadowCaster;
+  } else if (hasShadowCaster) {
+    // Sun ON + Shadows ON → clean directional shadow only
+    groundMesh.material = new THREE.ShadowMaterial({ opacity: 0.35, transparent: true });
+    groundMesh.receiveShadow = true;
+    if (!modeUsesSSAO) ssaoPass.enabled = false;
+  } else if (useAmbientShadow) {
+    // Sun OFF + Shadows ON → subtle surface so SSAO contact shadows are visible
+    groundMesh.material = new THREE.MeshStandardMaterial({
+      color: 0xffffff, opacity: 0.1, transparent: true,
+      roughness: 1.0, metalness: 0.0,
+      polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 2
+    });
+    groundMesh.receiveShadow = false;
+    if (!modeUsesSSAO) {
+      ssaoPass.enabled = true;
+      ssaoPass.kernelRadius = 16;
+      ssaoPass.minDistance  = maxDim * 0.0005;
+      ssaoPass.maxDistance  = maxDim * 0.05;
+    }
+  } else {
+    // Shadows OFF → fully invisible ground
+    groundMesh.material = new THREE.ShadowMaterial({ opacity: 0.35, transparent: true });
+    groundMesh.receiveShadow = false;
+    if (!modeUsesSSAO) ssaoPass.enabled = false;
+  }
 }
 
 // ── Ground plane (feature 8) ───────────────────────────────────────────────
@@ -2637,27 +2682,11 @@ function addGroundPlane(box) {
   const size   = box.getSize(new THREE.Vector3());
   const span   = Math.max(size.x, size.y) * 5;
   const geo    = new THREE.PlaneGeometry(span, span);
-  
-  let mat;
-  if (currentMode === 'arctic') {
-    mat = new THREE.MeshStandardMaterial({
-      color: 0xf5f5f5, 
-      roughness: 1.0,
-      metalness: 0.0,
-      polygonOffset: true,
-      polygonOffsetFactor: 2,
-      polygonOffsetUnits: 2
-    });
-  } else {
-    mat = new THREE.ShadowMaterial({ opacity: 0.35, transparent: true });
-  }
-  
-  groundMesh   = new THREE.Mesh(geo, mat);
-  // In Z-up world PlaneGeometry (XY-plane) sits at ground level
+  groundMesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial());
   groundMesh.position.set(center.x, center.y, box.min.z - 0.001);
-  groundMesh.receiveShadow = shadowsEnabled;
   groundMesh.name = 'ground-plane';
   scene.add(groundMesh);
+  updateGroundAppearance();
 }
 
 function removeGroundPlane() {
@@ -4035,25 +4064,7 @@ function applyDisplayMode() {
     scene.background = new THREE.Color(0xffffff);
   }
 
-  // Update groundMesh material dynamically based on mode to support floor SSAO and shadows
-  if (groundMesh) {
-    if (currentMode === 'arctic') {
-      groundMesh.material.dispose();
-      groundMesh.material = new THREE.MeshStandardMaterial({
-        color: 0xf5f5f5, 
-        roughness: 1.0,
-        metalness: 0.0,
-        polygonOffset: true,
-        polygonOffsetFactor: 2,
-        polygonOffsetUnits: 2
-      });
-      groundMesh.receiveShadow = shadowsEnabled;
-    } else {
-      groundMesh.material.dispose();
-      groundMesh.material = new THREE.ShadowMaterial({ opacity: 0.35, transparent: true });
-      groundMesh.receiveShadow = shadowsEnabled;
-    }
-  }
+  updateGroundAppearance();
 
   const edgeOverlay = document.getElementById('chk-edges-panel')?.checked ?? true;
 
