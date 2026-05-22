@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+
+# IDE
+.idea/
+.vscode/
+
+# Claude Code
+.claude/
+
+# Scratch / temp
+scratch/
+
+# OS
+.DS_Store
+Thumbs.db
