@@ -179,15 +179,23 @@ function init() {
   S.composer.addPass(S.ssaoPass);
   window._ssao = S.ssaoPass;
 
-  // Wrap AO passes so they temporarily restrict the camera to layer 0 (geometry only).
-  // Annotations live on layer 1 and must not contribute to depth/normal G-buffers.
+  // Wrap AO passes: exclude annotations from the depth/normal G-buffer render.
+  // GTAOPass uses scene.overrideMaterial + renderer.render(scene, camera) internally,
+  // so we need BOTH approaches: layer restriction (camera.layers.set(0)) AND
+  // visibility toggle (annotationGroup.visible = false). The RenderPass runs before
+  // these passes, so annotations are already in the visual output — hiding them here
+  // only affects the AO G-buffer, not the final image.
   [S.gtaoPass, S.ssaoPass].forEach(pass => {
     const _orig = pass.render.bind(pass);
     pass.render = (renderer, writeBuffer, readBuffer, dt, mask) => {
       const savedMask = S.camera.layers.mask;
+      const ann        = S.annotationGroup;
+      const annVisible = ann ? ann.visible : false;
       S.camera.layers.set(0);
+      if (ann) ann.visible = false;
       _orig(renderer, writeBuffer, readBuffer, dt, mask);
       S.camera.layers.mask = savedMask;
+      if (ann) ann.visible = annVisible;
     };
   });
 
