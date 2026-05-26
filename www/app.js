@@ -111,10 +111,12 @@ function init() {
   S.perspCamera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 10000);
   S.perspCamera.up.set(0, 0, 1);
   S.perspCamera.position.set(100, -100, 100);
+  S.perspCamera.layers.enable(1);  // layer 1 = annotations (excluded from AO)
   S.scene.add(S.perspCamera);
 
   S.orthoCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 100000);
   S.orthoCamera.up.set(0, 0, 1);
+  S.orthoCamera.layers.enable(1);
   S.scene.add(S.orthoCamera);
 
   S.camera = S.perspCamera;
@@ -176,6 +178,18 @@ function init() {
   S.ssaoPass.enabled = false;
   S.composer.addPass(S.ssaoPass);
   window._ssao = S.ssaoPass;
+
+  // Wrap AO passes so they temporarily restrict the camera to layer 0 (geometry only).
+  // Annotations live on layer 1 and must not contribute to depth/normal G-buffers.
+  [S.gtaoPass, S.ssaoPass].forEach(pass => {
+    const _orig = pass.render.bind(pass);
+    pass.render = (renderer, writeBuffer, readBuffer, dt, mask) => {
+      const savedMask = S.camera.layers.mask;
+      S.camera.layers.set(0);
+      _orig(renderer, writeBuffer, readBuffer, dt, mask);
+      S.camera.layers.mask = savedMask;
+    };
+  });
 
   // Outline pass for technical-mode silhouette (2px) — disabled by default.
   S.outlinePass = new OutlinePass(

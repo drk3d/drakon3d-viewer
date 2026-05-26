@@ -114,6 +114,10 @@ export async function createAnnotationSprites() {
     }
   });
 
+  // Put all annotation objects on layer 1 so AO passes (which restrict the
+  // camera to layer 0) don't include them in depth/normal G-buffer computation.
+  S.annotationGroup.traverse(obj => obj.layers.set(1));
+
   if (S.currentModel) S.currentModel.add(S.annotationGroup);
   else S.scene.add(S.annotationGroup);
 }
