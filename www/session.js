@@ -105,7 +105,7 @@ export async function loadSession(file) {
       const s = data.settings;
 
       S.currentMode    = s.displayMode    || 'shaded';
-      S.shadowsEnabled = s.shadowsEnabled ?? false;
+      S.shadowsEnabled = s.shadowsEnabled ?? true;
       S.groundEnabled  = s.groundEnabled  ?? false;
 
       const setCheck = (id, val) => {
@@ -224,7 +224,7 @@ export async function loadSession(file) {
 
 export function resetSettingsToDefault() {
   S.currentMode    = 'shaded';
-  S.shadowsEnabled = false;
+  S.shadowsEnabled = true;
   S.groundEnabled  = false;
   S.selectedObjects = [];
   S.hiddenObjects.clear();
@@ -247,7 +247,7 @@ export function resetSettingsToDefault() {
   setCheck('chk-edges-panel',     true);
   setCheck('chk-annotations-panel', true);
   setCheck('chk-ground-panel',    false);
-  setCheck('chk-shadows-panel',   false);
+  setCheck('chk-shadows-panel',   true);
   setCheck('chk-sun-panel',       false);
   setCheck('chk-clipping-enable', false);
 
