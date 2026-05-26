@@ -128,9 +128,16 @@ function init() {
   S.renderer.shadowMap.type = THREE.PCFShadowMap;
   container.appendChild(S.renderer.domElement);
 
-  // EffectComposer with default RT (no MSAA — GTAOPass needs depth from RenderPass).
-  // SMAA handles anti-aliasing later in the chain.
-  S.composer = new EffectComposer(S.renderer);
+  // EffectComposer with MSAA render target (samples:4).
+  // Hardware MSAA on the RT fixes thin-line aliasing that SMAA alone cannot solve
+  // (SMAA blends 1px lines with neighbors, reducing their apparent weight).
+  // GTAOPass reads depth — depth resolve from MSAA RT works in WebGL2;
+  // if GTAO is enabled and depth sampling breaks, fall back by switching to a
+  // plain RT at that time. GTAO is disabled by default so this is safe.
+  S.msaaTarget = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
+    samples: 4
+  });
+  S.composer = new EffectComposer(S.renderer, S.msaaTarget);
   S.composer.addPass(new RenderPass(S.scene, S.camera));
 
   // GTAO — Ground Truth Ambient Occlusion, configured per three.js example
