@@ -381,6 +381,7 @@ export async function preprocess3dm(file, skipLayerParse) {
           safeInst(geom, S.rhinoInstance.AnnotationBase)
           || geomName === 'TextEntity' || geomName === 'Text'
           || geomName === 'Dimension'  || geomNameLc.includes('dimension')
+          || geomNameLc.startsWith('dim')   // DimLinear, DimAngular, DimRadial, DimOrdinate …
           || geomName === 'Leader'     || geomNameLc.includes('annotation')
           || geomNameLc.includes('leader')
         );
@@ -390,12 +391,15 @@ export async function preprocess3dm(file, skipLayerParse) {
           try {
             let meshGeom = null;
             let tempSubd = null;
+            const M = S.rhinoInstance.Mesh;
+            // Mirror what THREE.js 3DMLoader does: subdivide(3) then createFromSubDControlNet(geom, false)
             try {
               tempSubd = geom.duplicate();
-              try { tempSubd.subdivide(3); } catch {}
-              meshGeom = S.rhinoInstance.Mesh.createFromSubDControlNet(tempSubd);
+              tempSubd.subdivide(3);
+              meshGeom = M.createFromSubDControlNet(tempSubd, false);
             } catch {
-              try { meshGeom = S.rhinoInstance.Mesh.createFromSubDControlNet(geom); } catch {}
+              // subdivide unavailable or failed — try control net of original as last resort
+              try { meshGeom = M.createFromSubDControlNet && M.createFromSubDControlNet(geom, false); } catch {}
             }
             if (tempSubd) { try { tempSubd.delete(); } catch {} }
             if (meshGeom) {
@@ -403,6 +407,12 @@ export async function preprocess3dm(file, skipLayerParse) {
                 attr ? cleanDoc.objects().addMesh(meshGeom, attr) : cleanDoc.objects().addMesh(meshGeom);
               } catch (ae) { console.warn('[pre] SubD addMesh err:', ae.message); }
               try { meshGeom.delete(); } catch {}
+            } else {
+              // All conversions failed — pass SubD through so THREE.js loader can attempt it
+              console.warn('[pre] SubD mesh conversion failed, passing through raw SubD');
+              try {
+                attr ? cleanDoc.objects().add(geom, attr) : cleanDoc.objects().add(geom);
+              } catch (ae) { console.warn('[pre] SubD add err:', ae.message); }
             }
           } catch (e) { console.warn('[pre] SubD err:', e.message); }
 
