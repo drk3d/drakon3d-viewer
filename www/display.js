@@ -235,7 +235,16 @@ export function applyDisplayMode() {
   // - shaded/wireframe/technical: NO shadows (clean look)
   // - arctic/rendered: shadows if sun enabled
   const modeWantsShadows = ['arctic', 'rendered'].includes(S.currentMode);
-  if (S.sunLight) S.sunLight.castShadow = modeWantsShadows && S.shadowsEnabled;
+  if (S.sunLight) {
+    S.sunLight.castShadow = modeWantsShadows && S.shadowsEnabled;
+    if (modeWantsShadows && S.shadowsEnabled) {
+      // Dispose stale shadow map so THREE.js generates a fresh one next frame.
+      // Without this, switching shaded→arctic keeps a stale/invalid shadow map
+      // and shadows don't reappear until the sun is re-toggled.
+      if (S.sunLight.shadow.map) { S.sunLight.shadow.map.dispose(); S.sunLight.shadow.map = null; }
+      S.sunLight.shadow.camera.updateProjectionMatrix();
+    }
+  }
   S.currentModel.traverse(c => {
     if (c.isMesh) {
       c.castShadow    = modeWantsShadows && S.shadowsEnabled;

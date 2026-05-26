@@ -127,7 +127,7 @@ function init() {
   S.renderer.outputColorSpace = THREE.SRGBColorSpace;
   S.renderer.toneMapping = THREE.ACESFilmicToneMapping;
   S.renderer.shadowMap.enabled = true;
-  S.renderer.shadowMap.type = THREE.PCFShadowMap;
+  S.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   container.appendChild(S.renderer.domElement);
 
   // EffectComposer with MSAA render target (samples:4).

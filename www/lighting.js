@@ -89,6 +89,8 @@ export function updateSunLight() {
 
   S.sunLight.castShadow = S.shadowsEnabled;
   S.sunLight.shadow.mapSize.set(2048, 2048);
+  S.sunLight.shadow.bias       = -0.0005;         // prevent shadow acne
+  S.sunLight.shadow.normalBias =  maxDim * 0.001; // scale with model size
   S.sunLight.shadow.camera.near   = maxDim * 0.01;
   S.sunLight.shadow.camera.far    = maxDim * 10;
   const h = maxDim * 3;
