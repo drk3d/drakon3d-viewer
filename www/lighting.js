@@ -15,29 +15,37 @@ export function setupLights() {
   switch (S.currentMode) {
     case 'shaded':
     case 'wireframe': {
+      // Shaded: just enough light to read form, NO skylight/shadows.
+      // Three directional lights from different angles give consistent surface tone
+      // without strong directional shading or environment effects.
       const ambInt = parseFloat(document.getElementById('sl-ambient-panel')?.value ?? 0.5);
       const keyInt = parseFloat(document.getElementById('sl-key-panel')?.value ?? 1.4);
-      S.scene.add(new THREE.AmbientLight(0xffffff, ambInt));
-      const key = new THREE.DirectionalLight(0xffffff, keyInt * 0.95);
+      S.scene.add(new THREE.AmbientLight(0xffffff, ambInt * 0.9));
+      const key = new THREE.DirectionalLight(0xffffff, keyInt * 0.7);
       key.position.copy(keyPos);
       S.scene.add(key);
-      const fill = new THREE.DirectionalLight(0xd9e8ff, keyInt * 0.25);
+      const fill = new THREE.DirectionalLight(0xffffff, keyInt * 0.35);
       fill.position.set(0.8, 0.6, 0.5).normalize();
       S.scene.add(fill);
+      const back = new THREE.DirectionalLight(0xffffff, keyInt * 0.2);
+      back.position.set(0, -1, -0.5).normalize();
+      S.scene.add(back);
       break;
     }
     case 'arctic': {
-      S.scene.add(new THREE.AmbientLight(0xffffff, 0.25));
-      const hemi = new THREE.HemisphereLight(0xffffff, 0x666666, 0.55);
-      S.scene.add(hemi);
-      const key = new THREE.DirectionalLight(0xffffff, 1.2);
+      // Env map (set in display.js) is the main ambient source — keep supplemental
+      // lights weak so the model doesn't wash out.  A tiny ambient prevents
+      // pitch-black back-faces; the key gives subtle form definition.
+      S.scene.add(new THREE.AmbientLight(0xffffff, 0.08));
+      const key = new THREE.DirectionalLight(0xffffff, 0.45);
       key.position.copy(keyPos);
       S.scene.add(key);
       break;
     }
     case 'rendered': {
-      S.scene.add(new THREE.AmbientLight(0xffffff, 0.15));
-      const key = new THREE.DirectionalLight(0xfff8f0, 0.85);
+      // Env map provides realistic ambient; sun handled separately.
+      S.scene.add(new THREE.AmbientLight(0xffffff, 0.12));
+      const key = new THREE.DirectionalLight(0xfff8f0, 0.65);
       key.position.copy(keyPos);
       S.scene.add(key);
       break;
@@ -68,11 +76,13 @@ export function updateSunLight() {
     S.sunLight.name = 'sun-light';
   }
 
-  if (S.currentMode === 'arctic' || S.currentMode === 'technical') {
-    S.sunLight.color.setHex(0xffffff);
-  } else {
-    S.sunLight.color.setHex(0xfff4e0);
-  }
+  // Apply sun intensity from UI slider (defaults to 1.8 if missing)
+  const sunInt = parseFloat(document.getElementById('sl-sun-intensity')?.value ?? 1.8);
+  S.sunLight.intensity = isNaN(sunInt) ? 1.8 : sunInt;
+
+  // Keep sun white across all modes — warm yellow in shaded/rendered made
+  // the whole model look yellowed.
+  S.sunLight.color.setHex(0xffffff);
 
   const center = S.modelShadowDims?.center || new THREE.Vector3(0, 0, 0);
   const maxDim = S.modelShadowDims?.maxDim || 100;
@@ -141,10 +151,13 @@ export function updateGroundAppearance() {
   S.groundMesh.material.dispose();
 
   if (S.currentMode === 'arctic') {
-    S.groundMesh.material = new THREE.MeshStandardMaterial({
-      color: 0xf5f5f5, roughness: 1.0, metalness: 0.0,
+    // Lambert shades from a single light; doesn't get washed out by env map.
+    // Combined with receiveShadow this gives clearly visible shadows on a white surface.
+    const groundMat = new THREE.MeshLambertMaterial({
+      color: 0xffffff,
       polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 2
     });
+    S.groundMesh.material = groundMat;
     S.groundMesh.receiveShadow = hasShadowCaster;
   } else if (hasShadowCaster) {
     S.groundMesh.material = new THREE.ShadowMaterial({ opacity: 0.35, transparent: true });

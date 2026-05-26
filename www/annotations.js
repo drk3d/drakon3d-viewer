@@ -76,8 +76,9 @@ export async function createAnnotationSprites() {
       const layer     = S.parsedLayers.find(l => l.index === ann.layerIndex);
       const isVisible = layer ? layer.visible : true;
 
-      // Resolve color: objectColor > layerColor > white
-      let color = new THREE.Color(0xffffff);
+      // Resolve color: objectColor > layerColor > black
+      // Use the color as-is — black stays black, white stays white
+      let color = new THREE.Color(0x000000);
       if (ann.objectColor) {
         color.setRGB(ann.objectColor.r / 255, ann.objectColor.g / 255, ann.objectColor.b / 255);
       } else if (layer?.color) {
@@ -91,9 +92,10 @@ export async function createAnnotationSprites() {
         obj3d = makeTextDot(textVal, color, baseH);
         if (obj3d) obj3d.position.set(...(ann.position || [0, 0, 0]));
 
-      } else if (ann.geomType &&
-                 (ann.geomType.includes('Dimension') || ann.geomType === 'Leader')) {
-        obj3d = makeDimension(textVal, color, ann, baseH, font);
+      } else if (ann.isDimension && ann.dimPoints) {
+        // Accurate dimension rendering using rhino3dm 8.17+ points data:
+        // { defpt1, defpt2, arrowpt1, arrowpt2, dimline, textpt }
+        obj3d = makeDimensionAccurate(textVal, color, ann, baseH, font);
 
       } else {
         // TextEntity / plain Text
@@ -151,7 +153,8 @@ function makeTextDot(text, bgColor, baseH) {
   tex.minFilter = tex.magFilter = THREE.LinearFilter;
 
   // transparent: true is REQUIRED so rounded corners aren't filled as rectangle
-  const mat  = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: false });
+  // depthTest: false keeps TextDots always in front of all geometry
+  const mat  = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false });
   const spr  = new THREE.Sprite(mat);
   spr.renderOrder = 998;
   spr.scale.set(baseH * (cw / ch), baseH, 1);
@@ -162,7 +165,9 @@ function makeTextDot(text, bgColor, baseH) {
 // Placed in the Rhino annotation plane: xAxis=right, yAxis=up
 
 function makeTextMesh(text, color, ann, baseH, font, centerX = false) {
-  const textH  = (ann.textHeight && ann.textHeight > 0) ? ann.textHeight : baseH;
+  // baseH-relative floor: in models where Rhino's textHeight (e.g. 3.5mm) is
+  // too small to read, scale up. rhino3dm.js does not expose DimensionScale.
+  const textH  = Math.max(ann.textHeight || 0, baseH * 0.5);
   const lines  = String(text).split(/\r?\n/);
   const lineGap = textH * 1.25;
   const group  = new THREE.Group();
@@ -181,7 +186,7 @@ function makeTextMesh(text, color, ann, baseH, font, centerX = false) {
       geo.translate(-(bb.min.x + bb.max.x) / 2, 0, 0);
     }
 
-    const mat  = new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide, depthTest: false, depthWrite: false });
+    const mat  = new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide, depthTest: true, depthWrite: false });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.renderOrder = 997;
     mesh.position.y = -li * lineGap;
@@ -238,6 +243,97 @@ function makeTextSprite(text, color, ann, baseH) {
 // ── Dimension ─────────────────────────────────────────────────────────────────
 // Draws: dimension line + arrowheads + oriented text (3D font or sprite)
 
+// Accurate dimension rendering using rhino3dm 8.17+ points data.
+// dimPoints = { defpt1, defpt2, arrowpt1, arrowpt2, dimline, textpt }
+//   - defpt1/defpt2: the actual measured points on the geometry
+//   - arrowpt1/arrowpt2: dim line endpoints where arrows sit
+//   - dimline: a point on the dimension line (often the midpoint)
+//   - textpt: text insertion point
+function makeDimensionAccurate(text, color, ann, baseH, font) {
+  const dp = ann.dimPoints;
+  if (!dp || !dp.arrowpt1 || !dp.arrowpt2) {
+    return makeDimension(text, color, ann, baseH, font);
+  }
+
+  const a1 = new THREE.Vector3(...dp.arrowpt1);
+  const a2 = new THREE.Vector3(...dp.arrowpt2);
+  if (a1.distanceTo(a2) < 1e-6) return null;
+
+  const dimDir = a2.clone().sub(a1).normalize();
+  const planeY = ann.yAxis ? new THREE.Vector3(...ann.yAxis).normalize() : _perpToX(dimDir);
+  let yDir = planeY.clone().sub(dimDir.clone().multiplyScalar(planeY.dot(dimDir))).normalize();
+  if (!isFinite(yDir.lengthSq()) || yDir.lengthSq() < 0.01) yDir = _perpToX(dimDir);
+  const zDir = new THREE.Vector3().crossVectors(dimDir, yDir).normalize();
+
+  const group = new THREE.Group();
+  // depthTest:true so dimension lines hide behind solid geometry (not see-through)
+  const lineMat = new THREE.LineBasicMaterial({ color, depthTest: true, depthWrite: false });
+  const addSeg = (a, b) => {
+    const geo  = new THREE.BufferGeometry().setFromPoints([a, b]);
+    const line = new THREE.Line(geo, lineMat);
+    line.renderOrder = 997;
+    group.add(line);
+  };
+
+  // ── Main dimension line: arrowpt1 → arrowpt2 ──
+  addSeg(a1, a2);
+
+  // ── Extension lines: from measured points (defpt1/defpt2) to dim line endpoints ──
+  if (dp.defpt1) {
+    const d1 = new THREE.Vector3(...dp.defpt1);
+    if (d1.distanceTo(a1) > 1e-3) {
+      // Small gap from measured point + small extension past the dim line
+      const dir1 = a1.clone().sub(d1).normalize();
+      const gap  = baseH * 0.15;
+      const past = baseH * 0.4;
+      addSeg(
+        d1.clone().addScaledVector(dir1, gap),
+        a1.clone().addScaledVector(dir1, past)
+      );
+    }
+  }
+  if (dp.defpt2) {
+    const d2 = new THREE.Vector3(...dp.defpt2);
+    if (d2.distanceTo(a2) > 1e-3) {
+      const dir2 = a2.clone().sub(d2).normalize();
+      const gap  = baseH * 0.15;
+      const past = baseH * 0.4;
+      addSeg(
+        d2.clone().addScaledVector(dir2, gap),
+        a2.clone().addScaledVector(dir2, past)
+      );
+    }
+  }
+
+  // ── Arrowheads (V shape, pointing inward along dim line) ──
+  // Size based on textHeight (so it scales with dimension style)
+  const arrowSz = (ann.textHeight ?? baseH * 0.7) * 1.2;
+  const addArrow = (tip, inward) => {
+    // inward = unit vector pointing from tip toward dim center
+    const back = inward.clone().multiplyScalar(arrowSz);
+    const w1 = tip.clone().add(back).addScaledVector(yDir,  arrowSz * 0.35);
+    const w2 = tip.clone().add(back).addScaledVector(yDir, -arrowSz * 0.35);
+    const geo   = new THREE.BufferGeometry().setFromPoints([w1, tip, w2]);
+    const arrow = new THREE.Line(geo, lineMat);
+    arrow.renderOrder = 997;
+    group.add(arrow);
+  };
+  addArrow(a1, dimDir);                       // at a1, V wings open back toward a2
+  addArrow(a2, dimDir.clone().negate());      // at a2, V wings open back toward a1
+
+  // ── Text at dim line midpoint (sprite — always faces camera) ──
+  // We use a Sprite (same as TextDot) so dimension text always reads correctly
+  // regardless of viewing angle. Mesh-based text appears mirrored from the back.
+  const textH = Math.max(ann.textHeight || 0, baseH * 0.5);
+  const textPos = a1.clone().add(a2).multiplyScalar(0.5);
+  textPos.addScaledVector(yDir, textH * 0.6);
+  const spr = _makeDimTextSprite(text, color, textH);
+  spr.position.copy(textPos);
+  group.add(spr);
+
+  return group;
+}
+
 function makeDimension(text, color, ann, baseH, font) {
   const pos  = ann.position || [0, 0, 0];
 
@@ -249,15 +345,69 @@ function makeDimension(text, color, ann, baseH, font) {
 
   // ── Dimension endpoints ─────────────────────────────────────────────────────
   // pt1/pt2 from Rhino = the measured points on the geometry.
-  // If they came back as [0,0,0] (default unset), treat as missing.
+  // rhino3dm WASM doesn't expose these, so we estimate from bbox extents.
   let p1 = null, p2 = null;
   if (ann.pt1 && ann.pt2) {
     const tp1 = new THREE.Vector3(...ann.pt1);
     const tp2 = new THREE.Vector3(...ann.pt2);
     if (tp1.distanceTo(tp2) > 1e-3) { p1 = tp1; p2 = tp2; }
   }
+  if (!p1 && ann.bboxMin && ann.bboxMax) {
+    // The bbox of a Rhino LinearDimension is an axis-aligned rectangle spanning:
+    //   - the dim line itself (along the longest bbox axis = dimDir)
+    //   - the extension lines (perpendicular, along the next-longest axis = perpDir)
+    // The dim line lies at ONE perpendicular edge of the bbox; the measured object
+    // (cylinder, square edge, etc.) lies at the OPPOSITE perpendicular edge.
+    // Rhino convention: dim line is placed on the side AWAY from the model body.
+    const bbMin   = new THREE.Vector3(...ann.bboxMin);
+    const bbMax   = new THREE.Vector3(...ann.bboxMax);
+    const bbSize  = bbMax.clone().sub(bbMin);
+
+    // Pick dimDir = longest bbox axis, perpDir = next-longest perpendicular axis
+    const sizes = [
+      { axis: new THREE.Vector3(1, 0, 0), len: bbSize.x },
+      { axis: new THREE.Vector3(0, 1, 0), len: bbSize.y },
+      { axis: new THREE.Vector3(0, 0, 1), len: bbSize.z }
+    ];
+    sizes.sort((a, b) => b.len - a.len);
+    const dimDir2  = sizes[0].axis;
+    const perpDir2 = sizes[1].axis;
+    const dimLen   = sizes[0].len;
+    const perpLen  = sizes[1].len;
+
+    // Determine which perpendicular edge is the dim line side.
+    // Heuristic: the edge farther from the model bounding box center.
+    let dimLineSign = +1;
+    try {
+      if (S.currentModel) {
+        const modelBox = new THREE.Box3().setFromObject(S.currentModel);
+        const modelCtr = modelBox.getCenter(new THREE.Vector3());
+        const annCtr   = bbMin.clone().add(bbMax).multiplyScalar(0.5);
+        const edgePlus  = annCtr.clone().addScaledVector(perpDir2,  perpLen * 0.5);
+        const edgeMinus = annCtr.clone().addScaledVector(perpDir2, -perpLen * 0.5);
+        // Dim line is at the edge FARTHER from the model center
+        dimLineSign = (edgePlus.distanceTo(modelCtr) > edgeMinus.distanceTo(modelCtr)) ? +1 : -1;
+      }
+    } catch {}
+
+    // Compute dim line endpoints: at bbox corner on the chosen perpendicular side,
+    // extending along dimDir for the full bbox extent.
+    const annCtr = bbMin.clone().add(bbMax).multiplyScalar(0.5);
+    const dimLinePerpPos = annCtr.clone().addScaledVector(perpDir2, perpLen * 0.5 * dimLineSign);
+
+    p1 = dimLinePerpPos.clone().addScaledVector(dimDir2, -dimLen * 0.5);
+    p2 = dimLinePerpPos.clone().addScaledVector(dimDir2,  dimLen * 0.5);
+
+    // Pass the "extension direction" (perpDir2 pointing AWAY from dim line, toward measured object)
+    // for use by the extension lines code below.
+    ann._extDir   = perpDir2.clone().multiplyScalar(-dimLineSign);
+    ann._extLen   = perpLen;
+
+    xDir.copy(dimDir2);
+    yDir.copy(perpDir2.clone().multiplyScalar(-dimLineSign)); // points toward measured object
+  }
   if (!p1) {
-    // Estimate from origin + numeric value along xDir
+    // Last-resort fallback: estimate from origin + numeric value along xDir
     const origin = new THREE.Vector3(...pos);
     const numVal  = parseFloat(text);
     const halfLen = (!isNaN(numVal) && numVal > 0) ? numVal * 0.5 : baseH * 3;
@@ -276,7 +426,7 @@ function makeDimension(text, color, ann, baseH, font) {
   const dimDir  = p2.clone().sub(p1).normalize();
   const arrowSz = Math.min(baseH * 0.45, p1.distanceTo(p2) * 0.07);
 
-  const lineMat = new THREE.LineBasicMaterial({ color, depthTest: false, depthWrite: false });
+  const lineMat = new THREE.LineBasicMaterial({ color, depthTest: true, depthWrite: false });
 
   const addSeg = (a, b) => {
     const geo  = new THREE.BufferGeometry().setFromPoints([a, b]);
@@ -302,23 +452,13 @@ function makeDimension(text, color, ann, baseH, font) {
   addArrow(p1, dimDir.clone().negate()); // at p1, pointing away from p2
   addArrow(p2, dimDir.clone());          // at p2, pointing away from p1
 
-  // ── Extension lines (when measured points differ from dim line) ─────────────
-  if (ann.pt1 && ann.pt2) {
-    // p1/p2 are measured points; dimension line is offset by yDir
-    // (This branch only runs if pt1/pt2 were valid non-zero)
-    const extLen = baseH * 0.6;
-    const extStart1 = p1.clone().addScaledVector(yDir,  baseH * 0.12);
-    const extEnd1   = p1.clone().addScaledVector(yDir,  extLen);
-    const extStart2 = p2.clone().addScaledVector(yDir,  baseH * 0.12);
-    const extEnd2   = p2.clone().addScaledVector(yDir,  extLen);
-    addSeg(extStart1, extEnd1);
-    addSeg(extStart2, extEnd2);
-    // Redraw dimension line at the extended position
-    addSeg(
-      p1.clone().addScaledVector(yDir, extLen),
-      p2.clone().addScaledVector(yDir, extLen)
-    );
-  }
+  // ── Extension lines ─────────────────────────────────────────────────────────
+  // Extension lines run from each dim line endpoint (p1, p2) perpendicular to
+  // the dim line, reaching to the measured object. yDir was set above to point
+  // FROM dim line TOWARD the measured object. Length = bbox perpendicular extent.
+  const extLen = ann._extLen ?? Math.max(baseH * 2.5, p1.distanceTo(p2) * 0.12);
+  addSeg(p1.clone(), p1.clone().addScaledVector(yDir, extLen));
+  addSeg(p2.clone(), p2.clone().addScaledVector(yDir, extLen));
 
   // ── Text: at annotation origin, oriented along dimension ────────────────────
   const textPos = new THREE.Vector3(...pos);
@@ -336,10 +476,11 @@ function makeDimension(text, color, ann, baseH, font) {
         -(bb.min.y + bb.max.y) / 2,
         0
       );
-      const mat  = new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide, depthTest: false, depthWrite: false });
+      const mat  = new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide, depthTest: true, depthWrite: false });
       const mesh = new THREE.Mesh(geo, mat);
       mesh.renderOrder = 998;
-      // Orient: xDir = along dimension, yDir = perpendicular (up for text)
+      // Orient: text reads along the dimension line direction (Rhino default).
+      // makeBasis(xLocal, yLocal, zLocal): text reading dir = xLocal, text-up = yLocal.
       const zDir = new THREE.Vector3().crossVectors(dimDir, yDir).normalize();
       mesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(dimDir, yDir, zDir));
       mesh.position.copy(textPos);
@@ -366,6 +507,42 @@ function _perpToX(xDir) {
   return p.lengthSq() > 0.001 ? p : new THREE.Vector3(0, 1, 0);
 }
 
+// ── Dimension/Text label as Sprite (always faces camera) ────────────────────
+// modelH = desired text height in world (model) units.
+function _makeDimTextSprite(text, color, modelH) {
+  const fsPx   = 64;  // canvas font size (px) — fixed for crisp rendering
+  const canvas = document.createElement('canvas');
+  const ctx    = canvas.getContext('2d');
+  ctx.font = `500 ${fsPx}px 'Inter', -apple-system, sans-serif`;
+  const tw  = ctx.measureText(text).width;
+  const pad = 6;
+  const cw  = Math.ceil(tw + pad * 2);
+  const ch  = Math.ceil(fsPx + pad * 2);
+  canvas.width  = cw;
+  canvas.height = ch;
+  // Resizing the canvas resets the ctx state — re-set font.
+  ctx.font = `500 ${fsPx}px 'Inter', -apple-system, sans-serif`;
+  ctx.textBaseline = 'middle';
+  ctx.textAlign    = 'center';
+  ctx.clearRect(0, 0, cw, ch);
+  ctx.fillStyle = `#${color.getHexString()}`;
+  ctx.fillText(text, cw / 2, ch / 2);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.minFilter = tex.magFilter = THREE.LinearFilter;
+  // depthTest:true so the dim text hides behind geometry (not see-through)
+  const mat = new THREE.SpriteMaterial({
+    map: tex, transparent: true, depthTest: true, depthWrite: false
+  });
+  const spr = new THREE.Sprite(mat);
+  spr.renderOrder = 998;
+  // Scale: map fsPx (the actual text height) → modelH world units.
+  // The whole canvas (including pad) is taller than fsPx, so scale accordingly.
+  const worldH = modelH * (ch / fsPx);
+  spr.scale.set(worldH * (cw / ch), worldH, 1);
+  return spr;
+}
+
 function _makeLabelSprite(text, color, fontSize) {
   const canvas = document.createElement('canvas');
   const ctx    = canvas.getContext('2d');
@@ -382,7 +559,7 @@ function _makeLabelSprite(text, color, fontSize) {
   ctx.fillText(text, canvas.width / 2, canvas.height / 2);
   const tex  = new THREE.CanvasTexture(canvas);
   tex.minFilter = tex.magFilter = THREE.LinearFilter;
-  const mat  = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false });
+  const mat  = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: false });
   const spr  = new THREE.Sprite(mat);
   spr.renderOrder = 998;
   const baseH = fs / 40;  // normalise

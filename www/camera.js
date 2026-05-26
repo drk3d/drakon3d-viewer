@@ -153,18 +153,28 @@ function _customViewKey() {
   return `rhino_custom_views_${base}`;
 }
 
+function _deletedRhinoViewKey() {
+  const base = S.currentFileName ? S.currentFileName.replace(/\.[^.]+$/, '') : '__default__';
+  return `rhino_deleted_views_${base}`;
+}
+
 export function getCustomViews() {
   try { return JSON.parse(localStorage.getItem(_customViewKey()) || '[]'); } catch { return []; }
 }
 
+function getDeletedRhinoViewNames() {
+  try { return JSON.parse(localStorage.getItem(_deletedRhinoViewKey()) || '[]'); } catch { return []; }
+}
+
 export function saveCustomView(name) {
   if (!name || !S.controls) return;
-  const views = getCustomViews();
+  const views = getCustomViews().filter(v => v.name !== name); // overwrite existing
   views.push({
     name,
     position: S.camera.position.toArray(),
     target:   S.controls.target.toArray(),
-    up:       S.camera.up.toArray()
+    up:       S.camera.up.toArray(),
+    isCustom: true
   });
   localStorage.setItem(_customViewKey(), JSON.stringify(views));
   renderNamedViewsUI();
@@ -176,22 +186,38 @@ export function deleteCustomView(name) {
   renderNamedViewsUI();
 }
 
+function deleteRhinoView(name) {
+  const deleted = getDeletedRhinoViewNames();
+  if (!deleted.includes(name)) deleted.push(name);
+  localStorage.setItem(_deletedRhinoViewKey(), JSON.stringify(deleted));
+  renderNamedViewsUI();
+}
+
 export function renderNamedViewsUI() {
   const container = document.getElementById('named-views-list');
   if (!container) return;
   container.innerHTML = '';
 
-  const rhinoViews  = S.parsedNamedViews || [];
-  const customViews = getCustomViews();
-  const allViews    = [...rhinoViews, ...customViews.map(v => ({ ...v, isCustom: true }))];
+  const deletedNames = getDeletedRhinoViewNames();
+  const rhinoViews   = (S.parsedNamedViews || []).filter(v => !deletedNames.includes(v.name));
+  const customViews  = getCustomViews();
+
+  // Merge: custom views override rhino views of the same name
+  const customNames = new Set(customViews.map(v => v.name));
+  const filteredRhino = rhinoViews.filter(v => !customNames.has(v.name));
+  const allViews = [...filteredRhino, ...customViews];
 
   if (!allViews.length) {
     container.innerHTML = '<span class="dropdown-empty-msg" data-i18n="view.no_named">No named views</span>';
     return;
   }
+
+  const delSVG = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="13" height="13"><polyline points="2 4 14 4"/><path d="M6 4V3h4v1M5 4l.5 9h5l.5-9"/></svg>`;
+  const saveSVG = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="13" height="13"><path d="M13 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V5l-3-3z"/><path d="M9 2v3H6V2"/><rect x="3" y="9" width="10" height="5" rx="0.5"/></svg>`;
+
   allViews.forEach(nv => {
     const row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:center;gap:4px;';
+    row.style.cssText = 'display:flex;align-items:center;gap:2px;';
 
     const btn = document.createElement('button');
     btn.className  = 'dropdown-item';
@@ -207,15 +233,31 @@ export function renderNamedViewsUI() {
     });
     row.appendChild(btn);
 
-    if (nv.isCustom) {
-      const del = document.createElement('button');
-      del.className  = 'icon-btn sm';
-      del.title      = 'Delete view';
-      del.style.cssText = 'padding:3px 5px;flex-shrink:0;color:var(--text-2);';
-      del.innerHTML  = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="13" height="13"><polyline points="2 4 14 4"/><path d="M6 4V3h4v1M5 4l.5 9h5l.5-9"/></svg>`;
-      del.addEventListener('click', (e) => { e.stopPropagation(); deleteCustomView(nv.name); });
-      row.appendChild(del);
-    }
+    // Overwrite button (save current camera to this view name)
+    const saveBtn = document.createElement('button');
+    saveBtn.className  = 'icon-btn sm';
+    saveBtn.title      = 'Overwrite with current view';
+    saveBtn.style.cssText = 'padding:3px 5px;flex-shrink:0;color:var(--text-2);';
+    saveBtn.innerHTML  = saveSVG;
+    saveBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      saveCustomView(nv.name); // overwrites same name in localStorage
+    });
+    row.appendChild(saveBtn);
+
+    // Delete button (works for both rhino and custom views)
+    const del = document.createElement('button');
+    del.className  = 'icon-btn sm';
+    del.title      = 'Delete view';
+    del.style.cssText = 'padding:3px 5px;flex-shrink:0;color:var(--text-2);';
+    del.innerHTML  = delSVG;
+    del.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (nv.isCustom) deleteCustomView(nv.name);
+      else deleteRhinoView(nv.name);
+    });
+    row.appendChild(del);
+
     container.appendChild(row);
   });
 }

@@ -6,7 +6,7 @@
   <title>byRhinoView</title>
   <link rel="stylesheet" href="style.css">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/rhino3dm@8.0.1/rhino3dm.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/rhino3dm@8.17.0/rhino3dm.min.js"></script>
 </head>
 <body>
 
@@ -60,6 +60,10 @@
             <button class="dropdown-item" data-mode="technical">
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="2" width="12" height="12" rx="1"/><line x1="2" y1="6" x2="14" y2="6"/><line x1="6" y1="6" x2="6" y2="14"/></svg>
               <span data-i18n="mode.technical">Sketch</span>
+            </button>
+            <button class="dropdown-item" data-mode="ao-debug">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="5"/><circle cx="8" cy="8" r="2" fill="currentColor" fill-opacity="0.4"/><line x1="8" y1="2" x2="8" y2="1"/><line x1="8" y1="14" x2="8" y2="15"/></svg>
+              <span>AO Debug</span>
             </button>
           </div>
         </div>
@@ -203,10 +207,7 @@
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="6.5" cy="6.5" r="4.5"/><line x1="10" y1="10" x2="14.5" y2="14.5"/></svg>
               <span data-i18n="tools.find">Find Object</span>
             </button>
-            <button class="dropdown-item" data-tool="colorgrade" id="btn-tool-colorgrade">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="5.5" cy="10.5" r="2"/><line x1="7" y1="9" x2="14" y2="2"/><line x1="12" y1="1" x2="15" y2="4"/></svg>
-              <span data-i18n="tools.color_adj">Color Adjustment</span>
-            </button>
+            <!-- Color Adjustment moved to Settings panel (under Sun) -->
           </div>
         </div>
 
@@ -320,6 +321,7 @@
           <option value="solid" data-i18n="bg.solid">Solid</option>
           <option value="gradient2" data-i18n="bg.gradient2">2-Color Gradient</option>
           <option value="radial" data-i18n="bg.radial">Radial Gradient</option>
+          <option value="hdr" data-i18n="bg.hdr">HDR Environment</option>
           <option value="gradient4" data-i18n="bg.gradient4">4-Color Gradient</option>
           <option value="hdr" data-i18n="bg.hdr">HDR Background</option>
         </select>
@@ -364,6 +366,13 @@
           <option value="night" data-i18n="env.night">Night</option>
           <option value="hdr-custom" data-i18n="env.custom" id="opt-hdr-custom" disabled>Custom HDR (No file)</option>
         </select>
+        <div class="sliders-grid" style="margin-bottom:8px;">
+          <div class="slider-row">
+            <span class="slider-label" data-i18n="env.intensity">Env Intensity</span>
+            <input type="range" id="sl-env-intensity" min="0" max="3" step="0.05" value="1.0">
+            <span id="sl-env-intensity-val" class="slider-val">1.00</span>
+          </div>
+        </div>
         <input type="file" id="hdr-file-input" accept=".hdr,.exr">
         <label for="hdr-file-input" class="hdr-upload-label" id="hdr-upload-trigger">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -410,6 +419,11 @@
           </label>
           <div id="sun-controls" class="sliders-grid" style="margin-top:6px;">
             <div class="slider-row">
+              <span class="slider-label" data-i18n="light.sun_intensity">Intensity</span>
+              <input type="range" id="sl-sun-intensity" min="0" max="3" step="0.05" value="1.8">
+              <span id="sl-sun-intensity-val" class="slider-val">1.80</span>
+            </div>
+            <div class="slider-row">
               <span class="slider-label" data-i18n="light.sun_azimuth">Azimuth</span>
               <input type="range" id="sl-sun-azimuth" min="0" max="360" step="1" value="135">
               <span id="sl-sun-azimuth-val" class="slider-val">135°</span>
@@ -418,6 +432,35 @@
               <span class="slider-label" data-i18n="light.sun_elevation">Elevation</span>
               <input type="range" id="sl-sun-elevation" min="5" max="85" step="1" value="45">
               <span id="sl-sun-elevation-val" class="slider-val">45°</span>
+            </div>
+          </div>
+        </div>
+        <!-- Color Adjustment (moved from Tools popup) -->
+        <div class="sun-section" style="margin-top:10px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+            <span class="slider-label" style="font-weight:600;" data-i18n="cg.title">Color Adjustment</span>
+            <button id="btn-cg-reset" class="text-btn" style="font-size:0.68rem;" data-i18n="cg.reset">Reset</button>
+          </div>
+          <div class="sliders-grid">
+            <div class="slider-row">
+              <span class="slider-label" data-i18n="cg.exposure">Exposure</span>
+              <input type="range" id="cg-exposure" min="-2" max="2" step="0.05" value="0">
+              <span id="cg-exposure-val" class="slider-val">+0.00</span>
+            </div>
+            <div class="slider-row">
+              <span class="slider-label" data-i18n="cg.contrast">Contrast</span>
+              <input type="range" id="cg-contrast" min="-1" max="1" step="0.05" value="0">
+              <span id="cg-contrast-val" class="slider-val">+0.00</span>
+            </div>
+            <div class="slider-row">
+              <span class="slider-label" data-i18n="cg.saturation">Saturation</span>
+              <input type="range" id="cg-saturation" min="-1" max="1" step="0.05" value="0">
+              <span id="cg-saturation-val" class="slider-val">+0.00</span>
+            </div>
+            <div class="slider-row">
+              <span class="slider-label" data-i18n="cg.temperature">Temperature</span>
+              <input type="range" id="cg-temperature" min="-1" max="1" step="0.05" value="0">
+              <span id="cg-temperature-val" class="slider-val">+0.00</span>
             </div>
           </div>
         </div>
@@ -501,11 +544,19 @@
       <div class="cg-row" style="gap:6px; flex-wrap:wrap;">
         <span class="cg-label" data-i18n="clip.axis">Axis</span>
         <div class="clip-axis-btns">
-          <button id="btn-clip-axis-z" class="clip-axis-btn active" data-axis="z">Z</button>
-          <button id="btn-clip-axis-y" class="clip-axis-btn" data-axis="y">Y</button>
-          <button id="btn-clip-axis-x" class="clip-axis-btn" data-axis="x">X</button>
+          <button id="btn-clip-axis-z" class="clip-axis-btn active" data-axis="z" style="color:#4da6ff;">Z</button>
+          <button id="btn-clip-axis-y" class="clip-axis-btn" data-axis="y" style="color:#4dff88;">Y</button>
+          <button id="btn-clip-axis-x" class="clip-axis-btn" data-axis="x" style="color:#ff6b6b;">X</button>
         </div>
         <button id="btn-clip-flip" class="clip-flip-btn" data-i18n="clip.flip">Flip</button>
+      </div>
+      <!-- Transform mode: translate / rotate -->
+      <div class="cg-row" style="gap:6px;">
+        <span class="cg-label" data-i18n="clip.mode">Mode</span>
+        <div class="clip-axis-btns">
+          <button id="btn-clip-mode-translate" class="clip-axis-btn active" data-clip-mode="translate" data-i18n="clip.translate">Move</button>
+          <button id="btn-clip-mode-rotate"    class="clip-axis-btn"        data-clip-mode="rotate"    data-i18n="clip.rotate">Rotate</button>
+        </div>
       </div>
     </div>
   </div>
@@ -533,7 +584,7 @@
 
   <!-- ── Measurement List Panel ── -->
   <div id="measurement-list-panel" class="measure-list-panel hidden">
-    <div class="measure-list-header">
+    <div class="measure-drag-handle measure-list-header">
       <span data-i18n="measure.list">Measurements</span>
       <button id="btn-measure-clear-all" class="text-btn" style="font-size:0.68rem" data-i18n="measure.clearAll">Clear All</button>
     </div>
@@ -554,40 +605,7 @@
     <div id="prop-content"></div>
   </div>
 
-  <!-- ── Color Grading / Adjustment Panel ── -->
-  <div id="color-panel" class="cg-panel hidden">
-    <div class="cg-header">
-      <h3 data-i18n="cg.title">Color Grading</h3>
-      <button id="btn-cg-reset" class="text-btn" data-i18n="cg.reset">Reset</button>
-      <button id="btn-close-color" class="icon-btn sm">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
-      </button>
-    </div>
-    <div class="cg-body">
-      <div class="cg-row">
-        <span class="cg-label" data-i18n="cg.exposure">Exposure</span>
-        <input type="range" id="cg-exposure" min="-1.5" max="1.5" step="0.05" value="0">
-        <span class="cg-val" id="cg-exposure-val">0.0</span>
-      </div>
-      <div class="cg-row">
-        <span class="cg-label" data-i18n="cg.contrast">Contrast</span>
-        <input type="range" id="cg-contrast" min="-1" max="1" step="0.05" value="0">
-        <span class="cg-val" id="cg-contrast-val">0.0</span>
-      </div>
-      <div class="cg-row">
-        <span class="cg-label" data-i18n="cg.saturation">Saturation</span>
-        <input type="range" id="cg-saturation" min="-1" max="1" step="0.05" value="0">
-        <span class="cg-val" id="cg-saturation-val">0.0</span>
-      </div>
-      <div class="cg-row">
-        <span class="cg-label" data-i18n="cg.temperature">Temperature</span>
-        <input type="range" id="cg-temperature" min="-1" max="1" step="0.05" value="0">
-        <span class="cg-val" id="cg-temperature-val">0.0</span>
-      </div>
-    </div>
-  </div>
+  <!-- Color Adjustment panel removed — sliders are now in Settings > Lighting -->
 
   <!-- ── Watermark ── -->
   <div id="byrhinoview-watermark">byRhinoView</div>
@@ -618,7 +636,7 @@
       "imports": {
         "three": "https://unpkg.com/three@0.169.0/build/three.module.js",
         "three/addons/": "https://unpkg.com/three@0.169.0/examples/jsm/",
-        "three-mesh-bvh": "https://unpkg.com/three-mesh-bvh@0.8.4/build/index.module.js"
+        "three-mesh-bvh": "https://cdn.jsdelivr.net/npm/three-mesh-bvh@0.8.4/build/index.module.js"
       }
     }
   </script>
@@ -683,6 +701,6 @@
     </div>
   </div>
 
-  <script type="module" src="app.js?v=1.2.2"></script>
+  <script type="module" src="app.js?v=1.2.73"></script>
 </body>
 </html>

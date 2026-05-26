@@ -2,14 +2,45 @@ import * as THREE from 'three';
 import { S } from './state.js';
 import { setupLights, updateGroundAppearance } from './lighting.js';
 
+// ── Skybox sphere for rendered mode (bypasses tone mapping) ─────────────────
+// In rendered mode with ACES tone mapping, scene.background color gets compressed.
+// We add a huge BackSide sphere with toneMapped:false that bypasses the tone
+// mapping pipeline, so the user-set bg color shows exactly. For other modes,
+// scene.background is used directly (no ACES → no compression issue).
+
+// Stub — bg skybox idea reverted. Background still uses scene.background.
+// In rendered mode with ACES, white bg compresses to ~86% (light gray).
+// Acceptable trade-off for PBR quality.
+export function updateBgSkybox() {
+  // No-op for now. May reintroduce a proper skybox approach later.
+  const sky = S.scene?.getObjectByName('bg-skybox') || S.camera?.getObjectByName('bg-skybox');
+  if (sky) {
+    sky.geometry?.dispose();
+    sky.material?.dispose();
+    sky.parent?.remove(sky);
+  }
+}
+
 // ── Scene Background ─────────────────────────────────────────────────────────
 
 export function applySceneBackground() {
   if (S.currentMode === 'technical') { S.scene.background = new THREE.Color(0xffffff); return; }
 
   const bgType = document.getElementById('bg-type-select')?.value || 'solid';
-  const c1 = document.getElementById('bg-panel-c1')?.value || '#2a2b2f';
-  const c2 = document.getElementById('bg-panel-c2')?.value || '#18181c';
+
+  // HDR environment as background — uses the same PMREMGenerator texture
+  // that drives IBL, so reflections and background match perfectly.
+  if (bgType === 'hdr') {
+    if (S.environmentMap) {
+      S.scene.background = S.environmentMap;
+      S.scene.backgroundBlurriness = 0;
+    }
+    updateBgSkybox();
+    return;
+  }
+
+  const c1 = document.getElementById('bg-panel-c1')?.value || '#ffffff';
+  const c2 = document.getElementById('bg-panel-c2')?.value || '#e0e0e0';
 
   if (S.bgTexture) { S.bgTexture.dispose(); S.bgTexture = null; }
 
@@ -83,6 +114,9 @@ export function applySceneBackground() {
     S.bgTexture.magFilter = THREE.LinearFilter;
     S.scene.background = S.bgTexture;
   }
+
+  // Update skybox to reflect new bg color (rendered mode only)
+  updateBgSkybox();
 }
 
 export function applyFileBackground() {
@@ -98,8 +132,17 @@ export function applyFileBackground() {
   }
   bgSel.value = newType;
 
-  if (S.rhinoBackgroundColor && c1Input) {
-    const hex = '#' + S.rhinoBackgroundColor.getHexString();
+  // S.rhinoBackgroundColor comes from renderSettings (Rhino's *render* background),
+  // NOT the viewport background — Rhino's render default is black, viewport is white.
+  // Only apply if the color is meaningfully light (luminance > 5%); otherwise
+  // fall back to white which matches the typical Rhino viewport appearance.
+  if (c1Input) {
+    let hex = '#ffffff'; // default: white (matches Rhino viewport default)
+    if (S.rhinoBackgroundColor) {
+      const c   = S.rhinoBackgroundColor;
+      const lum = c.r * 0.299 + c.g * 0.587 + c.b * 0.114;
+      if (lum > 0.05) hex = '#' + c.getHexString();
+    }
     c1Input.value = hex;
     if (c1Swatch) c1Swatch.style.background = hex;
   }
@@ -126,6 +169,10 @@ export function clearTechnicalOutlines() {
 }
 
 export function addTechnicalOutline(mesh) {
+  // BackSide silhouette via uniform scale. Use a small factor so thin objects
+  // (walls, plates) don't get overwhelmed by black bleed.
+  // 1.03 scale → 3% bleed (e.g. 150mm on a 5m wall) is too much.
+  // 1.005 scale → 0.5% bleed is barely visible but still gives a silhouette.
   const mat = new THREE.MeshBasicMaterial({
     color: 0x000000, side: THREE.BackSide,
     depthWrite: false
@@ -133,7 +180,7 @@ export function addTechnicalOutline(mesh) {
   const outline = new THREE.Mesh(mesh.geometry, mat);
   outline.name = 'rhino-outline';
   outline.renderOrder = 1;
-  outline.scale.setScalar(1.03);
+  outline.scale.setScalar(1.005);
   mesh.add(outline);
 }
 
@@ -143,37 +190,149 @@ export function applyDisplayMode() {
   clearTechnicalOutlines();
   setupLights();
 
+  // OutlinePass: enable in technical mode, register all meshes for silhouette.
+  if (S.outlinePass) {
+    if (S.currentMode === 'technical') {
+      S.outlinePass.enabled = true;
+      const meshes = [];
+      S.currentModel.traverse(c => {
+        if (c.isMesh && c.name !== 'rhino-edges' && c.name !== 'rhino-outline'
+            && c.name !== 'selection-outline' && c.name !== 'ground-plane') {
+          meshes.push(c);
+        }
+      });
+      S.outlinePass.selectedObjects = meshes;
+    } else {
+      S.outlinePass.enabled = false;
+      S.outlinePass.selectedObjects = [];
+    }
+  }
+
   if (S.renderer) {
+    // ACES for rendered mode (filmic PBR look). Background is rendered via
+    // a separate skybox sphere with toneMapped:false so it bypasses ACES
+    // compression and shows the user's exact color.
     S.renderer.toneMapping = (S.currentMode === 'rendered')
       ? THREE.ACESFilmicToneMapping
       : THREE.NoToneMapping;
+    S.renderer.toneMappingExposure = 1.0;
   }
+  if (S.scene) S.scene.backgroundIntensity = 1.0;
 
-  if (['wireframe', 'technical', 'shaded', 'arctic'].includes(S.currentMode)) {
-    S.scene.environment = null;
-  } else if (S.environmentMap) {
+  // Manage a skybox sphere that bypasses tone mapping so user-set background
+  // color appears exactly as intended even in rendered (ACES) mode.
+  updateBgSkybox();
+
+  // Environment map (skylight) — Arch + Rendered use it for AO + reflections.
+  // Shaded/Wireframe/Technical: no env (flat/specific look).
+  if (['arctic', 'rendered'].includes(S.currentMode) && S.environmentMap) {
     S.scene.environment = S.environmentMap;
+  } else {
+    S.scene.environment = null;
   }
-  S.ssaoPass.enabled = false;
 
-  const maxDim = S.modelShadowDims ? S.modelShadowDims.maxDim : 100;
+  // Shadow control by mode:
+  // - shaded/wireframe/technical: NO shadows (clean look)
+  // - arctic/rendered: shadows if sun enabled
+  const modeWantsShadows = ['arctic', 'rendered'].includes(S.currentMode);
+  if (S.sunLight) S.sunLight.castShadow = modeWantsShadows && S.shadowsEnabled;
+  S.currentModel.traverse(c => {
+    if (c.isMesh) {
+      c.castShadow    = modeWantsShadows && S.shadowsEnabled;
+      c.receiveShadow = modeWantsShadows && S.shadowsEnabled;
+    }
+  });
+
+  if (S.ssaoPass) S.ssaoPass.enabled = false;
+  if (S.gtaoPass) S.gtaoPass.enabled = false;
+
+  // GTAO — world-space radius computed from the model bbox makes AO scale-
+  // invariant: 5% of the largest dimension gives the same visual density for
+  // a 20 mm jewelry ring and a 50 m building (same ratio the three.js example
+  // uses: radius ~0.25 on ~5-unit objects).
+  // screenSpaceRadius: false matches the three.js example and avoids the
+  // shader path that was producing AO = 1.0 everywhere when true was set.
+
+  const pdParams = {
+    lumaPhi: 10.0, depthPhi: 2.0, normalPhi: 3.0,
+    radius: 4.0, radiusExponent: 1.0, rings: 2.0, samples: 16
+  };
+
+  // 5 % of the model's longest axis — same proportional radius as the three.js
+  // GTAO example scene (0.25 unit radius on ~5 unit objects).
+  let aoRadiusWS = 1.0;
+  if (S.currentModel) {
+    const _b = new THREE.Box3();
+    S.currentModel.traverse(c => {
+      if (c.isMesh && !['rhino-edges','rhino-outline','selection-outline','ground-plane'].includes(c.name))
+        _b.expandByObject(c);
+    });
+    if (!_b.isEmpty()) {
+      const _sz = _b.getSize(new THREE.Vector3());
+      const _d  = Math.max(_sz.x, _sz.y, _sz.z);
+      if (_d > 0) aoRadiusWS = _d * 0.05;
+    }
+  }
+
+  // thickness must scale with the model. In the GTAO shader:
+  //   if (abs(viewDelta.z) < thickness) → accept occluder
+  // three.js example uses thickness=1.0 because 1 unit ≈ 1 m there, so 1.0 = 1 m tolerance.
+  // Our models are in mm → thickness=1.0 = 1 mm → rejects every real occluder
+  // (ring prong 15 mm above band, wall corner 200-2000 mm depth delta, etc.) → AO = 1.0.
+  // Fix: scale to model size. 20× radius = ~100% of model bbox, safely covers all adjacent
+  // surfaces while staying far below the background (which sits at far = dist × 50).
+  const gtaoParams = {
+    radius:            aoRadiusWS,          // 5 % of model size (world-space)
+    distanceExponent:  1.0,
+    thickness:         aoRadiusWS * 20.0,  // scale with model — was 1.0 (only 1 mm!)
+    scale:             1.0,
+    samples:           16,
+    distanceFallOff:   1.0,
+    screenSpaceRadius: false               // world-space mode — matches three.js example
+  };
+
   switch (S.currentMode) {
     case 'arctic':
-      S.ssaoPass.enabled     = true;
-      S.ssaoPass.kernelRadius = 16;
-      S.ssaoPass.minDistance  = maxDim * 0.0005;
-      S.ssaoPass.maxDistance  = maxDim * 0.05;
+      if (S.gtaoPass) {
+        S.gtaoPass.output         = 0; // OUTPUT.Default — blend AO with scene
+        S.gtaoPass.enabled        = true;
+        // blend formula: mix(white, AO, intensity) then MultiplyBlend onto scene.
+        // intensity > 1 clamps AO < (1 - 1/intensity) to pure black — avoid this.
+        // three.js example slider max is 1.0.
+        S.gtaoPass.blendIntensity = 0.85;
+        S.gtaoPass.updateGtaoMaterial(gtaoParams);
+        S.gtaoPass.updatePdMaterial(pdParams);
+      }
       break;
+
     case 'rendered':
-      S.ssaoPass.enabled     = true;
-      S.ssaoPass.kernelRadius = 12;
-      S.ssaoPass.minDistance  = maxDim * 0.0005;
-      S.ssaoPass.maxDistance  = maxDim * 0.03;
+      if (S.gtaoPass) {
+        S.gtaoPass.output         = 0;
+        S.gtaoPass.enabled        = true;
+        S.gtaoPass.blendIntensity = 0.65;
+        S.gtaoPass.updateGtaoMaterial(gtaoParams);
+        S.gtaoPass.updatePdMaterial(pdParams);
+      }
+      break;
+
+    // ── AO Debug: GTAOPass output=4 (raw AO buffer).
+    // Dark corners/crevices = AO is computing correctly.
+    // All white = GTAOPass AO shader still not producing occlusion.
+    // White material on the model + white background makes AO shadows clearly visible.
+    case 'ao-debug':
+      if (S.gtaoPass) {
+        S.gtaoPass.output         = 4; // OUTPUT.AO — raw AO buffer diagnostic
+        S.gtaoPass.enabled        = true;
+        S.gtaoPass.blendIntensity = 1.0;
+        S.gtaoPass.updateGtaoMaterial(gtaoParams);
+        S.gtaoPass.updatePdMaterial(pdParams);
+      }
       break;
   }
 
   applySceneBackground();
-  if (S.currentMode === 'technical') S.scene.background = new THREE.Color(0xffffff);
+  if (S.currentMode === 'technical' || S.currentMode === 'ao-debug')
+    S.scene.background = new THREE.Color(0xffffff);
 
   updateGroundAppearance();
 
@@ -188,9 +347,27 @@ export function applyDisplayMode() {
     const edges = child.getObjectByName('rhino-edges');
     if (edges) edges.renderOrder = 0;
 
+    // Helper: raw color from layer/object (PRESERVES black, no auto-white).
+    // Used by wireframe mode where the user expects black-on-black if specified.
+    const childAttrs = child.userData.attributes || {};
+    const childLayer = S.parsedLayers.find(l => l.index === childAttrs.layerIndex);
+    const rawColor = () => {
+      const oc = childAttrs.objectColor;
+      const hasOverride = oc && ((oc.r ?? 0) > 0 || (oc.g ?? 0) > 0 || (oc.b ?? 0) > 0);
+      const out = new THREE.Color(0, 0, 0);
+      if (hasOverride) {
+        out.setRGB(oc.r / 255, oc.g / 255, oc.b / 255);
+      } else if (childLayer?.color) {
+        const lc = childLayer.color;
+        out.setRGB((lc.r ?? lc.R ?? 0) / 255, (lc.g ?? lc.G ?? 0) / 255, (lc.b ?? lc.B ?? 0) / 255);
+      }
+      return out;
+    };
+
     switch (S.currentMode) {
 
       case 'wireframe':
+        // Hide faces by writing only to depth buffer (transparent front face)
         if (edgeOverlay) {
           child.material = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: true });
         } else {
@@ -201,8 +378,8 @@ export function applyDisplayMode() {
         }
         if (edges) {
           edges.visible = edgeOverlay;
-          const base = child.userData.shadedMaterial || orig;
-          edges.material.color.copy(base.color);
+          // Use raw color so black layer/object stays black in wireframe
+          edges.material.color.copy(rawColor());
         }
         break;
 
@@ -216,17 +393,31 @@ export function applyDisplayMode() {
         if (child.userData.objectColorCustom !== undefined) m.color?.set(child.userData.objectColorCustom);
         m.needsUpdate = true;
         child.material = m;
-        if (edges) { edges.visible = edgeOverlay; edges.material.color.setHex(0x000000); }
+        if (edges) {
+          edges.visible = edgeOverlay;
+          edges.material.color.setHex(0x000000);
+          edges.renderOrder = 1;
+          edges.material.depthWrite = false;
+        }
         break;
       }
 
       case 'arctic': {
+        // Architecture: near-white surfaces + env-map IBL + sun shadows.
         const m = new THREE.MeshStandardMaterial({
-          color: 0xf0f0f0, roughness: 0.9, metalness: 0.0
+          color: 0xf0f0f0, roughness: 0.95, metalness: 0.0
         });
         m.polygonOffset = true; m.polygonOffsetFactor = 1; m.polygonOffsetUnits = 1;
+        // Rely on scene.environment instead of explicit envMap so HDR changes apply.
+        // 0.4 keeps IBL contribution modest — supplemental lights add the rest.
+        m.envMapIntensity = 0.4;
         child.material = m;
-        if (edges) { edges.visible = edgeOverlay; edges.material.color.setHex(0x000000); }
+        if (edges) {
+          edges.visible = edgeOverlay;
+          edges.material.color.setHex(0x000000);
+          edges.renderOrder = 1;
+          edges.material.depthWrite = false;
+        }
         break;
       }
 
@@ -237,30 +428,60 @@ export function applyDisplayMode() {
         if (m.roughness !== undefined && m.roughness < 0.05) m.roughness = 0.4;
         if (m.metalness === undefined) m.metalness = 0.0;
         m.polygonOffset = true; m.polygonOffsetFactor = 1; m.polygonOffsetUnits = 1;
-        m.envMap = S.environmentMap;
-        m.envMapIntensity = 0.9;
+        // Don't set m.envMap directly — that overrides scene.environment and prevents
+        // HDR changes from taking effect. envMapIntensity controls strength.
+        m.envMap = null;
+        m.envMapIntensity = 1.0;
         applyCustomToMaterial(m, child.userData.customMaterial);
         m.needsUpdate = true;
         child.material = m;
-        S.scene.environment = S.environmentMap;
-        if (edges) { edges.visible = edgeOverlay; edges.material.color.setHex(0x000000); }
+        if (edges) {
+          edges.visible = edgeOverlay;
+          edges.material.color.setHex(0x000000);
+          // renderOrder=1 + depthWrite:false ensures lines always draw on top
+          // of face geometry, preventing fragmentation from z-fighting.
+          edges.renderOrder = 1;
+          edges.material.depthWrite = false;
+        }
         break;
       }
 
-      case 'technical':
+      case 'technical': {
         child.renderOrder = 0;
-        child.material = new THREE.MeshBasicMaterial({
-          color: 0xffffff, side: THREE.FrontSide,
-          polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1
-        });
+        const orig = child.userData.originalMaterial;
+        const isTransparent = orig?.transparent && (orig?.opacity ?? 1) < 0.95;
+        if (isTransparent) {
+          child.material = new THREE.MeshBasicMaterial({
+            color: 0xffffff, side: THREE.DoubleSide,
+            transparent: true, opacity: 0.08,
+            polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
+            depthWrite: false
+          });
+        } else {
+          child.material = new THREE.MeshBasicMaterial({
+            color: 0xffffff, side: THREE.DoubleSide,
+            polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1
+          });
+        }
         if (edges) {
           edges.visible = edgeOverlay;
           edges.material.color.setHex(0x000000);
           edges.renderOrder = 2;
           edges.material.depthWrite = false;
         }
-        addTechnicalOutline(child);
         break;
+      }
+
+      // AO debug: white surfaces so we can read the AO shadow map clearly.
+      // GTAOPass output=4 overlays the raw AO buffer — dark = occluded, white = open.
+      case 'ao-debug': {
+        child.material = new THREE.MeshStandardMaterial({
+          color: 0xffffff, roughness: 1.0, metalness: 0.0,
+          polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1
+        });
+        if (edges) edges.visible = false; // hide edges — irrelevant for AO debug
+        break;
+      }
     }
   });
 }
@@ -289,9 +510,13 @@ export function applyLayerColorsToModel(model) {
     const attrs = child.userData.attributes || {};
     if (child.userData.isColorByLayer) {
       const layer = S.parsedLayers.find(l => l.index === attrs.layerIndex);
-      if (layer) {
-        const { r, g, b } = layer.color;
-        const col = new THREE.Color(r / 255, g / 255, b / 255);
+      if (layer?.color) {
+        const lc = layer.color;
+        const col = new THREE.Color(
+          (lc.r ?? lc.R ?? 0) / 255,
+          (lc.g ?? lc.G ?? 0) / 255,
+          (lc.b ?? lc.B ?? 0) / 255
+        );
         if (col.r < 0.02 && col.g < 0.02 && col.b < 0.02) col.setHex(0xffffff);
         child.userData.originalMaterial.color.copy(col);
         if (child.userData.shadedMaterial) child.userData.shadedMaterial.color.copy(col);

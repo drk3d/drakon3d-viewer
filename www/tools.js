@@ -38,8 +38,6 @@ export function deactivateAllTools() {
   document.getElementById('btn-tool-clipping')?.classList.remove('active');
   document.getElementById('find-panel')?.classList.add('hidden');
   document.getElementById('btn-tool-find')?.classList.remove('active');
-  document.getElementById('color-panel')?.classList.add('hidden');
-  document.getElementById('btn-tool-colorgrade')?.classList.remove('active');
   document.getElementById('btn-tool-distance')?.classList.remove('active');
   document.getElementById('btn-tool-angle')?.classList.remove('active');
 }
@@ -288,7 +286,11 @@ export function updateTempDistanceLine(event) {
     if (S.distanceToolState.tempLine)      S.measurementGroup.remove(S.distanceToolState.tempLine);
     if (S.distanceToolState.tempBillboard) S.measurementGroup.remove(S.distanceToolState.tempBillboard);
     const lineGeo = new THREE.BufferGeometry().setFromPoints([p1, p2]);
-    const lineMat = new THREE.LineDashedMaterial({ color: 0x10b981, dashSize: 0.5, gapSize: 0.25 });
+    const modelLen = S.currentModel
+      ? new THREE.Box3().setFromObject(S.currentModel).getSize(new THREE.Vector3()).length()
+      : 100;
+    const dashSize = modelLen * 0.02;
+    const lineMat = new THREE.LineDashedMaterial({ color: 0x10b981, linewidth: 2, dashSize, gapSize: dashSize * 0.5 });
     const line    = new THREE.Line(lineGeo, lineMat);
     line.computeLineDistances();
     S.distanceToolState.tempLine = line;
@@ -382,7 +384,11 @@ export function onCanvasClick(event) {
     if (S.distanceToolState.tempBillboard) S.measurementGroup.remove(S.distanceToolState.tempBillboard);
 
     const lineGeo = new THREE.BufferGeometry().setFromPoints([p1, p2]);
-    const lineMat = new THREE.LineDashedMaterial({ color: 0x10b981, dashSize: 1, gapSize: 0.5 });
+    const modelLen2 = S.currentModel
+      ? new THREE.Box3().setFromObject(S.currentModel).getSize(new THREE.Vector3()).length()
+      : 100;
+    const ds = modelLen2 * 0.02;
+    const lineMat = new THREE.LineDashedMaterial({ color: 0x10b981, linewidth: 2, dashSize: ds, gapSize: ds * 0.5 });
     const line    = new THREE.Line(lineGeo, lineMat);
     line.computeLineDistances();
     S.measurementGroup.add(line);
@@ -435,6 +441,8 @@ export function setupClippingHelper() {
   const size = S.currentModel
     ? new THREE.Box3().setFromObject(S.currentModel).getSize(new THREE.Vector3()).length() * 0.65
     : 50;
+
+  // Build clipping plane grid (white/light blue grid)
   const div = 5, pts = [];
   for (let i = -div; i <= div; i++) {
     const t = (i / div) * size;
@@ -447,10 +455,28 @@ export function setupClippingHelper() {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
   const mat = new THREE.LineBasicMaterial({
-    color: 0xef4444, depthTest: false, depthWrite: false, transparent: true, opacity: 0.75
+    color: 0x4da6ff, depthTest: false, depthWrite: false, transparent: true, opacity: 0.65
   });
   S.clippingHelper = new THREE.LineSegments(geo, mat);
   S.clippingHelper.renderOrder = 999;
+
+  // Add normal direction arrow (blue = Z / cut direction)
+  // Arrow points along +Y (local) which maps to plane normal after pose update
+  const arrowLen = size * 0.55;
+  const arrowPts = [
+    0, 0, 0,        0, arrowLen, 0,            // shaft
+    0, arrowLen, 0, -size*0.08, arrowLen*0.82, 0, // left head
+    0, arrowLen, 0,  size*0.08, arrowLen*0.82, 0  // right head
+  ];
+  const arrowGeo = new THREE.BufferGeometry();
+  arrowGeo.setAttribute('position', new THREE.Float32BufferAttribute(arrowPts, 3));
+  const arrowMat = new THREE.LineBasicMaterial({
+    color: 0x4da6ff, depthTest: false, depthWrite: false, linewidth: 2
+  });
+  const arrow = new THREE.LineSegments(arrowGeo, arrowMat);
+  arrow.renderOrder = 999;
+  S.clippingHelper.add(arrow);
+
   S.scene.add(S.clippingHelper);
   updateClippingHelperPose();
 

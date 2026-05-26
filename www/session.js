@@ -52,9 +52,12 @@ export function saveSession() {
     sunLightEnabled:    document.getElementById('chk-sun-panel')?.checked ?? false,
     sunAzimuth:         parseFloat(document.getElementById('sl-sun-azimuth')?.value ?? 135),
     sunElevation:       parseFloat(document.getElementById('sl-sun-elevation')?.value ?? 45),
+    sunIntensity:       parseFloat(document.getElementById('sl-sun-intensity')?.value ?? 1.8),
     ambientIntensity:   parseFloat(document.getElementById('sl-ambient-panel')?.value ?? 0.5),
     cameraFov:          parseFloat(document.getElementById('sl-camera-fov')?.value ?? 45),
     dampingFactor:      parseFloat(document.getElementById('sl-damping-panel')?.value ?? 0.5),
+    envIntensity:       parseFloat(document.getElementById('sl-env-intensity')?.value ?? 1.0),
+    envPreset:          document.getElementById('env-preset-select')?.value || 'studio',
     bgType:             document.getElementById('bg-type-select')?.value || 'solid',
     bgC1:               document.getElementById('bg-panel-c1')?.value || '#2a2b2f',
     bgC2:               document.getElementById('bg-panel-c2')?.value || '#18181c',
@@ -131,7 +134,14 @@ export async function loadSession(file) {
         }
       };
 
+      // Restore env preset
+      if (s.envPreset) {
+        const envSel = document.getElementById('env-preset-select');
+        if (envSel) { envSel.value = s.envPreset; envSel.dispatchEvent(new Event('change')); }
+      }
+      setSlider('sl-env-intensity', 'sl-env-intensity-val', s.envIntensity ?? 1.0, 'float');
       setSlider('sl-ambient-panel', 'sl-ambient-val',     s.ambientIntensity, 'float');
+      setSlider('sl-sun-intensity', 'sl-sun-intensity-val', s.sunIntensity ?? 1.8, 'float');
       setSlider('sl-sun-azimuth',   'sl-sun-azimuth-val', s.sunAzimuth,       'degree');
       setSlider('sl-sun-elevation', 'sl-sun-elevation-val', s.sunElevation,   'degree');
       setSlider('sl-camera-fov',    'sl-camera-fov-val',  s.cameraFov,        'degree');
@@ -256,7 +266,9 @@ export function resetSettingsToDefault() {
     }
   };
 
+  resetSlider('sl-env-intensity', 'sl-env-intensity-val', 1.0,  'float');
   resetSlider('sl-ambient-panel', 'sl-ambient-val',       0.5,  'float');
+  resetSlider('sl-sun-intensity', 'sl-sun-intensity-val', 1.8,  'float');
   resetSlider('sl-sun-azimuth',   'sl-sun-azimuth-val',   135,  'degree');
   resetSlider('sl-sun-elevation', 'sl-sun-elevation-val', 45,   'degree');
   resetSlider('sl-camera-fov',    'sl-camera-fov-val',    45,   'degree');
@@ -284,10 +296,10 @@ export function resetSettingsToDefault() {
       el.dispatchEvent(new Event('input'));
     }
   };
-  resetBgColor('bg-panel-c1', 'bg-panel-swatch-c1', '#2a2b2f');
-  resetBgColor('bg-panel-c2', 'bg-panel-swatch-c2', '#18181c');
-  resetBgColor('bg-panel-c3', 'bg-panel-swatch-c3', '#2d3748');
-  resetBgColor('bg-panel-c4', 'bg-panel-swatch-c4', '#1a202c');
+  resetBgColor('bg-panel-c1', 'bg-panel-swatch-c1', '#ffffff');
+  resetBgColor('bg-panel-c2', 'bg-panel-swatch-c2', '#e0e0e0');
+  resetBgColor('bg-panel-c3', 'bg-panel-swatch-c3', '#f0f0f0');
+  resetBgColor('bg-panel-c4', 'bg-panel-swatch-c4', '#cccccc');
 
   const bgSel = document.getElementById('bg-type-select');
   if (bgSel) { bgSel.value = 'solid'; bgSel.dispatchEvent(new Event('change')); }

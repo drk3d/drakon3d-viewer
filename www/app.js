@@ -6,8 +6,11 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { SSAOPass } from 'three/addons/postprocessing/SSAOPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { OutlinePass } from 'three/addons/postprocessing/OutlinePass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
@@ -60,7 +63,10 @@ const ColorGradingShader = {
       c.r += uTemperature * 0.15;
       c.g += uTemperature * 0.03;
       c.b -= uTemperature * 0.15;
-      gl_FragColor = vec4(clamp(c, 0.0, 1.0), tex.a);
+      // Only clamp NEGATIVE values; preserve HDR (>1.0) so subsequent
+      // tone mapping in OutputPass works correctly. Clamping to [0,1] here
+      // would clip HDR values like scene.backgroundIntensity above 1.
+      gl_FragColor = vec4(max(c, vec3(0.0)), tex.a);
     }
   `
 };
@@ -81,7 +87,7 @@ if (window.rhino3dm) {
 }
 
 const rhinoLoader = new Rhino3dmLoader();
-rhinoLoader.setLibraryPath('https://cdn.jsdelivr.net/npm/rhino3dm@8.0.1/');
+rhinoLoader.setLibraryPath('https://cdn.jsdelivr.net/npm/rhino3dm@8.17.0/');
 
 const gltfLoader = new GLTFLoader();
 
@@ -122,17 +128,70 @@ function init() {
   S.renderer.shadowMap.type = THREE.PCFShadowMap;
   container.appendChild(S.renderer.domElement);
 
+  // EffectComposer with default RT (no MSAA — GTAOPass needs depth from RenderPass).
+  // SMAA handles anti-aliasing later in the chain.
   S.composer = new EffectComposer(S.renderer);
   S.composer.addPass(new RenderPass(S.scene, S.camera));
+
+  // GTAO — Ground Truth Ambient Occlusion, configured per three.js example
+  // (https://threejs.org/examples/?q=ambient#webgl_postprocessing_gtao)
+  S.gtaoPass = new GTAOPass(S.scene, S.camera, window.innerWidth, window.innerHeight);
+  // OUTPUT.Default = scene blended with AO. OUTPUT.Denoise outputs AO only (debug).
+  S.gtaoPass.output = GTAOPass.OUTPUT.Default;
+  S.gtaoPass.enabled = false;
+  S.gtaoPass.blendIntensity = 1.0;
+  S.composer.addPass(S.gtaoPass);
+  // Expose for runtime debugging in console
+  window._gtao = S.gtaoPass;
+  window._GTAO_OUTPUT = GTAOPass.OUTPUT;
+
+  // Initialize GTAO parameters (default — overridden per mode in display.js).
+  // screenSpaceRadius: false matches the three.js example setup.  The
+  // world-space radius is set to a placeholder (1.0); display.js sets it to
+  // 5% of the loaded model's bounding-box size so it scales automatically
+  // from a 20 mm jewelry ring to a 50 m building.
+  S.gtaoPass.updateGtaoMaterial({
+    radius: 1.0, distanceExponent: 1.0, thickness: 20.0, scale: 1.0,
+    samples: 16, distanceFallOff: 1.0, screenSpaceRadius: false
+  });
+  S.gtaoPass.updatePdMaterial({
+    lumaPhi: 10., depthPhi: 2., normalPhi: 3.,
+    radius: 4., radiusExponent: 1., rings: 2., samples: 16
+  });
+
+  // SSAOPass — fallback / comparison. Added to the composer so we can enable it
+  // per-mode. Starts disabled; ao-debug mode can toggle it to verify the
+  // pipeline works while GTAOPass is being debugged.
   S.ssaoPass = new SSAOPass(S.scene, S.camera, window.innerWidth, window.innerHeight);
-  S.ssaoPass.kernelRadius = 16;
-  S.ssaoPass.minDistance = 0.005;
-  S.ssaoPass.maxDistance = 0.1;
+  S.ssaoPass.kernelRadius = 16;   // world-space radius (scaled in display.js)
+  S.ssaoPass.minDistance  = 0.005;
+  S.ssaoPass.maxDistance  = 0.1;
   S.ssaoPass.enabled = false;
   S.composer.addPass(S.ssaoPass);
+  window._ssao = S.ssaoPass;
+
+  // Outline pass for technical-mode silhouette (2px) — disabled by default.
+  S.outlinePass = new OutlinePass(
+    new THREE.Vector2(window.innerWidth, window.innerHeight),
+    S.scene, S.camera
+  );
+  S.outlinePass.edgeStrength      = 20.0;
+  S.outlinePass.edgeGlow          = 0.0;
+  S.outlinePass.edgeThickness     = 4.0;  // visibly thicker than 1px geometry edges
+  S.outlinePass.pulsePeriod       = 0;
+  S.outlinePass.visibleEdgeColor.set('#000000');
+  S.outlinePass.hiddenEdgeColor.set('#000000');
+  S.outlinePass.enabled = false;
+  S.composer.addPass(S.outlinePass);
 
   S.cgPass = new ShaderPass(ColorGradingShader);
   S.composer.addPass(S.cgPass);
+
+  // SMAA — software AA pass; secondary to the MSAA render target.
+  // Helps smooth post-process artifacts (OutlinePass edges, etc) that MSAA misses.
+  S.smaaPass = new SMAAPass(window.innerWidth, window.innerHeight);
+  S.composer.addPass(S.smaaPass);
+
   S.composer.addPass(new OutputPass());
 
   S.controls = new OrbitControls(S.camera, S.renderer.domElement);
@@ -197,6 +256,11 @@ function init() {
   bindUI();
   updateAllSliderFills();
   window.addEventListener('resize', onWindowResize);
+
+  // Apply env intensity initial value
+  const slEnvInit = document.getElementById('sl-env-intensity');
+  if (slEnvInit) S.scene.environmentIntensity = parseFloat(slEnvInit.value) || 1.0;
+
   hideLoading();
 }
 
@@ -375,16 +439,49 @@ function bindUI() {
     });
   }
 
-  // ── Environment presets ──
+  // ── Environment preset select ──
+  const envPresetSel = document.getElementById('env-preset-select');
+  if (envPresetSel) {
+    envPresetSel.addEventListener('change', () => {
+      S.currentEnvPreset = envPresetSel.value;
+      const preset = S.envMaps[S.currentEnvPreset];
+      if (preset) {
+        S.environmentMap = preset;
+        if (['arctic','rendered'].includes(S.currentMode)) {
+          S.scene.environment = S.environmentMap;
+        }
+        // Also update background if HDR bg mode is active
+        const bgSel = document.getElementById('bg-type-select');
+        if (bgSel?.value === 'hdr') applySceneBackground();
+      }
+    });
+  }
+
+  // ── Environment light intensity ──
+  const slEnvInt    = document.getElementById('sl-env-intensity');
+  const slEnvIntVal = document.getElementById('sl-env-intensity-val');
+  if (slEnvInt) {
+    slEnvInt.addEventListener('input', e => {
+      const v = parseFloat(e.target.value);
+      if (slEnvIntVal) slEnvIntVal.textContent = v.toFixed(2);
+      updateSliderFill(e.target);
+      S.scene.environmentIntensity = v;
+    });
+    updateSliderFill(slEnvInt);
+  }
+
+  // Legacy button-based env presets (no-op if no such elements in HTML)
   document.querySelectorAll('.env-preset-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       S.currentEnvPreset = btn.dataset.preset;
       document.querySelectorAll('.env-preset-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
+      if (envPresetSel) envPresetSel.value = S.currentEnvPreset;
       const preset = S.envMaps[S.currentEnvPreset];
       if (preset) {
         S.environmentMap = preset;
         S.scene.environment = S.environmentMap;
+        if (document.getElementById('bg-type-select')?.value === 'hdr') applySceneBackground();
       }
     });
   });
@@ -408,7 +505,14 @@ function bindUI() {
         S.envMaps['hdr-custom'] = envTexture;
         S.environmentMap = envTexture;
         S.currentEnvPreset = 'hdr-custom';
-        S.scene.environment = S.environmentMap;
+        if (['arctic','rendered'].includes(S.currentMode)) S.scene.environment = S.environmentMap;
+        // Enable the custom-HDR option and select it
+        const hdrOpt = document.getElementById('opt-hdr-custom');
+        if (hdrOpt) { hdrOpt.disabled = false; hdrOpt.textContent = 'Custom HDR'; }
+        const envSel = document.getElementById('env-preset-select');
+        if (envSel) envSel.value = 'hdr-custom';
+        // Also update background if HDR bg mode
+        if (document.getElementById('bg-type-select')?.value === 'hdr') applySceneBackground();
         document.querySelectorAll('.env-preset-btn').forEach(b => b.classList.remove('active'));
         document.querySelector('.env-preset-btn[data-preset="hdr-custom"]')?.classList.add('active');
       }, undefined, err => console.error('[HDR] load error', err));
@@ -478,10 +582,11 @@ function bindUI() {
     });
   });
 
-  const chkSun      = document.getElementById('chk-sun-panel');
-  const sunControls = document.getElementById('sun-controls');
-  const slAzimuth   = document.getElementById('sl-sun-azimuth');
-  const slElevation = document.getElementById('sl-sun-elevation');
+  const chkSun       = document.getElementById('chk-sun-panel');
+  const sunControls  = document.getElementById('sun-controls');
+  const slAzimuth    = document.getElementById('sl-sun-azimuth');
+  const slElevation  = document.getElementById('sl-sun-elevation');
+  const slSunInt     = document.getElementById('sl-sun-intensity');
 
   chkSun?.addEventListener('change', () => {
     sunControls?.classList.toggle('hidden', !chkSun.checked);
@@ -497,8 +602,14 @@ function bindUI() {
     updateSliderFill(e.target);
     updateSunLight();
   });
+  slSunInt?.addEventListener('input', e => {
+    document.getElementById('sl-sun-intensity-val').textContent = parseFloat(e.target.value).toFixed(2);
+    updateSliderFill(e.target);
+    updateSunLight();
+  });
   if (slAzimuth)   updateSliderFill(slAzimuth);
   if (slElevation) updateSliderFill(slElevation);
+  if (slSunInt)    updateSliderFill(slSunInt);
 
   document.getElementById('sl-damping-panel').addEventListener('input', e => {
     const friction = parseFloat(e.target.value);
@@ -607,10 +718,16 @@ function bindUI() {
 
   // ── Turntable ──
   let ttContinuous = false;
-  let ttBaseSpeed  = 2.0;
   const ttToggleBtn  = document.getElementById('btn-tt-toggle');
   const springSlider = document.getElementById('tt-spring-slider');
   const springVal    = document.getElementById('tt-spring-val');
+  const ttDropdown   = document.getElementById('turntable-dropdown');
+  const ttTriggerBtn = document.getElementById('btn-turntable-dropdown');
+
+  // Prevent clicks INSIDE the turntable dropdown from closing it.
+  // The global document click handler closes all dropdowns; stopping
+  // propagation here ensures clicks on the toggle/slider don't close it.
+  ttDropdown?.addEventListener('click', e => e.stopPropagation());
 
   const setTurntable = (on) => {
     ttContinuous = on;
@@ -618,6 +735,8 @@ function bindUI() {
       ttToggleBtn.classList.toggle('active', on);
       ttToggleBtn.textContent = on ? t('turntable.on') : t('turntable.off');
     }
+    // Tint the toolbar Turn button when auto-rotate is active
+    if (ttTriggerBtn) ttTriggerBtn.classList.toggle('active', on);
     if (!on) {
       // Turning off: reset slider and stop rotation
       springSlider.value = 0;
@@ -628,9 +747,12 @@ function bindUI() {
     }
     // Turning on: keep current slider value — speed 0 means no rotation yet
   };
-  ttToggleBtn?.addEventListener('click', () => setTurntable(!ttContinuous));
+  ttToggleBtn?.addEventListener('click', () => {
+    setTurntable(!ttContinuous);
+    // Don't close dropdown on toggle — user needs speed slider
+  });
 
-  springSlider.addEventListener('input', () => {
+  springSlider?.addEventListener('input', () => {
     const speed = parseFloat(springSlider.value);
     springVal.textContent = (speed >= 0 ? '+' : '') + speed.toFixed(1);
     updateSliderFill(springSlider);
@@ -647,15 +769,14 @@ function bindUI() {
     // Continuous ON: keep the set speed (no spring-back)
     if (ttContinuous) return;
     // Continuous OFF: spring back to 0 and stop
-    springSlider.value = 0;
-    springVal.textContent = '0.0';
-    updateSliderFill(springSlider);
+    if (springSlider) { springSlider.value = 0; updateSliderFill(springSlider); }
+    if (springVal) springVal.textContent = '0.0';
     S.controls.autoRotate = false;
     S.controls.autoRotateSpeed = 0;
   };
-  springSlider.addEventListener('pointerup',     resetSpringSlider);
-  springSlider.addEventListener('pointercancel', resetSpringSlider);
-  springSlider.addEventListener('change',        resetSpringSlider);
+  springSlider?.addEventListener('pointerup',     resetSpringSlider);
+  springSlider?.addEventListener('pointercancel', resetSpringSlider);
+  springSlider?.addEventListener('change',        resetSpringSlider);
 
   // ── Select mode ──
   document.getElementById('select-dropdown').querySelectorAll('.dropdown-item').forEach(btn => {
@@ -745,13 +866,7 @@ function bindUI() {
     document.getElementById('tools-dropdown').classList.add('hidden');
   });
 
-  document.getElementById('btn-tool-colorgrade').addEventListener('click', (e) => {
-    e.stopPropagation();
-    deactivateAllTools();
-    document.getElementById('color-panel').classList.remove('hidden');
-    document.getElementById('btn-tool-colorgrade').classList.add('active');
-    document.getElementById('tools-dropdown').classList.add('hidden');
-  });
+  // Color Adjustment moved to Settings panel — no floating popup anymore
 
   const setupSafeClose = (btnId, callback) => {
     const btn = document.getElementById(btnId);
@@ -778,15 +893,37 @@ function bindUI() {
     document.getElementById('find-panel').classList.add('hidden');
     document.getElementById('btn-tool-find').classList.remove('active');
   });
-  setupSafeClose('btn-close-color', () => {
-    document.getElementById('color-panel').classList.add('hidden');
-    document.getElementById('btn-tool-colorgrade').classList.remove('active');
-  });
+  // Color panel removed — color adj is now inline in Settings
   document.getElementById('btn-measure-clear-all')?.addEventListener('click', () => clearMeasurements());
   setupSafeClose('btn-close-props', () => {
     document.getElementById('object-properties').classList.add('hidden');
     clearSelection();
   });
+
+  // ── Draggable measurement panel ──
+  ;(function() {
+    const panel  = document.getElementById('measurement-list-panel');
+    const handle = panel?.querySelector('.measure-drag-handle');
+    if (!panel || !handle) return;
+    let dragging = false, ox = 0, oy = 0;
+    handle.addEventListener('pointerdown', e => {
+      if (e.target.closest('button')) return;
+      dragging = true;
+      const rect = panel.getBoundingClientRect();
+      ox = e.clientX - rect.left; oy = e.clientY - rect.top;
+      handle.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+    handle.addEventListener('pointermove', e => {
+      if (!dragging) return;
+      const x = Math.max(0, Math.min(window.innerWidth  - panel.offsetWidth,  e.clientX - ox));
+      const y = Math.max(0, Math.min(window.innerHeight - panel.offsetHeight, e.clientY - oy));
+      panel.style.left = x + 'px'; panel.style.top = y + 'px';
+      panel.style.right = 'auto'; panel.style.bottom = 'auto';
+    });
+    handle.addEventListener('pointerup',     () => { dragging = false; });
+    handle.addEventListener('pointercancel', () => { dragging = false; });
+  })();
 
   // ── Draggable properties panel ──
   ;(function() {
@@ -885,12 +1022,23 @@ function bindUI() {
     updateClippingPlane();
   };
 
-  document.querySelectorAll('.clip-axis-btn').forEach(btn => {
+  document.querySelectorAll('.clip-axis-btn[data-axis]').forEach(btn => {
     btn.addEventListener('click', () => { clipAxis = btn.dataset.axis; applyClipAxisUI(); });
   });
   document.getElementById('btn-clip-flip')?.addEventListener('click', () => {
     clipFlipped = !clipFlipped;
     applyClipAxisUI();
+  });
+
+  // Clipping transform mode (translate / rotate)
+  document.querySelectorAll('.clip-axis-btn[data-clip-mode]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.clip-axis-btn[data-clip-mode]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      if (S.clippingTransformControls) {
+        S.clippingTransformControls.setMode(btn.dataset.clipMode);
+      }
+    });
   });
 
   // ── 9. Object search (live) ──
@@ -948,28 +1096,7 @@ function bindUI() {
     }
   });
 
-  // ── Draggable color panel ──
-  ;(function() {
-    const panel  = document.getElementById('color-panel');
-    const handle = panel?.querySelector('.cg-header');
-    if (!panel || !handle) return;
-    let ox=0, oy=0, dragging=false;
-    handle.addEventListener('pointerdown', e => {
-      if (e.target.closest('button,input,select')) return;
-      dragging=true; handle.setPointerCapture(e.pointerId);
-      const r = panel.getBoundingClientRect();
-      ox = e.clientX - r.left; oy = e.clientY - r.top;
-      handle.style.cursor = 'grabbing';
-    });
-    handle.addEventListener('pointermove', e => {
-      if (!dragging) return;
-      const x = Math.max(0, Math.min(window.innerWidth  - panel.offsetWidth,  e.clientX - ox));
-      const y = Math.max(0, Math.min(window.innerHeight - panel.offsetHeight, e.clientY - oy));
-      panel.style.left = x + 'px'; panel.style.top = y + 'px';
-      panel.style.right = 'auto'; panel.style.bottom = 'auto';
-    });
-    handle.addEventListener('pointerup', () => { dragging=false; handle.style.cursor='grab'; });
-  })();
+  // Color panel removed — color adjustment is now inline in Settings
 
   // ── 11. Canvas pointer events ──
   S.renderer.domElement.addEventListener('pointerdown', (e) => {
@@ -1087,6 +1214,10 @@ function onWindowResize() {
   }
   S.renderer.setSize(window.innerWidth, window.innerHeight);
   S.composer.setSize(window.innerWidth, window.innerHeight);
+  if (S.outlinePass?.setSize) S.outlinePass.setSize(window.innerWidth, window.innerHeight);
+  if (S.smaaPass?.setSize)    S.smaaPass.setSize(window.innerWidth, window.innerHeight);
+  if (S.gtaoPass?.setSize)    S.gtaoPass.setSize(window.innerWidth, window.innerHeight);
+  if (S.ssaoPass?.setSize)    S.ssaoPass.setSize(window.innerWidth, window.innerHeight);
 }
 
 // ── Theme ──────────────────────────────────────────────────────────────────

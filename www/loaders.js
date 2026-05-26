@@ -183,8 +183,21 @@ export async function load3MFFile(file, extractEdges) {
 export async function preprocess3dm(file, skipLayerParse) {
   S.parsedAnnotations = [];
   S.parsed3dmFileInfo = null;
+  S._objLayerById = new Map();
   let fileData = file;
 
+  // Wait up to 6 s for the rhino3dm WASM to finish initializing.
+  // Without this, files opened at startup (before WASM resolves) skip
+  // SubD conversion and annotation extraction entirely.
+  if (!S.rhinoInstance) {
+    await new Promise(resolve => {
+      let waited = 0;
+      const check = setInterval(() => {
+        waited += 100;
+        if (S.rhinoInstance || waited >= 6000) { clearInterval(check); resolve(); }
+      }, 100);
+    });
+  }
   if (!S.rhinoInstance) return file;
 
   try {
@@ -196,6 +209,29 @@ export async function preprocess3dm(file, skipLayerParse) {
     if (!doc) return file;
 
     const safeInst = (obj, cls) => !!(cls && (obj instanceof cls));
+
+    // ── Dimension styles ─────────────────────────────────────────────────
+    // rhino3dm@8.17 exposes textHeight but NOT dimensionScale (RhinoCommon has it,
+    // js bindings don't). Per-object scale override is similarly unavailable.
+    // We extract what we can; effective size will be computed with a baseH floor.
+    const dimStylesById = {};
+    try {
+      const dsTable = doc.dimstyles();
+      const dsCount = dsTable?.count ?? 0;
+      for (let i = 0; i < dsCount; i++) {
+        const ds = dsTable.get(i);
+        if (ds) {
+          try {
+            dimStylesById[ds.id] = {
+              name:       ds.name,
+              textHeight: ds.textHeight ?? 1.0
+            };
+          } catch {}
+          try { ds.delete(); } catch {}
+        }
+      }
+      try { dsTable.delete(); } catch {}
+    } catch {}
 
     // ── Layer / render settings ───────────────────────────────────────────
     if (!skipLayerParse) {
@@ -252,6 +288,14 @@ export async function preprocess3dm(file, skipLayerParse) {
       S.parsedNamedViews = [];
       try {
         const views = doc.views();
+        const safePt = (v, dx = 0, dy = 0, dz = 0) => {
+          if (!v) return [dx, dy, dz];
+          return [
+            v.X ?? v.x ?? v[0] ?? dx,
+            v.Y ?? v.y ?? v[1] ?? dy,
+            v.Z ?? v.z ?? v[2] ?? dz
+          ];
+        };
         for (let i = 0; i < views.count; i++) {
           const v   = views.get(i);
           const loc = v.cameraLocation;
@@ -259,9 +303,9 @@ export async function preprocess3dm(file, skipLayerParse) {
           const tgt = v.cameraTarget;
           S.parsedNamedViews.push({
             name:     v.name || `Named View ${i}`,
-            position: [loc.x ?? loc[0] ?? 0, loc.y ?? loc[1] ?? 0, loc.z ?? loc[2] ?? 0],
-            up:       [up.x  ?? up[0]  ?? 0, up.y  ?? up[1]  ?? 1, up.z  ?? up[2]  ?? 0],
-            target:   [tgt.x ?? tgt[0] ?? 0, tgt.y ?? tgt[1] ?? 0, tgt.z ?? tgt[2] ?? 0]
+            position: safePt(loc),
+            up:       safePt(up, 0, 1, 0),
+            target:   safePt(tgt)
           });
           v.delete();
         }
@@ -285,15 +329,19 @@ export async function preprocess3dm(file, skipLayerParse) {
       }
     } catch (e) { console.warn('[pre] layer copy err:', e); }
 
-    // Helper: extract per-object color if set to "by object" (colorSource === 1)
+    // Helper: extract per-object color override
+    // In rhino3dm WASM, attr.colorSource is an Object (enum proxy), not a number,
+    // so we can't reliably check for "ByObject" source. Instead, accept any
+    // non-pure-black objectColor as an override (pure black = default unset value).
     const getObjectColor = (a) => {
       try {
         if (!a) return null;
-        const src = a.colorSource ?? a.objectColorSource ?? -1;
-        if (src !== 1) return null;
         const c = a.objectColor;
         if (!c) return null;
-        return { r: c.r ?? 0, g: c.g ?? 0, b: c.b ?? 0 };
+        const r = c.r ?? 0, g = c.g ?? 0, b = c.b ?? 0;
+        // Pure black {0,0,0} is rhino3dm's default-unset return; treat as no override
+        if (r === 0 && g === 0 && b === 0) return null;
+        return { r, g, b };
       } catch { return null; }
     };
 
@@ -310,27 +358,55 @@ export async function preprocess3dm(file, skipLayerParse) {
         attr = modelObj.attributes();
         if (!geom) continue;
 
+        // Store original layerIndex by object UUID — cleanDoc.add() loses this mapping
+        try {
+          const id = attr?.id;
+          const li = attr?.layerIndex;
+          if (id && typeof li === 'number') {
+            S._objLayerById = S._objLayerById || new Map();
+            S._objLayerById.set(id, li);
+          }
+        } catch {}
+
         const geomName = geom.constructor.name;
 
-        if (safeInst(geom, S.rhinoInstance.SubD) || geomName === 'SubD') {
+        const geomNameLc = geomName.toLowerCase();
+        const isSubD = safeInst(geom, S.rhinoInstance.SubD)
+          || geomName === 'SubD'
+          || geomNameLc.includes('subd');
+        const isTextDot = safeInst(geom, S.rhinoInstance.TextDot)
+          || geomName === 'TextDot'
+          || geomNameLc.includes('textdot');
+        const isAnnotation = (
+          safeInst(geom, S.rhinoInstance.AnnotationBase)
+          || geomName === 'TextEntity' || geomName === 'Text'
+          || geomName === 'Dimension'  || geomNameLc.includes('dimension')
+          || geomName === 'Leader'     || geomNameLc.includes('annotation')
+          || geomNameLc.includes('leader')
+        );
+
+        if (isSubD) {
           hasSubD = true;
           try {
             let meshGeom = null;
-            let tempSubd = geom.duplicate();
+            let tempSubd = null;
             try {
-              tempSubd.subdivide(3);
+              tempSubd = geom.duplicate();
+              try { tempSubd.subdivide(3); } catch {}
               meshGeom = S.rhinoInstance.Mesh.createFromSubDControlNet(tempSubd);
             } catch {
-              meshGeom = S.rhinoInstance.Mesh.createFromSubDControlNet(geom);
+              try { meshGeom = S.rhinoInstance.Mesh.createFromSubDControlNet(geom); } catch {}
             }
-            if (tempSubd) tempSubd.delete();
+            if (tempSubd) { try { tempSubd.delete(); } catch {} }
             if (meshGeom) {
-              attr ? cleanDoc.objects().addMesh(meshGeom, attr) : cleanDoc.objects().addMesh(meshGeom);
-              meshGeom.delete();
+              try {
+                attr ? cleanDoc.objects().addMesh(meshGeom, attr) : cleanDoc.objects().addMesh(meshGeom);
+              } catch (ae) { console.warn('[pre] SubD addMesh err:', ae.message); }
+              try { meshGeom.delete(); } catch {}
             }
           } catch (e) { console.warn('[pre] SubD err:', e.message); }
 
-        } else if (safeInst(geom, S.rhinoInstance.TextDot) || geomName === 'TextDot') {
+        } else if (isTextDot) {
           hasAnnotation = true;
           try {
             const textVal = typeof geom.text === 'string' ? geom.text : '';
@@ -342,18 +418,17 @@ export async function preprocess3dm(file, skipLayerParse) {
             try {
               if (geom.point) {
                 const pt = geom.point;
-                origin = [pt.x ?? pt[0] ?? origin[0], pt.y ?? pt[1] ?? origin[1], pt.z ?? pt[2] ?? origin[2]];
+                origin = [
+                  pt.X ?? pt.x ?? pt[0] ?? origin[0],
+                  pt.Y ?? pt.y ?? pt[1] ?? origin[1],
+                  pt.Z ?? pt.z ?? pt[2] ?? origin[2]
+                ];
               }
             } catch {}
             S.parsedAnnotations.push({ type: 'TextDot', text: textVal, position: origin, layerIndex: attr?.layerIndex ?? 0, objectColor: getObjectColor(attr) });
           } catch (e) { console.warn('[pre] TextDot err:', e.message); }
 
-        } else if (
-          safeInst(geom, S.rhinoInstance.AnnotationBase) ||
-          geomName === 'TextEntity' || geomName === 'Text' ||
-          geomName === 'Dimension'  || geomName.includes('Dimension') ||
-          geomName === 'Leader'     || geomName.includes('Annotation')
-        ) {
+        } else if (isAnnotation) {
           hasAnnotation = true;
           try {
             const getText = (g) => {
@@ -370,28 +445,19 @@ export async function preprocess3dm(file, skipLayerParse) {
             };
             const getPt = (val, def) => {
               if (!val) return def;
-              if (Array.isArray(val)) return [val[0] ?? def[0], val[1] ?? def[1], val[2] ?? def[2]];
-              return [val.x ?? val[0] ?? def[0], val.y ?? val[1] ?? def[1], val.z ?? val[2] ?? def[2]];
+              const d = def || [0, 0, 0];
+              if (Array.isArray(val)) return [val[0] ?? d[0], val[1] ?? d[1], val[2] ?? d[2]];
+              // rhino3dm 8.17 Point3d uses UPPERCASE X/Y/Z — also support lowercase for safety
+              return [
+                val.X ?? val.x ?? val[0] ?? d[0],
+                val.Y ?? val.y ?? val[1] ?? d[1],
+                val.Z ?? val.z ?? val[2] ?? d[2]
+              ];
             };
 
             let textVal = getText(geom) || geomName;
             let origin = [0,0,0], xAxis = [1,0,0], yAxis = [0,1,0], zAxis = [0,0,1];
-            try {
-              const bbox = geom.getBoundingBox();
-              if (bbox?.isValid) origin = [bbox.center[0], bbox.center[1], bbox.center[2]];
-            } catch {}
-            let pln = null;
-            try { pln = geom.plane; } catch {}
-            let loc = null;
-            if (!pln) { try { loc = geom.location; } catch {} }
-            if (pln) {
-              try { origin = getPt(pln.origin, origin); } catch {}
-              try { xAxis  = getPt(pln.xAxis,  xAxis);  } catch {}
-              try { yAxis  = getPt(pln.yAxis,  yAxis);  } catch {}
-              try { zAxis  = getPt(pln.zAxis,  zAxis);  } catch {}
-            } else if (loc) {
-              try { origin = getPt(loc, origin); } catch {}
-            }
+            const isNonZero = (p) => p && (Math.abs(p[0]) + Math.abs(p[1]) + Math.abs(p[2]) > 1e-6);
             // Extract Rhino text height (in model units)
             let textHeight = null;
             try {
@@ -399,21 +465,70 @@ export async function preprocess3dm(file, skipLayerParse) {
               if (typeof h === 'number' && h > 0) textHeight = h;
               else if (typeof h === 'function') { const v = h(); if (v > 0) textHeight = v; }
             } catch {}
-            let pt1 = null, pt2 = null;
-            if (geomName.includes('Dimension')) {
-              const tryPt = (g, ...props) => {
-                for (const p of props) {
-                  try {
-                    const v = g[p];
-                    if (v && typeof v === 'object') return [v.x ?? 0, v.y ?? 0, v.z ?? 0];
-                  } catch {}
-                }
-                return null;
-              };
-              pt1 = tryPt(geom, 'defPt1', 'point1', 'startPoint', 'arrowPt1');
-              pt2 = tryPt(geom, 'defPt2', 'point2', 'endPoint',   'arrowPt2');
+            // Detect if this is a dimension annotation.
+            let isDimension = geomName.includes('Dimension');
+            if (!isDimension && textVal) {
+              const t = String(textVal).trim();
+              if (/^-?\d+(\.\d+)?(\s*[a-zA-Z'"]*)?$/.test(t) && /\d/.test(t)) {
+                isDimension = true;
+              }
             }
-            S.parsedAnnotations.push({ type: 'Text', geomType: geomName, text: textVal, position: origin, xAxis, yAxis, zAxis, textHeight, objectColor: getObjectColor(attr), pt1, pt2, layerIndex: attr?.layerIndex ?? 0 });
+
+            // ── Plane and points (rhino3dm 8.17+ exposes these directly) ──
+            // DimLinear and Text both expose .plane; DimLinear also exposes .points
+            // with { defpt1, defpt2, arrowpt1, arrowpt2, dimline, textpt }.
+            let dimPoints = null;
+            try {
+              const pl = geom.plane;
+              if (pl) {
+                const o = getPt(pl.origin, null);
+                if (isNonZero(o)) origin = o;
+                const x = getPt(pl.xAxis, null);
+                if (isNonZero(x)) xAxis = x;
+                const y = getPt(pl.yAxis, null);
+                if (isNonZero(y)) yAxis = y;
+                const z = getPt(pl.zAxis, null);
+                if (isNonZero(z)) zAxis = z;
+              }
+            } catch {}
+            try {
+              const pts = geom.points;
+              if (pts) {
+                dimPoints = {
+                  defpt1:   getPt(pts.defpt1,   null),
+                  defpt2:   getPt(pts.defpt2,   null),
+                  arrowpt1: getPt(pts.arrowpt1, null),
+                  arrowpt2: getPt(pts.arrowpt2, null),
+                  dimline:  getPt(pts.dimline,  null),
+                  textpt:   getPt(pts.textpt,   null)
+                };
+              }
+            } catch {}
+
+            // Pick the most precise textHeight available.
+            // rhino3dm.js doesn't expose DimensionScale (per-style or per-object),
+            // so we use the raw dimstyle textHeight. annotations.js will apply
+            // a baseH-relative floor so text stays visible in larger models.
+            let styleTextHeight = null;
+            try {
+              const styleId = geom.dimensionStyleId;
+              const style   = styleId ? dimStylesById[styleId] : null;
+              if (style) styleTextHeight = style.textHeight || null;
+            } catch {}
+            const baseTextHeight = textHeight ?? styleTextHeight ?? 1.0;
+
+            S.parsedAnnotations.push({
+              type: 'Text',
+              geomType: geomName,
+              isDimension,
+              text: textVal,
+              position: origin,
+              xAxis, yAxis, zAxis,
+              textHeight: baseTextHeight,
+              dimPoints,
+              objectColor: getObjectColor(attr),
+              layerIndex: attr?.layerIndex ?? 0
+            });
           } catch (e) { console.warn('[pre] Annotation err:', e.message); }
 
         } else {
@@ -461,21 +576,46 @@ export function postProcessModel(model, addEdgesFlag) {
     fixMaterialTransparency(child.userData.originalMaterial);
 
     const attrs = child.userData.attributes || {};
-    const layer = S.parsedLayers.find(l => l.index === attrs.layerIndex);
-    const colorSource = attrs.objectColorSource;
-    const isByLayer   = (colorSource === 0 || colorSource === undefined || colorSource === null);
+    // Look up original layerIndex by object UUID — cleanDoc.add() resets it to 0
+    let realLayerIndex = attrs.layerIndex;
+    try {
+      if (S._objLayerById && attrs.id) {
+        const li = S._objLayerById.get(attrs.id);
+        if (typeof li === 'number') realLayerIndex = li;
+      }
+    } catch {}
+    attrs.layerIndex = realLayerIndex; // persist for later code
+    const layer = S.parsedLayers.find(l => l.index === realLayerIndex);
+    const oc = attrs.objectColor;
+    const hasOverrideColor = oc && (
+      (oc.r ?? oc.R ?? 0) > 0 || (oc.g ?? oc.G ?? 0) > 0 || (oc.b ?? oc.B ?? 0) > 0
+    );
+    const isByLayer = !hasOverrideColor;
     child.userData.isColorByLayer = isByLayer;
-    child.userData.layerColor     = layer
-      ? new THREE.Color(layer.color.r/255, layer.color.g/255, layer.color.b/255)
+    child.userData.layerColor = layer?.color
+      ? new THREE.Color(
+          (layer.color.r ?? layer.color.R ?? 0) / 255,
+          (layer.color.g ?? layer.color.G ?? 0) / 255,
+          (layer.color.b ?? layer.color.B ?? 0) / 255
+        )
       : null;
 
+    // Helper: extract RGB from Color object (handles both {r,g,b} and {R,G,B})
+    const colRGB = (c) => c && {
+      r: (c.r ?? c.R ?? 0) / 255,
+      g: (c.g ?? c.G ?? 0) / 255,
+      b: (c.b ?? c.B ?? 0) / 255
+    };
     const shadedColor = new THREE.Color();
-    if (isByLayer && layer) {
-      shadedColor.setRGB(layer.color.r / 255, layer.color.g / 255, layer.color.b / 255);
-    } else if (attrs.objectColor) {
-      shadedColor.setRGB(attrs.objectColor.r / 255, attrs.objectColor.g / 255, attrs.objectColor.b / 255);
-    } else if (layer) {
-      shadedColor.setRGB(layer.color.r / 255, layer.color.g / 255, layer.color.b / 255);
+    if (isByLayer && layer?.color) {
+      const lc = colRGB(layer.color);
+      shadedColor.setRGB(lc.r, lc.g, lc.b);
+    } else if (oc) {
+      const c = colRGB(oc);
+      shadedColor.setRGB(c.r, c.g, c.b);
+    } else if (layer?.color) {
+      const lc = colRGB(layer.color);
+      shadedColor.setRGB(lc.r, lc.g, lc.b);
     } else if (child.material?.color) {
       shadedColor.copy(child.material.color);
     } else {

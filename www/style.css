@@ -835,12 +835,12 @@ input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
   flex: 1;
-  height: 3px;
+  height: 4px;
   background: linear-gradient(to right,
     var(--primary) 0%,
     var(--primary) var(--fill, 50%),
-    rgba(255,255,255,0.14) var(--fill, 50%),
-    rgba(255,255,255,0.14) 100%
+    rgba(255,255,255,0.28) var(--fill, 50%),
+    rgba(255,255,255,0.28) 100%
   );
   border-radius: 2px;
   outline: none;
@@ -1785,6 +1785,72 @@ body.light-theme .spinner {
 }
 body.light-theme #progress-bar-container {
   background: rgba(0, 0, 0, 0.06) ;
+}
+
+/* ── Dark Mode Fixes ── */
+
+/* Issue 7: Slider bar more visible in dark mode */
+[data-theme="dark"] input[type="range"],
+body.dark-theme input[type="range"] {
+  background: linear-gradient(to right,
+    var(--primary) 0%,
+    var(--primary) var(--fill, 50%),
+    rgba(255,255,255,0.32) var(--fill, 50%),
+    rgba(255,255,255,0.32) 100%
+  ) !important;
+  background-clip: content-box !important;
+}
+
+/* Issue 8: Native <select> option text visible in dark mode */
+[data-theme="dark"] select,
+body.dark-theme select {
+  background: #27272b;
+  color: #e4e4e7;
+  border-color: rgba(255,255,255,0.1);
+}
+[data-theme="dark"] select option,
+body.dark-theme select option {
+  background: #27272b;
+  color: #e4e4e7;
+}
+/* Also fix the custom panel-select in dark mode */
+[data-theme="dark"] .panel-select,
+body.dark-theme .panel-select {
+  background: #27272b !important;
+  color: #e4e4e7 !important;
+}
+[data-theme="dark"] .panel-select option,
+body.dark-theme .panel-select option {
+  background: #27272b !important;
+  color: #e4e4e7 !important;
+}
+
+/* Issue 9: Top toolbar icons brighter in dark mode */
+[data-theme="dark"] .dropdown-trigger-btn,
+body.dark-theme .dropdown-trigger-btn {
+  color: #a1a1aa;
+}
+[data-theme="dark"] .dropdown-trigger-btn:hover,
+body.dark-theme .dropdown-trigger-btn:hover {
+  color: #e4e4e7;
+}
+[data-theme="dark"] .icon-btn,
+body.dark-theme .icon-btn {
+  color: #a1a1aa;
+}
+[data-theme="dark"] .icon-btn:hover,
+body.dark-theme .icon-btn:hover {
+  color: #e4e4e7;
+}
+
+/* Measurement panel drag handle cursor */
+.measure-list-panel .measure-drag-handle {
+  cursor: grab;
+  padding: 4px 8px 2px;
+  user-select: none;
+}
+.measure-list-panel .measure-drag-handle:active {
+  cursor: grabbing;
 }
 
 /* Popups premium white styling for light theme class */
