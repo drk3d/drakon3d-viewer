@@ -151,10 +151,11 @@ export function updateGroundAppearance() {
   S.groundMesh.material.dispose();
 
   if (S.currentMode === 'arctic') {
-    // Lambert shades from a single light; doesn't get washed out by env map.
-    // Combined with receiveShadow this gives clearly visible shadows on a white surface.
-    const groundMat = new THREE.MeshLambertMaterial({
-      color: 0xffffff,
+    // MeshStandard picks up IBL (scene.environment) like the model objects do,
+    // so the ground stays white instead of appearing dark under the weak direct lights.
+    const groundMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff, roughness: 1.0, metalness: 0.0,
+      envMapIntensity: 0.4,
       polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 2
     });
     S.groundMesh.material = groundMat;
