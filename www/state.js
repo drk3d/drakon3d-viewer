@@ -63,7 +63,7 @@ export const S = {
   sunLight:         null,
   modelShadowDims:  null,
   groundMesh:       null,
-  shadowsEnabled:   false,
+  shadowsEnabled:   true,
   groundEnabled:    false,
 
   // ── Hidden objects ───────────────────────────────────────────────────────

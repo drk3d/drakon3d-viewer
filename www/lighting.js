@@ -115,7 +115,8 @@ export function updateSunLight() {
 
   if (S.sunLight.shadow.map) { S.sunLight.shadow.map.dispose(); S.sunLight.shadow.map = null; }
   S.sunLight.shadow.camera.updateProjectionMatrix();
-  updateGroundAppearance();
+  // Sync model castShadow state and ground receiveShadow together.
+  updateShadowCasting();
 }
 
 export function setupModelShadowFrustum(box) {
