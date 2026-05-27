@@ -1051,6 +1051,13 @@ input[type="range"]::-moz-range-thumb {
   overflow: visible;   /* must be visible so dropdown menus appear below */
 }
 
+/* ── No-model disabled state: center toolbar + layer button ── */
+#top-bar-center.no-model,
+#btn-layer-panel.no-model {
+  pointer-events: none;
+  opacity: 0.35;
+}
+
 #top-bar-right {
   display: flex;
   align-items: center;
@@ -1197,7 +1204,7 @@ input[type="range"]::-moz-range-thumb {
   letter-spacing: 0.02em;
 }
 .app-version-tag {
-  margin-left: auto;   /* h2 바로 뒤, 닫기 버튼 바로 앞에 밀착 */
+  margin-left: auto;
   margin-right: 8px;
   font-size: 0.62rem;
   font-weight: 400;
@@ -1206,6 +1213,8 @@ input[type="range"]::-moz-range-thumb {
   letter-spacing: 0.03em;
   font-family: monospace;
   user-select: none;
+  position: relative;
+  top: 3px;  /* Settings 텍스트 베이스라인 쪽으로 살짝 내림 */
 }
 
 .right-panel-content {

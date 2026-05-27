@@ -21,7 +21,7 @@ import { updateSliderFill, updateAllSliderFills, updateSelectIcon, hideLoading }
 import { setupLights, updateSunLight, updateShadowCasting, addGroundPlane, removeGroundPlane } from './lighting.js';
 import { switchToOrtho, switchToPersp, setViewPreset, triggerCameraTransition, fitCameraToBox, fitCameraToObject, fitCameraToSelected, saveCustomView, renderNamedViewsUI } from './camera.js';
 import { applySceneBackground, applyFileBackground, applyDisplayMode } from './display.js';
-import { renderLayerUI, updateLayerVisibility } from './layers.js?v=1.2.87';
+import { renderLayerUI, updateLayerVisibility } from './layers.js?v=1.2.88';
 import { createAnnotationSprites } from './annotations.js';
 import { saveSession, loadSession } from './session.js';
 import { handleFile, clearCurrentModel } from './loaders.js';
@@ -33,7 +33,7 @@ import {
   syncMeasurementTabsUI,
   onCanvasClick, updateClippingPlane, setupClippingHelper, updateClippingHelperPose
 } from './tools.js';
-import { onPointerDown, clearSelection, updatePropertiesPanel, addSelectionOutline } from './selection.js?v=1.2.87';
+import { onPointerDown, clearSelection, updatePropertiesPanel, addSelectionOutline } from './selection.js?v=1.2.88';
 
 // ── Color Grading Shader ───────────────────────────────────────────────────
 const ColorGradingShader = {
@@ -100,8 +100,28 @@ init();
 animate();
 
 // ── init ───────────────────────────────────────────────────────────────────
+
+/**
+ * Enable or disable center toolbar + layer button based on model presence.
+ * @param {boolean} loaded - true when a model is loaded, false otherwise.
+ */
+export function setToolbarModelState(loaded) {
+  const center = document.getElementById('top-bar-center');
+  const layerBtn = document.getElementById('btn-layer-panel');
+  if (loaded) {
+    center?.classList.remove('no-model');
+    layerBtn?.classList.remove('no-model');
+  } else {
+    center?.classList.add('no-model');
+    layerBtn?.classList.add('no-model');
+  }
+}
+
 function init() {
   const container = document.getElementById('canvas-container');
+
+  // Disable model-dependent toolbar buttons until a model is loaded
+  setToolbarModelState(false);
 
   S.scene = new THREE.Scene();
   S.scene.background = null;

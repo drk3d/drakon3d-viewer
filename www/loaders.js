@@ -4,11 +4,12 @@ import { applyDisplayMode, applyFileBackground, applyLayerColorsToModel,
          addEdges, fixMaterialTransparency, clearTechnicalOutlines } from './display.js';
 import { setupModelShadowFrustum, addGroundPlane, removeGroundPlane } from './lighting.js';
 import { fitCameraToObject } from './camera.js';
-import { renderLayerUI, updateLayerVisibility } from './layers.js?v=1.2.87';
+import { renderLayerUI, updateLayerVisibility } from './layers.js?v=1.2.88';
 import { createAnnotationSprites } from './annotations.js';
 import { renderNamedViewsUI } from './camera.js';
 import { resetSettingsToDefault } from './session.js';
 import { showLoading, hideLoading, setProgress, setFileName, showModelInfo } from './helpers.js';
+import { setToolbarModelState } from './app.js?v=1.2.88';
 
 // ── Dynamic OCCT loader ───────────────────────────────────────────────────────
 
@@ -312,6 +313,7 @@ export async function loadCADFile(file, isSTEP, extractEdges) {
     S.currentModel = group;
     S.scene.add(S.currentModel);
     document.getElementById('empty-state')?.classList.add('hidden');
+    setToolbarModelState(true);
     postProcessModel(S.currentModel, extractEdges);
     fitCameraToObject(S.currentModel, false);
     const box = new THREE.Box3().setFromObject(S.currentModel);
@@ -357,6 +359,7 @@ export async function loadSTLFile(file, extractEdges) {
     S.currentModel = group;
     S.scene.add(S.currentModel);
     document.getElementById('empty-state')?.classList.add('hidden');
+    setToolbarModelState(true);
     postProcessModel(S.currentModel, extractEdges);
     fitCameraToObject(S.currentModel, false);
     const box = new THREE.Box3().setFromObject(S.currentModel);
@@ -395,6 +398,7 @@ export async function load3MFFile(file, extractEdges) {
     S.currentModel = group;
     S.scene.add(S.currentModel);
     document.getElementById('empty-state')?.classList.add('hidden');
+    setToolbarModelState(true);
     postProcessModel(S.currentModel, extractEdges);
     fitCameraToObject(S.currentModel, false);
     const box = new THREE.Box3().setFromObject(S.currentModel);
@@ -900,7 +904,7 @@ export function postProcessModel(model, addEdgesFlag) {
 export function clearCurrentModel() {
   if (!S.currentModel) return;
   // Clear selection outlines (dynamic import avoids circular at parse time)
-  import('./selection.js?v=1.2.87').then(m => m.clearSelection()).catch(() => {});
+  import('./selection.js?v=1.2.88').then(m => m.clearSelection()).catch(() => {});
   clearTechnicalOutlines();
   S.currentModel.traverse(child => {
     if (child.name === 'rhino-outline') return;
@@ -952,6 +956,7 @@ export function clearCurrentModel() {
   setFileName('Open a 3DM file…');
   document.getElementById('file-name-text')?.classList.remove('loaded');
   document.getElementById('empty-state')?.classList.remove('hidden');
+  setToolbarModelState(false);
   S.scene.background = null;
 }
 
@@ -980,6 +985,7 @@ export async function handleFile(file, rhinoLoader, gltfLoader) {
         S.currentModel = gltf.scene;
         S.scene.add(S.currentModel);
         document.getElementById('empty-state')?.classList.add('hidden');
+        setToolbarModelState(true);
         postProcessModel(S.currentModel, extractEdges);
         fitCameraToObject(S.currentModel, false);
         const box = new THREE.Box3().setFromObject(S.currentModel);
@@ -1038,6 +1044,7 @@ export async function handleFile(file, rhinoLoader, gltfLoader) {
         S.currentModel = object;
         S.scene.add(S.currentModel);
         document.getElementById('empty-state')?.classList.add('hidden');
+        setToolbarModelState(true);
         postProcessModel(S.currentModel, extractEdges);
         applyLayerColorsToModel(S.currentModel);
         fitCameraToObject(S.currentModel, false);
@@ -1080,6 +1087,7 @@ export async function loadGeometryFromGLB(glbBuffer, fileName, fileSize) {
   S.currentModel = gltf.scene;
   S.scene.add(S.currentModel);
   document.getElementById('empty-state')?.classList.add('hidden');
+  setToolbarModelState(true);
   
   const extractEdges = document.getElementById('chk-edges-panel')?.checked ?? true;
   postProcessModel(S.currentModel, extractEdges);
