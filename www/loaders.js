@@ -4,7 +4,7 @@ import { applyDisplayMode, applyFileBackground, applyLayerColorsToModel,
          addEdges, fixMaterialTransparency, clearTechnicalOutlines } from './display.js';
 import { setupModelShadowFrustum, addGroundPlane, removeGroundPlane } from './lighting.js';
 import { fitCameraToObject } from './camera.js';
-import { renderLayerUI, updateLayerVisibility } from './layers.js';
+import { renderLayerUI, updateLayerVisibility } from './layers.js?v=1.2.87';
 import { createAnnotationSprites } from './annotations.js';
 import { renderNamedViewsUI } from './camera.js';
 import { resetSettingsToDefault } from './session.js';
@@ -42,15 +42,218 @@ export async function loadCADFile(file, isSTEP, extractEdges) {
 
     const arrayBuffer = await file.arrayBuffer();
     const u8Array     = new Uint8Array(arrayBuffer);
-    const result      = isSTEP ? occt.ReadStepFile(u8Array) : occt.ReadIgesFile(u8Array);
+    const result      = isSTEP ? occt.ReadStepFile(u8Array, {}) : occt.ReadIgesFile(u8Array, {});
 
     if (!result?.success) throw new Error(isSTEP ? 'STEP parsing failed' : 'IGES parsing failed');
 
+    // Parse actual raw IGES text to retrieve levels and Name properties
+    const levelNames = new Map();
+    const deLevels = [];
+    if (!isSTEP) {
+      try {
+        const text = await file.text();
+        const lines = text.split(/\r?\n/);
+        
+        // 1. Separate D (Directory Entry) and flattening P (Parameter Data) lines
+        const deLines = [];
+        let cleanText = "";
+        for (const line of lines) {
+          const trimmed = line.trimEnd();
+          const match = trimmed.match(/([SGPDT])\s*\d+\s*$/);
+          if (match) {
+            const section = match[1];
+            const dataPart = trimmed.substring(0, match.index).padEnd(72, ' ');
+            if (section === 'D') {
+              deLines.push(dataPart);
+            } else if (section === 'P') {
+              cleanText += dataPart;
+            }
+          } else {
+            cleanText += line;
+          }
+        }
+        
+        // 2. Find 406 Form 2 name properties: 406, 2, <level>, <len>H<name>
+        const regex = /406\s*,\s*2\s*,\s*(\d+)\s*,\s*(\d+)H([^,;]+)/g;
+        let match;
+        while ((match = regex.exec(cleanText)) !== null) {
+          const lvl = parseInt(match[1]);
+          const name = match[3].trim();
+          levelNames.set(lvl, name);
+        }
+        
+        // 3. Parse DE section for independent geometry levels
+        const nonGeomTypes = new Set([124, 304, 306, 308, 310, 312, 314, 402, 404, 406, 408, 410, 412, 414, 416, 418, 420]);
+        for (let i = 0; i < deLines.length; i += 2) {
+          const line1 = deLines[i];
+          if (!line1) break;
+          
+          const typeStr = line1.substring(0, 8).trim();
+          const entityType = parseInt(typeStr);
+          
+          // Columns 49-56 of Line 1: Status Number
+          const statusStr = line1.substring(48, 56);
+          // Columns 51-52: Subordinate Entity Switch (index 2-3 of statusStr)
+          const subSwitch = statusStr.length >= 4 ? statusStr.substring(2, 4).trim() : '00';
+          const isIndependent = (subSwitch === '00' || subSwitch === '0' || subSwitch === '');
+          
+          if (!nonGeomTypes.has(entityType) && isIndependent) {
+            // Columns 33-40: Level number (Field 5) - Corrected column mapping!
+            const lvlStr = line1.substring(32, 40).trim();
+            const level = lvlStr ? parseInt(lvlStr) : 0;
+            deLevels.push(level);
+          }
+        }
+        console.log(`Parsed ${deLevels.length} independent geometry levels from IGES DE section.`);
+      } catch (e) {
+        console.warn('Failed to parse IGES levels from text:', e);
+      }
+    }
+
     setProgress(80);
+
+    // Parse assembly hierarchy and build layers
+    S.parsedLayers = [];
+    let layerCounter = 0;
+    let igesNodeCounter = 0;
+    const meshLayerIndices = new Array(result.meshes.length).fill(0);
+    const premiumPalette = [
+      { r: 79,  g: 70,  b: 229 }, // Indigo
+      { r: 16,  g: 185, b: 129 }, // Emerald
+      { r: 245, g: 158, b: 11  }, // Amber
+      { r: 239, g: 68,  b: 68  }, // Rose
+      { r: 6,   g: 182, b: 212 }, // Cyan
+      { r: 139, g: 92,  b: 246 }, // Violet
+      { r: 236, g: 72,  b: 153 }, // Pink
+      { r: 249, g: 115, b: 22  }, // Orange
+      { r: 34,  g: 197, b: 94  }, // Green
+      { r: 59,  g: 130, b: 246 }  // Blue
+    ];
+
+    const layerPathMap = new Map(); // fullLayerName -> layerIndex
+
+    function traverseNode(node, parentLayerIdx = -1, path = "") {
+      let nodeName = node.name || 'Default';
+      let lvl = -1;
+
+      // 1. Determine level and nodeName for IGES level mapping
+      if (!isSTEP && deLevels.length > 0) {
+        // IGES 독립 기하 엔티티들은 루트 바로 밑의 탑레벨 자식 노드들과 1:1로 대응됩니다.
+        if (parentLayerIdx === -1) {
+          lvl = deLevels[igesNodeCounter] ?? 0;
+          igesNodeCounter++;
+        } else {
+          // 자식 노드들은 부모 노드의 Level을 그대로 물려받아 사용합니다.
+          lvl = parentLayerIdx;
+        }
+        
+        nodeName = levelNames.get(lvl) || (lvl === 0 ? 'Default' : `Layer ${String(lvl).padStart(2, '0')}`);
+      } else {
+        // STEP or fallback IGES without deLevels
+        if (!isSTEP && nodeName.includes('(')) {
+          const lvlMatch = nodeName.match(/\((\d+)\)/);
+          if (lvlMatch) {
+            const tempLvl = parseInt(lvlMatch[1]);
+            if (levelNames.has(tempLvl)) {
+              nodeName = levelNames.get(tempLvl);
+            } else if (tempLvl === 0) {
+              nodeName = 'Default';
+            } else {
+              nodeName = `Layer ${String(tempLvl).padStart(2, '0')}`;
+            }
+          }
+        }
+      }
+
+      const fullLayerName = path ? `${path}::${nodeName}` : nodeName;
+      
+      let currentLayerIndex;
+      if (layerPathMap.has(fullLayerName)) {
+        currentLayerIndex = layerPathMap.get(fullLayerName);
+      } else {
+        // When doing IGES level mapping, use the actual Level number (lvl) as the index directly
+        currentLayerIndex = (!isSTEP && deLevels.length > 0) ? lvl : layerCounter++;
+        layerPathMap.set(fullLayerName, currentLayerIndex);
+        
+        let layerColor = premiumPalette[Math.abs(currentLayerIndex) % premiumPalette.length];
+        if (node.meshes && node.meshes.length > 0) {
+          for (const mIdx of node.meshes) {
+            const meshObj = result.meshes[mIdx];
+            if (meshObj && meshObj.color) {
+              layerColor = {
+                r: Math.round(meshObj.color[0] * 255),
+                g: Math.round(meshObj.color[1] * 255),
+                b: Math.round(meshObj.color[2] * 255),
+                a: 255
+              };
+              break;
+            }
+          }
+        }
+
+        S.parsedLayers.push({
+          index:            currentLayerIndex,
+          name:             fullLayerName,
+          color:            layerColor,
+          visible:          true,
+          parentLayerIndex: parentLayerIdx
+        });
+      }
+
+      if (node.meshes) {
+        for (const mIdx of node.meshes) {
+          meshLayerIndices[mIdx] = currentLayerIndex;
+          if (result.meshes[mIdx] && !result.meshes[mIdx].name) {
+            result.meshes[mIdx].name = node.name || '';
+          }
+        }
+      }
+
+      if (node.children && node.children.length > 0) {
+        for (const child of node.children) {
+          traverseNode(child, currentLayerIndex, fullLayerName);
+        }
+      }
+    }
+
+    if (result.root) {
+      const rootChildren = result.root.children || [];
+      const rootMeshes = result.root.meshes || [];
+      
+      if (rootChildren.length > 0) {
+        if (rootMeshes.length > 0) {
+          const rootName = result.root.name || 'Root';
+          traverseNode({ name: rootName, meshes: rootMeshes }, -1, "");
+        }
+        for (const child of rootChildren) {
+          traverseNode(child, -1, "");
+        }
+      } else {
+        traverseNode(result.root, -1, "");
+      }
+    } else {
+      S.parsedLayers.push({
+        index:            0,
+        name:             'CAD_Layer',
+        color:            { r: 120, g: 120, b: 120, a: 255 },
+        visible:          true,
+        parentLayerIndex: -1
+      });
+    }
+
+    // Sort parsed layers by index to maintain neat ordering (Default/0, 1, 2...)
+    if (!isSTEP) {
+      S.parsedLayers.sort((a, b) => a.index - b.index);
+    }
+
+    // Refresh layer UI panel
+    renderLayerUI();
+
     const group = new THREE.Group();
     group.name  = file.name;
 
-    for (const resultMesh of result.meshes) {
+    for (let i = 0; i < result.meshes.length; i++) {
+      const resultMesh = result.meshes[i];
       const geometry = new THREE.BufferGeometry();
       geometry.setAttribute('position', new THREE.Float32BufferAttribute(resultMesh.attributes.position.array, 3));
       if (resultMesh.attributes.normal) {
@@ -60,17 +263,48 @@ export async function loadCADFile(file, isSTEP, extractEdges) {
       }
       if (resultMesh.index) geometry.setIndex(new THREE.Uint32BufferAttribute(resultMesh.index.array, 1));
 
+      const layerIdx = meshLayerIndices[i] ?? 0;
+      const layer = S.parsedLayers.find(l => l.index === layerIdx);
+
       let color = 0xcccccc;
       if (resultMesh.color) {
         const r = Math.round(resultMesh.color[0] * 255);
         const g = Math.round(resultMesh.color[1] * 255);
         const b = Math.round(resultMesh.color[2] * 255);
         color = (r << 16) | (g << 8) | b;
+      } else if (layer) {
+        color = (layer.color.r << 16) | (layer.color.g << 8) | layer.color.b;
       }
-      const material = new THREE.MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.2 });
-      const mesh     = new THREE.Mesh(geometry, material);
+
+      // Check if this geometry represents a 3D curve or wireframe element
+      const hasNormals = resultMesh.attributes && resultMesh.attributes.normal && resultMesh.attributes.normal.array && resultMesh.attributes.normal.array.length > 0;
+      const isCurve = !hasNormals || (resultMesh.name && (
+        resultMesh.name.toLowerCase().includes('crv') || 
+        resultMesh.name.toLowerCase().includes('curve') || 
+        resultMesh.name.toLowerCase().includes('line') ||
+        resultMesh.name.toLowerCase().includes('bscrv')
+      ));
+
+      let mesh;
+      if (isCurve) {
+        const lineMat = new THREE.LineBasicMaterial({
+          color: color,
+          linewidth: 2,
+          depthWrite: true
+        });
+        if (resultMesh.index) {
+          mesh = new THREE.LineSegments(geometry, lineMat);
+        } else {
+          mesh = new THREE.Line(geometry, lineMat);
+        }
+        mesh.isLine = true; // Mark as Line for display.js
+      } else {
+        const material = new THREE.MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.2 });
+        mesh = new THREE.Mesh(geometry, material);
+      }
+
       mesh.name      = resultMesh.name || 'CAD_Mesh';
-      mesh.userData  = { attributes: { name: mesh.name, layerIndex: 0 } };
+      mesh.userData  = { attributes: { name: mesh.name, layerIndex: layerIdx } };
       group.add(mesh);
     }
 
@@ -273,7 +507,7 @@ export async function preprocess3dm(file, skipLayerParse) {
         for (let i = 0; i < layers.count; i++) {
           const l = layers.get(i);
           S.parsedLayers.push({
-            index:            l.layerIndex ?? i,
+            index:            l.index ?? l.layerIndex ?? i,
             name:             (l.fullPath?.trim()) ? l.fullPath.trim() : (l.name || `Layer ${i}`),
             color:            l.color,
             visible:          l.visible,
@@ -575,7 +809,23 @@ export async function preprocess3dm(file, skipLayerParse) {
 
 export function postProcessModel(model, addEdgesFlag) {
   model.traverse(child => {
-    if (!child.isMesh) return;
+    if (child.name === 'rhino-edges' || child.name === 'rhino-outline' || child.name === 'selection-outline' || child.name === 'ground-plane') return;
+
+    // ── Layer index synchronization for all CAD objects (including curves) ──
+    if (child.userData && child.userData.attributes) {
+      const attrs = child.userData.attributes;
+      let realLayerIndex = attrs.layerIndex;
+      try {
+        if (S._objLayerById && attrs.id) {
+          const li = S._objLayerById.get(attrs.id);
+          if (typeof li === 'number') realLayerIndex = li;
+        }
+      } catch {}
+      attrs.layerIndex = realLayerIndex;
+    }
+
+    if (!child.isMesh && !child.isLine) return;
+
     if (child.material?.color) {
       const mc = child.material.color;
       if (mc.r < 0.02 && mc.g < 0.02 && mc.b < 0.02) child.material.color.setHex(0xffffff);
@@ -586,15 +836,7 @@ export function postProcessModel(model, addEdgesFlag) {
     fixMaterialTransparency(child.userData.originalMaterial);
 
     const attrs = child.userData.attributes || {};
-    // Look up original layerIndex by object UUID — cleanDoc.add() resets it to 0
-    let realLayerIndex = attrs.layerIndex;
-    try {
-      if (S._objLayerById && attrs.id) {
-        const li = S._objLayerById.get(attrs.id);
-        if (typeof li === 'number') realLayerIndex = li;
-      }
-    } catch {}
-    attrs.layerIndex = realLayerIndex; // persist for later code
+    const realLayerIndex = attrs.layerIndex ?? 0;
     const layer = S.parsedLayers.find(l => l.index === realLayerIndex);
     const oc = attrs.objectColor;
     const hasOverrideColor = oc && (
@@ -646,7 +888,7 @@ export function postProcessModel(model, addEdgesFlag) {
     child.userData.renderedMaterial = child.material.clone();
     fixMaterialTransparency(child.userData.renderedMaterial);
 
-    if (addEdgesFlag && child.geometry) addEdges(child);
+    if (addEdgesFlag && child.geometry && child.isMesh && !child.isLine) addEdges(child);
     if (S.bvhReady && child.geometry) child.geometry.computeBoundsTree();
     child.castShadow    = S.shadowsEnabled;
     child.receiveShadow = S.shadowsEnabled;
@@ -658,7 +900,7 @@ export function postProcessModel(model, addEdgesFlag) {
 export function clearCurrentModel() {
   if (!S.currentModel) return;
   // Clear selection outlines (dynamic import avoids circular at parse time)
-  import('./selection.js').then(m => m.clearSelection()).catch(() => {});
+  import('./selection.js?v=1.2.87').then(m => m.clearSelection()).catch(() => {});
   clearTechnicalOutlines();
   S.currentModel.traverse(child => {
     if (child.name === 'rhino-outline') return;
@@ -719,6 +961,7 @@ export async function handleFile(file, rhinoLoader, gltfLoader) {
   if (!file) return;
 
   resetSettingsToDefault();
+  clearCurrentModel();
   showLoading('Reading file…');
   document.getElementById('empty-state')?.classList.add('hidden');
 
@@ -824,4 +1067,27 @@ export async function handleFile(file, rhinoLoader, gltfLoader) {
       document.getElementById('empty-state')?.classList.remove('hidden');
     }
   );
+}
+
+export async function loadGeometryFromGLB(glbBuffer, fileName, fileSize) {
+  const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
+  const loader = new GLTFLoader();
+  const gltf = await new Promise((resolve, reject) => {
+    loader.parse(glbBuffer, '', resolve, reject);
+  });
+
+  clearCurrentModel();
+  S.currentModel = gltf.scene;
+  S.scene.add(S.currentModel);
+  document.getElementById('empty-state')?.classList.add('hidden');
+  
+  const extractEdges = document.getElementById('chk-edges-panel')?.checked ?? true;
+  postProcessModel(S.currentModel, extractEdges);
+  fitCameraToObject(S.currentModel, false);
+  const box = new THREE.Box3().setFromObject(S.currentModel);
+  setupModelShadowFrustum(box);
+  if (S.groundEnabled) addGroundPlane(box);
+  applyDisplayMode();
+  setFileName(fileName);
+  showModelInfo(S.currentModel, fileSize);
 }

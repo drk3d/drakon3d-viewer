@@ -17,6 +17,9 @@ export function onPointerDown(event) {
     if (gHits.length > 0) return;
   }
 
+  // Block selection when dragging arc rotation handles
+  if (S.clippingArcDrag) return;
+
   S.mouse.x =  (event.clientX / window.innerWidth)  * 2 - 1;
   S.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
   S.raycaster.setFromCamera(S.mouse, S.camera);
@@ -172,7 +175,9 @@ export function updatePropertiesPanel() {
       </div>
       <div class="mat-row">
         <span class="mat-label">Color</span>
-        <input type="color" id="prop-object-color" value="${objColorHex}">
+        <input type="text" id="prop-object-color" class="layer-color-picker-input" data-coloris value="${objColorHex}" inputmode="none"
+               style="width:14px; height:14px; border-radius:3px; border:1px solid rgba(255,255,255,0.18); cursor:pointer;
+                      background:${objColorHex}; color:transparent; outline:none; flex-shrink:0; box-sizing:border-box; font-size:0; caret-color:transparent;">
       </div>
     </div>
     <div class="mat-divider"></div>
@@ -180,7 +185,9 @@ export function updatePropertiesPanel() {
     <div class="mat-editor">
       <div class="mat-row">
         <span class="mat-label">Color</span>
-        <input type="color" id="mat-color" value="${matColor}">
+        <input type="text" id="mat-color" class="layer-color-picker-input" data-coloris value="${matColor}" inputmode="none"
+               style="width:14px; height:14px; border-radius:3px; border:1px solid rgba(255,255,255,0.18); cursor:pointer;
+                      background:${matColor}; color:transparent; outline:none; flex-shrink:0; box-sizing:border-box; font-size:0; caret-color:transparent;">
       </div>
       <div class="mat-row">
         <span class="mat-label">Roughness</span>
@@ -214,7 +221,14 @@ export function updatePropertiesPanel() {
         if (obj.userData.shadedMaterial) obj.userData.shadedMaterial.color.copy(lc);
         obj.userData.objectColorCustom = undefined;
         const picker = document.getElementById('prop-object-color');
-        if (picker) picker.value = '#' + lc.getHexString();
+        if (picker) {
+          const hex = '#' + lc.getHexString();
+          picker.value = hex;
+          const wrapper = picker.parentNode;
+          if (wrapper && wrapper.classList.contains('clr-field')) {
+            wrapper.style.color = hex;
+          }
+        }
       }
     } else {
       const current = '#' + (obj.userData.shadedMaterial?.color?.getHexString() || 'cccccc');
@@ -229,12 +243,26 @@ export function updatePropertiesPanel() {
     const toggle = document.getElementById('prop-bylayer-toggle');
     if (toggle) { toggle.checked = false; const lbl = toggle.nextElementSibling; if (lbl) lbl.textContent = 'Off'; }
     if (obj.userData.shadedMaterial) obj.userData.shadedMaterial.color.set(e.target.value);
+    
+    // Update visual background color of parent clr-field wrapper
+    const wrapper = e.target.parentNode;
+    if (wrapper && wrapper.classList.contains('clr-field')) {
+      wrapper.style.color = e.target.value;
+    }
+    
     applyDisplayMode();
   });
 
   document.getElementById('mat-color').addEventListener('input', e => {
     ensureCustomMaterial(obj);
     obj.userData.customMaterial.color = e.target.value;
+    
+    // Update visual background color of parent clr-field wrapper
+    const wrapper = e.target.parentNode;
+    if (wrapper && wrapper.classList.contains('clr-field')) {
+      wrapper.style.color = e.target.value;
+    }
+    
     applyDisplayMode();
   });
   document.getElementById('mat-roughness').addEventListener('input', e => {
@@ -263,6 +291,11 @@ export function updatePropertiesPanel() {
     applyDisplayMode();
     updatePropertiesPanel();
   });
+
+  // Call Coloris wrapping handler to bind touch-reliable buttons dynamically for properties panel
+  if (window.Coloris) {
+    Coloris.wrap('.layer-color-picker-input');
+  }
 
   const hideBtn = document.createElement('button');
   hideBtn.id = 'btn-hide-single';

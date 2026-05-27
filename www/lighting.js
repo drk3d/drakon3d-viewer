@@ -87,7 +87,8 @@ export function updateSunLight() {
   const center = S.modelShadowDims?.center || new THREE.Vector3(0, 0, 0);
   const maxDim = S.modelShadowDims?.maxDim || 100;
 
-  S.sunLight.castShadow = S.shadowsEnabled;
+  const modeWantsShadows = ['shaded', 'arctic', 'rendered'].includes(S.currentMode);
+  S.sunLight.castShadow = S.shadowsEnabled && modeWantsShadows;
   S.sunLight.shadow.mapSize.set(2048, 2048);
   S.sunLight.shadow.bias       = -0.0005;         // prevent shadow acne
   S.sunLight.shadow.normalBias =  maxDim * 0.001; // scale with model size
@@ -130,15 +131,16 @@ export function setupModelShadowFrustum(box) {
 }
 
 export function updateShadowCasting() {
+  const modeWantsShadows = ['shaded', 'arctic', 'rendered'].includes(S.currentMode);
   if (S.sunLight) {
-    S.sunLight.castShadow = S.shadowsEnabled;
+    S.sunLight.castShadow = S.shadowsEnabled && modeWantsShadows;
     if (S.sunLight.shadow.map) { S.sunLight.shadow.map.dispose(); S.sunLight.shadow.map = null; }
   }
   if (!S.currentModel) return;
   S.currentModel.traverse(child => {
     if (child.isMesh) {
-      child.castShadow    = S.shadowsEnabled;
-      child.receiveShadow = S.shadowsEnabled;
+      child.castShadow    = S.shadowsEnabled && modeWantsShadows;
+      child.receiveShadow = S.shadowsEnabled && modeWantsShadows;
     }
   });
   if (S.groundMesh) updateGroundAppearance();
@@ -146,23 +148,30 @@ export function updateShadowCasting() {
 
 export function updateGroundAppearance() {
   if (!S.groundMesh) return;
-  const hasShadowCaster  = S.sunLight !== null && S.shadowsEnabled;
-  const useAmbientShadow = S.sunLight === null  && S.shadowsEnabled;
+  const modeWantsShadows = ['shaded', 'arctic', 'rendered'].includes(S.currentMode);
+  const hasShadowCaster  = S.sunLight !== null && S.shadowsEnabled && modeWantsShadows;
+  const useAmbientShadow = S.sunLight === null  && S.shadowsEnabled && modeWantsShadows;
   const maxDim       = S.modelShadowDims?.maxDim ?? 100;
   const modeUsesSSAO = S.currentMode === 'arctic' || S.currentMode === 'rendered';
 
   S.groundMesh.material.dispose();
 
   if (S.currentMode === 'arctic') {
-    // MeshStandard picks up IBL (scene.environment) like the model objects do,
-    // so the ground stays white instead of appearing dark under the weak direct lights.
-    const groundMat = new THREE.MeshStandardMaterial({
-      color: 0xffffff, roughness: 1.0, metalness: 0.0,
-      envMapIntensity: 0.4,
-      polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 2
-    });
-    S.groundMesh.material = groundMat;
-    S.groundMesh.receiveShadow = hasShadowCaster;
+    if (hasShadowCaster) {
+      // Use ShadowMaterial to overlay a clean shadow on the background,
+      // avoiding the overexposure/clamping issue in Arctic mode where toneMapping is disabled.
+      S.groundMesh.material = new THREE.ShadowMaterial({ opacity: 0.35, transparent: true });
+      S.groundMesh.receiveShadow = true;
+    } else {
+      // MeshStandard picks up IBL (scene.environment) like the model objects do,
+      // so the ground stays white instead of appearing dark under the weak direct lights.
+      const groundMat = new THREE.MeshStandardMaterial({
+        color: 0xffffff, roughness: 1.0, metalness: 0.0,
+        envMapIntensity: 0.4
+      });
+      S.groundMesh.material = groundMat;
+      S.groundMesh.receiveShadow = false;
+    }
   } else if (hasShadowCaster) {
     S.groundMesh.material = new THREE.ShadowMaterial({ opacity: 0.35, transparent: true });
     S.groundMesh.receiveShadow = true;
@@ -170,8 +179,7 @@ export function updateGroundAppearance() {
   } else if (useAmbientShadow) {
     S.groundMesh.material = new THREE.MeshStandardMaterial({
       color: 0xffffff, opacity: 0.1, transparent: true,
-      roughness: 1.0, metalness: 0.0,
-      polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 2
+      roughness: 1.0, metalness: 0.0
     });
     S.groundMesh.receiveShadow = false;
     if (!modeUsesSSAO) {
@@ -191,10 +199,11 @@ export function addGroundPlane(box) {
   removeGroundPlane();
   const center = box.getCenter(new THREE.Vector3());
   const size   = box.getSize(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z);
   const span   = Math.max(size.x, size.y) * 5;
   const geo    = new THREE.PlaneGeometry(span, span);
   S.groundMesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial());
-  S.groundMesh.position.set(center.x, center.y, box.min.z - 0.001);
+  S.groundMesh.position.set(center.x, center.y, box.min.z - Math.max(0.001, maxDim * 0.001));
   S.groundMesh.name = 'ground-plane';
   S.scene.add(S.groundMesh);
   updateGroundAppearance();

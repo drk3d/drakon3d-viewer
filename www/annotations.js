@@ -142,15 +142,22 @@ function makeTextDot(text, bgColor, baseH) {
   ctx.textBaseline = 'middle';
   ctx.textAlign    = 'center';
 
-  // Pill background
+  // Auto-contrast calculation for outline & text color
+  const lum = bgColor.r * 0.299 + bgColor.g * 0.587 + bgColor.b * 0.114;
+
+  // Pill background (inset slightly to leave space for crisp stroke)
   ctx.beginPath();
-  drawRoundedRect(ctx, 0, 0, cw, ch, ch / 2);
+  drawRoundedRect(ctx, 1.5, 1.5, cw - 3, ch - 3, (ch - 3) / 2);
   ctx.fillStyle = `#${bgColor.getHexString()}`;
   ctx.fill();
 
+  // Thin high-fidelity outline border matching Rhino
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = lum > 0.55 ? '#000000' : '#ffffff';
+  ctx.stroke();
+
   // Auto-contrast text
-  const lum = bgColor.r * 0.299 + bgColor.g * 0.587 + bgColor.b * 0.114;
-  ctx.fillStyle = lum > 0.55 ? '#111111' : '#ffffff';
+  ctx.fillStyle = lum > 0.55 ? '#000000' : '#ffffff';
   ctx.fillText(text, cw / 2, ch / 2);
 
   const tex = new THREE.CanvasTexture(canvas);

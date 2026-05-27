@@ -209,15 +209,16 @@ export function applyDisplayMode() {
   }
 
   if (S.renderer) {
-    // ACES for rendered mode (filmic PBR look). Background is rendered via
-    // a separate skybox sphere with toneMapped:false so it bypasses ACES
-    // compression and shows the user's exact color.
-    S.renderer.toneMapping = (S.currentMode === 'rendered')
-      ? THREE.ACESFilmicToneMapping
-      : THREE.NoToneMapping;
+    // Set toneMapping to NoToneMapping across all modes to ensure background colors (like solid white #ffffff)
+    // are rendered exactly as specified without dulling or compression, matching the exact color selection
+    // and standard CAD/Rhino viewport rendering characteristics.
+    S.renderer.toneMapping = THREE.NoToneMapping;
     S.renderer.toneMappingExposure = 1.0;
   }
-  if (S.scene) S.scene.backgroundIntensity = 1.0;
+  if (S.scene) {
+    // Maintain standard background intensity now that toneMapping compression is bypassed.
+    S.scene.backgroundIntensity = 1.0;
+  }
 
   // Manage a skybox sphere that bypasses tone mapping so user-set background
   // color appears exactly as intended even in rendered (ACES) mode.
@@ -232,9 +233,9 @@ export function applyDisplayMode() {
   }
 
   // Shadow control by mode:
-  // - shaded/wireframe/technical: NO shadows (clean look)
-  // - arctic/rendered: shadows if sun enabled
-  const modeWantsShadows = ['arctic', 'rendered'].includes(S.currentMode);
+  // - shaded/arctic/rendered: shadows if sun enabled
+  // - wireframe/technical: NO shadows (clean look)
+  const modeWantsShadows = ['shaded', 'arctic', 'rendered'].includes(S.currentMode);
   if (S.sunLight) {
     S.sunLight.castShadow = modeWantsShadows && S.shadowsEnabled;
     if (modeWantsShadows && S.shadowsEnabled) {
@@ -324,23 +325,11 @@ export function applyDisplayMode() {
       }
       break;
 
-    // ── AO Debug: GTAOPass output=4 (raw AO buffer).
-    // Dark corners/crevices = AO is computing correctly.
-    // All white = GTAOPass AO shader still not producing occlusion.
-    // White material on the model + white background makes AO shadows clearly visible.
-    case 'ao-debug':
-      if (S.gtaoPass) {
-        S.gtaoPass.output         = 4; // OUTPUT.AO — raw AO buffer diagnostic
-        S.gtaoPass.enabled        = true;
-        S.gtaoPass.blendIntensity = 1.0;
-        S.gtaoPass.updateGtaoMaterial(gtaoParams);
-        S.gtaoPass.updatePdMaterial(pdParams);
-      }
-      break;
+
   }
 
   applySceneBackground();
-  if (S.currentMode === 'technical' || S.currentMode === 'ao-debug')
+  if (S.currentMode === 'technical')
     S.scene.background = new THREE.Color(0xffffff);
 
   updateGroundAppearance();
@@ -348,13 +337,10 @@ export function applyDisplayMode() {
   const edgeOverlay = document.getElementById('chk-edges-panel')?.checked ?? true;
 
   S.currentModel.traverse(child => {
-    if (!(child.isMesh && child.userData.originalMaterial)) return;
+    if (!((child.isMesh || child.isLine) && child.userData.originalMaterial)) return;
     if (child.name === 'rhino-outline') return;
     if (child.name === 'selection-outline') return;
     child.renderOrder = 0;
-    const orig  = child.userData.originalMaterial;
-    const edges = child.getObjectByName('rhino-edges');
-    if (edges) edges.renderOrder = 0;
 
     // Helper: raw color from layer/object (PRESERVES black, no auto-white).
     // Used by wireframe mode where the user expects black-on-black if specified.
@@ -372,6 +358,17 @@ export function applyDisplayMode() {
       }
       return out;
     };
+
+    if (child.isLine) {
+      child.material.color.copy(rawColor());
+      return;
+    }
+
+    const orig  = child.userData.originalMaterial;
+    const edges = child.getObjectByName('rhino-edges');
+    if (edges) edges.renderOrder = 0;
+
+
 
     switch (S.currentMode) {
 
@@ -481,16 +478,6 @@ export function applyDisplayMode() {
         break;
       }
 
-      // AO debug: white surfaces so we can read the AO shadow map clearly.
-      // GTAOPass output=4 overlays the raw AO buffer — dark = occluded, white = open.
-      case 'ao-debug': {
-        child.material = new THREE.MeshStandardMaterial({
-          color: 0xffffff, roughness: 1.0, metalness: 0.0,
-          polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1
-        });
-        if (edges) edges.visible = false; // hide edges — irrelevant for AO debug
-        break;
-      }
     }
   });
 }
@@ -506,6 +493,7 @@ export function fixMaterialTransparency(mat) {
 }
 
 export function addEdges(mesh) {
+  if (!mesh || !mesh.isMesh || mesh.isLine || !mesh.geometry) return;
   const eg   = new THREE.EdgesGeometry(mesh.geometry, 20);
   const line = new THREE.LineSegments(eg, new THREE.LineBasicMaterial({ color: 0x000000 }));
   line.name = 'rhino-edges';
@@ -515,7 +503,8 @@ export function addEdges(mesh) {
 export function applyLayerColorsToModel(model) {
   if (!S.parsedLayers.length) return;
   model.traverse(child => {
-    if (!child.isMesh || !child.userData.originalMaterial) return;
+    if (child.name === 'rhino-edges' || child.name === 'rhino-outline' || child.name === 'selection-outline') return;
+    if ((!child.isMesh && !child.isLine) || !child.userData.originalMaterial) return;
     const attrs = child.userData.attributes || {};
     if (child.userData.isColorByLayer) {
       const layer = S.parsedLayers.find(l => l.index === attrs.layerIndex);
@@ -527,8 +516,15 @@ export function applyLayerColorsToModel(model) {
           (lc.b ?? lc.B ?? 0) / 255
         );
         if (col.r < 0.02 && col.g < 0.02 && col.b < 0.02) col.setHex(0xffffff);
-        child.userData.originalMaterial.color.copy(col);
-        if (child.userData.shadedMaterial) child.userData.shadedMaterial.color.copy(col);
+        
+        if (child.isLine) {
+          // Update line color directly
+          child.material.color.copy(col);
+          if (child.userData.originalMaterial) child.userData.originalMaterial.color.copy(col);
+        } else {
+          child.userData.originalMaterial.color.copy(col);
+          if (child.userData.shadedMaterial) child.userData.shadedMaterial.color.copy(col);
+        }
       }
     }
   });

@@ -84,6 +84,7 @@ export const S = {
 
   // ── Measurement tool ─────────────────────────────────────────────────────
   distanceToolState:     null,
+  angleToolState:        null,
   distanceGhostSphere:   null,
   completedMeasurements: [],
   angleWidget:    null,
@@ -93,7 +94,13 @@ export const S = {
   clippingPlane:             null,
   clippingHelper:            null,
   clippingTransformControls: null,
+  clippingArcHandles:        [],   // Array of {mesh, hitMesh, axis: 'x'|'y'|'z'} for custom rotation arcs
+  clippingArcDrag: null,           // Active drag state: {axis, startAngle, startQuat}
+  arcOverlayScene: null,           // Separate scene for arc handles — rendered without clipping planes
   clippingEnabled:           false,
+  clippingBaseQuaternion:    null,
+  clipAxis:                  'z',
+  clipFlipped:               false,
 
   // ── BVH ──────────────────────────────────────────────────────────────────
   bvhReady: false,

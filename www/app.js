@@ -21,7 +21,7 @@ import { updateSliderFill, updateAllSliderFills, updateSelectIcon, hideLoading }
 import { setupLights, updateSunLight, updateShadowCasting, addGroundPlane, removeGroundPlane } from './lighting.js';
 import { switchToOrtho, switchToPersp, setViewPreset, triggerCameraTransition, fitCameraToBox, fitCameraToObject, fitCameraToSelected, saveCustomView, renderNamedViewsUI } from './camera.js';
 import { applySceneBackground, applyFileBackground, applyDisplayMode } from './display.js';
-import { renderLayerUI, updateLayerVisibility } from './layers.js';
+import { renderLayerUI, updateLayerVisibility } from './layers.js?v=1.2.87';
 import { createAnnotationSprites } from './annotations.js';
 import { saveSession, loadSession } from './session.js';
 import { handleFile, clearCurrentModel } from './loaders.js';
@@ -29,9 +29,11 @@ import {
   deactivateAllTools, clearMeasurements, renderMeasurementListUI,
   spawnAngleWidget, handleWidgetPointerDown, handleWidgetPointerMove,
   handleWidgetPointerUp, updateTempDistanceLine, updateDistanceGhost,
-  onCanvasClick, updateClippingPlane, setupClippingHelper
+  updateTempAngleWidget, updateAngleGhost,
+  syncMeasurementTabsUI,
+  onCanvasClick, updateClippingPlane, setupClippingHelper, updateClippingHelperPose
 } from './tools.js';
-import { onPointerDown, clearSelection, updatePropertiesPanel, addSelectionOutline } from './selection.js';
+import { onPointerDown, clearSelection, updatePropertiesPanel, addSelectionOutline } from './selection.js?v=1.2.87';
 
 // ── Color Grading Shader ───────────────────────────────────────────────────
 const ColorGradingShader = {
@@ -106,7 +108,11 @@ function init() {
   S.measurementGroup = new THREE.Group();
   S.raycaster = new THREE.Raycaster();
   S.mouse = new THREE.Vector2();
-  S.clippingPlane = new THREE.Plane(new THREE.Vector3(0, 0, -1), 0);
+  S.clippingPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+
+  // Separate overlay scene for arc handles — rendered after main scene with NO clipping planes
+  S.arcOverlayScene = new THREE.Scene();
+  S.arcOverlayScene.background = null;
 
   S.perspCamera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 10000);
   S.perspCamera.up.set(0, 0, 1);
@@ -125,7 +131,7 @@ function init() {
   S.renderer.setPixelRatio(window.devicePixelRatio);
   S.renderer.setSize(window.innerWidth, window.innerHeight);
   S.renderer.outputColorSpace = THREE.SRGBColorSpace;
-  S.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  S.renderer.toneMapping = THREE.NoToneMapping;
   S.renderer.shadowMap.enabled = true;
   S.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   container.appendChild(S.renderer.domElement);
@@ -235,20 +241,74 @@ function init() {
 
   S.clippingTransformControls = new TransformControls(S.camera, S.renderer.domElement);
   S.clippingTransformControls.setSpace('local');
+  S.clippingTransformControls.setMode('translate');
+  S.clippingTransformControls.size = 0.6; // Scale down translate gizmo to 60%
   S.clippingTransformControls.showX = true;
   S.clippingTransformControls.showY = true;
   S.clippingTransformControls.showZ = true;
-  // v0.169: TransformControls extends Controls (not Object3D); add the helper root instead
-  S.scene.add(S.clippingTransformControls.getHelper());
+  
+  // Render gizmo helper in the arc overlay scene so it is never clipped
+  S.arcOverlayScene.add(S.clippingTransformControls.getHelper());
+
+  // Hide negative-direction arrowheads permanently via material opacity.
+  // TransformControls resets handle.visible = true every frame (source line 1233),
+  // so we CANNOT use visible=false. Instead we make the material fully transparent.
+  // setupGizmo() bakes positions into geometry (resets object.position to 0,0,0),
+  // so we detect direction via geometry bounding box centroid.
+  try {
+    const gizmoTranslate = S.clippingTransformControls._gizmo.gizmo['translate'];
+    gizmoTranslate.traverse(child => {
+      const isPlane = child.name && (
+        child.name === 'XY' || child.name === 'YZ' || child.name === 'XZ' ||
+        child.name.includes('XY') || child.name.includes('YZ') || child.name.includes('XZ')
+      );
+      if (isPlane) {
+        child.userData.isPlaneHandle = true;
+      }
+
+      if (!child.geometry) return;
+      child.geometry.computeBoundingBox();
+      const center = child.geometry.boundingBox.getCenter(new THREE.Vector3());
+      const isGeometryNeg = (center.x < -0.02 || center.y < -0.02 || center.z < -0.02);
+      const isPositionNeg = (child.position.x < -0.02 || child.position.y < -0.02 || child.position.z < -0.02);
+      
+      const shouldHide = isPlane || isGeometryNeg || isPositionNeg;
+      if (shouldHide) {
+        child.layers.set(31); // Move to hidden layer so camera never renders it!
+        const mat = child.material;
+        if (mat) {
+          const clonedMat = mat.clone();
+          clonedMat.transparent = true;
+          clonedMat.opacity = 0;
+          clonedMat.needsUpdate = true;
+          child.material = clonedMat;
+          child.userData.clonedNegMat = clonedMat;
+        }
+        if (isGeometryNeg || isPositionNeg) {
+          child.userData.isNegArrow = true;
+        }
+      }
+    });
+  } catch(e) { console.warn('Negative arrow or plane hide failed:', e); }
 
   S.clippingTransformControls.addEventListener('dragging-changed', (event) => {
     S.controls.enabled = !event.value;
   });
 
   S.clippingTransformControls.addEventListener('change', () => {
-    if (S.clippingHelper && S.currentModel && S.clippingTransformControls.object) {
-      const normal = S.clippingPlane.normal.clone().normalize();
+    if (S.clippingHelper && S.currentModel) {
+      const normal = new THREE.Vector3(0, 0, 1).applyQuaternion(S.clippingHelper.quaternion).normalize();
+      if (S.clipFlipped) normal.negate();
+      S.clippingPlane.normal.copy(normal);
       S.clippingPlane.constant = -normal.dot(S.clippingHelper.position);
+      if (S.clippingArcHandles) {
+        S.clippingArcHandles.forEach(h => {
+          h.mesh.position.copy(S.clippingHelper.position);
+          h.mesh.quaternion.copy(S.clippingHelper.quaternion);
+          h.hitMesh.position.copy(S.clippingHelper.position);
+          h.hitMesh.quaternion.copy(S.clippingHelper.quaternion);
+        });
+      }
     }
   });
 
@@ -324,11 +384,20 @@ function bindUI() {
     fileInput.type = 'file';
     fileInput.id = 'file-upload';
     fileInput.style.display = 'none';
-    fileInput.accept = '.3dm,.glb,.gltf,.stp,.step,.iges,.igs,.stl,.3mf';
+    fileInput.accept = '.3dm,.glb,.gltf,.stp,.step,.iges,.igs,.stl,.3mf,.rhinoview';
     document.body.appendChild(fileInput);
+  } else {
+    fileInput.accept = '.3dm,.glb,.gltf,.stp,.step,.iges,.igs,.stl,.3mf,.rhinoview';
   }
-  fileInput.addEventListener('change', e => {
-    const f = e.target.files[0]; if (f) handleFile(f, rhinoLoader, gltfLoader);
+  fileInput.addEventListener('change', async e => {
+    const f = e.target.files[0];
+    if (f) {
+      if (f.name.toLowerCase().endsWith('.rhinoview')) {
+        await loadSession(f);
+      } else {
+        handleFile(f, rhinoLoader, gltfLoader);
+      }
+    }
   });
 
   let sessionInput = document.getElementById('session-upload');
@@ -386,6 +455,13 @@ function bindUI() {
   // ── 2. File tab actions ──
   document.getElementById('btn-open-panel').addEventListener('click', () => { fileInput.click(); });
   document.getElementById('btn-save-panel').addEventListener('click', () => { saveSession(); });
+  document.getElementById('btn-save-as-panel')?.addEventListener('click', () => {
+    if (!S.currentModel) {
+      alert('No model loaded to save.');
+      return;
+    }
+    openSaveAsDialog();
+  });
   document.getElementById('btn-close-panel').addEventListener('click', () => { clearCurrentModel(); });
   document.getElementById('btn-capture-panel').addEventListener('click', () => {
     document.getElementById('capture-w').value = window.innerWidth;
@@ -729,6 +805,41 @@ function bindUI() {
   });
   namedViewDlg?.addEventListener('click', (e) => { if (e.target === namedViewDlg) closeNamedViewDialog(); });
 
+  // Save As Dialog
+  const saveAsDlg   = document.getElementById('save-as-dialog');
+  const saveAsInput = document.getElementById('input-save-as-name');
+
+  function openSaveAsDialog() {
+    if (!saveAsDlg) return;
+    saveAsInput.value = S.currentFileName || 'scene';
+    saveAsDlg.classList.remove('hidden');
+    requestAnimationFrame(() => {
+      saveAsInput.focus();
+      saveAsInput.select();
+    });
+  }
+  function closeSaveAsDialog() {
+    saveAsDlg?.classList.add('hidden');
+  }
+  function confirmSaveAs() {
+    const name = saveAsInput?.value.trim();
+    if (name) {
+      saveSession(name);
+      closeSaveAsDialog();
+    } else {
+      alert('Please enter a valid file name.');
+    }
+  }
+
+  document.getElementById('btn-close-save-as-dialog')?.addEventListener('click', closeSaveAsDialog);
+  document.getElementById('btn-cancel-save-as')?.addEventListener('click', closeSaveAsDialog);
+  document.getElementById('btn-confirm-save-as')?.addEventListener('click', confirmSaveAs);
+  saveAsInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter')  { e.preventDefault(); confirmSaveAs(); }
+    if (e.key === 'Escape') { e.preventDefault(); closeSaveAsDialog(); }
+  });
+  saveAsDlg?.addEventListener('click', (e) => { if (e.target === saveAsDlg) closeSaveAsDialog(); });
+
   document.getElementById('btn-zoom-extents-drop').addEventListener('click', () => {
     if (!S.currentModel) return;
     const box = new THREE.Box3();
@@ -873,10 +984,17 @@ function bindUI() {
 
   document.getElementById('btn-tool-angle').addEventListener('click', (e) => {
     e.stopPropagation();
-    deactivateAllTools();
-    document.getElementById('btn-tool-angle').classList.add('active');
-    spawnAngleWidget();
     document.getElementById('tools-dropdown').classList.add('hidden');
+    if (S.angleToolState) {
+      deactivateAllTools();
+      renderMeasurementListUI();
+      return;
+    }
+    deactivateAllTools();
+    S.angleToolState = { points: [], spheres: [] };
+    document.getElementById('btn-tool-angle').classList.add('active');
+    document.getElementById('canvas-container').style.cursor = 'crosshair';
+    renderMeasurementListUI();
   });
 
   document.getElementById('btn-tool-clipping').addEventListener('click', (e) => {
@@ -885,6 +1003,7 @@ function bindUI() {
     document.getElementById('clipping-panel').classList.remove('hidden');
     document.getElementById('btn-tool-clipping').classList.add('active');
     document.getElementById('tools-dropdown').classList.add('hidden');
+    setClippingActive(true);
   });
 
   document.getElementById('btn-tool-find').addEventListener('click', (e) => {
@@ -917,13 +1036,34 @@ function bindUI() {
   setupSafeClose('btn-close-clipping', () => {
     document.getElementById('clipping-panel').classList.add('hidden');
     document.getElementById('btn-tool-clipping').classList.remove('active');
+    setClippingActive(false);
   });
   setupSafeClose('btn-close-find', () => {
     document.getElementById('find-panel').classList.add('hidden');
     document.getElementById('btn-tool-find').classList.remove('active');
   });
+  setupSafeClose('btn-close-measurements', () => {
+    deactivateAllTools();
+    document.getElementById('measurement-list-panel').classList.add('hidden');
+  });
   // Color panel removed — color adj is now inline in Settings
   document.getElementById('btn-measure-clear-all')?.addEventListener('click', () => clearMeasurements());
+
+  // ── Measurement panel tab selectors ──
+  document.getElementById('btn-measure-tab-dist')?.addEventListener('click', () => {
+    if (S.distanceToolState) return;
+    deactivateAllTools();
+    S.distanceToolState = { points: [], spheres: [] };
+    document.getElementById('canvas-container').style.cursor = 'crosshair';
+    renderMeasurementListUI();
+  });
+  document.getElementById('btn-measure-tab-angle')?.addEventListener('click', () => {
+    if (S.angleToolState) return;
+    deactivateAllTools();
+    S.angleToolState = { points: [], spheres: [] };
+    document.getElementById('canvas-container').style.cursor = 'crosshair';
+    renderMeasurementListUI();
+  });
   setupSafeClose('btn-close-props', () => {
     document.getElementById('object-properties').classList.add('hidden');
     clearSelection();
@@ -981,6 +1121,31 @@ function bindUI() {
     handle.addEventListener('pointercancel', onUp);
   })();
 
+  // ── Draggable find panel ──
+  ;(function() {
+    const panel  = document.getElementById('find-panel');
+    const handle = panel?.querySelector('.cg-header');
+    if (!panel || !handle) return;
+    let dragging = false, ox = 0, oy = 0;
+    handle.addEventListener('pointerdown', e => {
+      if (e.target.closest('button,input,select')) return;
+      dragging = true;
+      const rect = panel.getBoundingClientRect();
+      ox = e.clientX - rect.left; oy = e.clientY - rect.top;
+      handle.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+    handle.addEventListener('pointermove', e => {
+      if (!dragging) return;
+      const x = Math.max(0, Math.min(window.innerWidth  - panel.offsetWidth,  e.clientX - ox));
+      const y = Math.max(0, Math.min(window.innerHeight - panel.offsetHeight, e.clientY - oy));
+      panel.style.left = x + 'px'; panel.style.top = y + 'px';
+      panel.style.right = 'auto'; panel.style.bottom = 'auto';
+    });
+    handle.addEventListener('pointerup',     () => { dragging = false; });
+    handle.addEventListener('pointercancel', () => { dragging = false; });
+  })();
+
   // ── Layer toggle-all ──
   document.getElementById('btn-toggle-all-layers-panel')?.addEventListener('click', () => {
     const anyOff = S.parsedLayers.some(l => !l.visible);
@@ -991,19 +1156,35 @@ function bindUI() {
   });
 
   // ── 8. Clipping plane ──
-  document.getElementById('chk-clipping-enable').addEventListener('change', e => {
-    S.clippingEnabled = e.target.checked;
-    S.renderer.clippingPlanes = S.clippingEnabled ? [S.clippingPlane] : [];
-    if (S.clippingEnabled) {
+  function setClippingActive(active) {
+    S.clippingEnabled = active;
+    S.renderer.clippingPlanes = active ? [S.clippingPlane] : [];
+    if (active) {
+      updateClippingPlane();
       setupClippingHelper();
     } else {
       if (S.clippingTransformControls) {
         S.clippingTransformControls.detach();
         S.clippingTransformControls.getHelper().visible = false;
       }
-      if (S.clippingHelper) { S.scene.remove(S.clippingHelper); S.clippingHelper = null; }
+      // Clean up arc handles from overlay scene
+      S.clippingArcHandles.forEach(h => {
+        S.arcOverlayScene?.remove(h.mesh);
+        S.arcOverlayScene?.remove(h.hitMesh);
+        h.mesh.geometry.dispose();
+        h.mesh.material.dispose();
+        h.hitMesh.geometry.dispose();
+        h.hitMesh.material.dispose();
+      });
+      if (S.clippingHelper) {
+        S.arcOverlayScene?.remove(S.clippingHelper);
+        S.clippingHelper = null;
+      }
+      S.clippingArcHandles = [];
+      S.clippingArcDrag = null;
     }
-  });
+  }
+  window.setClippingActive = setClippingActive;
 
   // ── Draggable clipping panel ──
   ;(function() {
@@ -1028,45 +1209,127 @@ function bindUI() {
     handle.addEventListener('pointerup', () => { dragging=false; handle.style.cursor='grab'; });
   })();
 
-  let clipAxis   = 'z';
-  let clipFlipped = false;
-
   const applyClipAxisUI = () => {
     document.querySelectorAll('.clip-axis-btn').forEach(b => {
-      b.classList.toggle('active', b.dataset.axis === clipAxis);
+      b.classList.toggle('active', b.dataset.axis === S.clipAxis);
     });
-    const normals = {
-      z:  [0,  180], zf: [0,    0],
-      y:  [-90,  0], yf: [ 90,  0],
-      x:  [0,  -90], xf: [0,   90]
-    };
-    const key = clipAxis + (clipFlipped ? 'f' : '');
-    const [rx, ry] = normals[key];
-    const rotXSlider = document.getElementById('clip-rot-x');
-    const rotYSlider = document.getElementById('clip-rot-y');
-    if (rotXSlider) rotXSlider.value = rx;
-    if (rotYSlider) rotYSlider.value = ry;
-    const cp = document.getElementById('clipping-panel');
-    if (cp) { cp.dataset.rotX = rx; cp.dataset.rotY = ry; }
-    updateClippingPlane();
+
+    if (!S.clippingHelper) {
+      // No gizmo yet — fall back to world-axis defaults
+      const normals = {
+        z:  [0,  180], zf: [0,    0],
+        y:  [-90,  0], yf: [ 90,  0],
+        x:  [0,  -90], xf: [0,   90]
+      };
+      const key = S.clipAxis + (S.clipFlipped ? 'f' : '');
+      const [rx, ry] = normals[key];
+      const cp = document.getElementById('clipping-panel');
+      if (cp) { cp.dataset.rotX = rx; cp.dataset.rotY = ry; }
+      updateClippingPlane();
+      return;
+    }
+
+    // ── Gizmo exists: derive normal from the base quaternion ──
+    const qBase = S.clippingBaseQuaternion || S.clippingHelper.quaternion.clone();
+    if (!S.clippingBaseQuaternion) {
+      S.clippingBaseQuaternion = qBase.clone();
+    }
+    const Lx = new THREE.Vector3(1, 0, 0).applyQuaternion(qBase).normalize();
+    const Ly = new THREE.Vector3(0, 1, 0).applyQuaternion(qBase).normalize();
+    const Lz = new THREE.Vector3(0, 0, 1).applyQuaternion(qBase).normalize();
+
+    let targetX, targetY, targetZ;
+    if (S.clipAxis === 'x') {
+      targetZ = Lx;
+      targetX = Lz.clone().negate();
+      targetY = Ly;
+    } else if (S.clipAxis === 'y') {
+      targetZ = Ly;
+      targetX = Lx;
+      targetY = Lz.clone().negate();
+    } else {
+      targetZ = Lz;
+      targetX = Lx;
+      targetY = Ly;
+    }
+
+    const mat = new THREE.Matrix4();
+    mat.makeBasis(targetX, targetY, targetZ);
+    S.clippingHelper.quaternion.setFromRotationMatrix(mat);
+
+    // Derive normal from targetZ, negating if clipFlipped is active
+    const worldNormal = targetZ.clone();
+    if (S.clipFlipped) worldNormal.negate();
+
+    // Update clipping plane normal and constant
+    S.clippingPlane.normal.copy(worldNormal);
+    S.clippingPlane.constant = -worldNormal.dot(S.clippingHelper.position);
+
+    // Sync arc handles to the new gizmo orientation
+    S.clippingHelper.updateMatrixWorld(true);
+    if (S.clippingArcHandles) {
+      S.clippingArcHandles.forEach(h => {
+        h.mesh.position.copy(S.clippingHelper.position);
+        h.mesh.quaternion.copy(S.clippingHelper.quaternion);
+        h.hitMesh.position.copy(S.clippingHelper.position);
+        h.hitMesh.quaternion.copy(S.clippingHelper.quaternion);
+      });
+    }
+
+    // Refresh TransformControls
+    if (S.clippingTransformControls) {
+      S.clippingTransformControls.detach();
+      S.clippingTransformControls.attach(S.clippingHelper);
+      S.clippingTransformControls.getHelper().visible = true;
+    }
   };
 
   document.querySelectorAll('.clip-axis-btn[data-axis]').forEach(btn => {
-    btn.addEventListener('click', () => { clipAxis = btn.dataset.axis; applyClipAxisUI(); });
-  });
-  document.getElementById('btn-clip-flip')?.addEventListener('click', () => {
-    clipFlipped = !clipFlipped;
-    applyClipAxisUI();
+    btn.addEventListener('click', () => { S.clipAxis = btn.dataset.axis; applyClipAxisUI(); });
   });
 
-  // Clipping transform mode (translate / rotate)
-  document.querySelectorAll('.clip-axis-btn[data-clip-mode]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.clip-axis-btn[data-clip-mode]').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      if (S.clippingTransformControls) {
-        S.clippingTransformControls.setMode(btn.dataset.clipMode);
-      }
+  document.getElementById('btn-clip-flip')?.addEventListener('click', () => {
+    S.clipFlipped = !S.clipFlipped;
+    if (S.clippingHelper && S.clippingEnabled) {
+      // ── Flip only reverses the cut side — do NOT move or rotate the gizmo ──
+      // Negate the normal: same plane geometry, opposite clipping direction
+      S.clippingPlane.normal.negate();
+      // Recalculate constant to keep the plane at the exact same position
+      S.clippingPlane.constant = -S.clippingPlane.normal.dot(S.clippingHelper.position);
+    } else {
+      applyClipAxisUI();
+    }
+  });
+
+  document.getElementById('btn-clip-reset')?.addEventListener('click', () => {
+    // 1. Completely deactivate clipping to destroy all helpers and controls cleanly
+    setClippingActive(false);
+
+    // 2. Reset all state variables
+    S.clipAxis = 'z';
+    S.clipFlipped = false;
+    S.clippingBaseQuaternion = null;
+
+    // 3. Reset dataset rotations to Z-axis world default
+    const cp = document.getElementById('clipping-panel');
+    if (cp) {
+      cp.dataset.rotX = "0";
+      cp.dataset.rotY = "180";
+    }
+
+    // 4. Reset height slider to 0 (centered)
+    const heightSlider = document.getElementById('clip-height');
+    if (heightSlider) {
+      heightSlider.value = 0;
+      updateSliderFill(heightSlider);
+    }
+
+    // 5. Re-activate clipping fresh from scratch!
+    setClippingActive(true);
+
+    // 6. Update UI active states
+    document.querySelectorAll('.clip-axis-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.axis === 'z');
     });
   });
 
@@ -1125,20 +1388,149 @@ function bindUI() {
     }
   });
 
-  // Color panel removed — color adjustment is now inline in Settings
-
   // ── 11. Canvas pointer events ──
+  // Helper: raycast against arc hit meshes
+  function hitTestArcHandles(clientX, clientY) {
+    if (!S.clippingHelper || !S.clippingEnabled || S.clippingArcHandles.length === 0) return null;
+    const mouse = new THREE.Vector2(
+      (clientX / window.innerWidth) * 2 - 1,
+      -(clientY / window.innerHeight) * 2 + 1
+    );
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(mouse, S.camera);
+    // Collect all arc meshes (visible + hit areas)
+    const arcMeshes = [];
+    S.clippingArcHandles.forEach(h => { arcMeshes.push(h.mesh, h.hitMesh); });
+    const hits = raycaster.intersectObjects(arcMeshes, false);
+    if (hits.length > 0) {
+      const obj = hits[0].object;
+      const axis = obj.userData.clipArcAxis;
+      return axis || null;
+    }
+    return null;
+  }
+
+  // Helper: get signed angle of pointer projected onto arc plane
+  function getArcPointerAngle(clientX, clientY, axis) {
+    if (!S.clippingHelper) return 0;
+    // Project screen ray onto the plane of the arc (local plane, world-space)
+    const mouse = new THREE.Vector2(
+      (clientX / window.innerWidth) * 2 - 1,
+      -(clientY / window.innerHeight) * 2 + 1
+    );
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(mouse, S.camera);
+
+    // Build a plane perpendicular to the axis in world space
+    const worldAxisMap = { x: new THREE.Vector3(1,0,0), y: new THREE.Vector3(0,1,0), z: new THREE.Vector3(0,0,1) };
+    const localAxis = worldAxisMap[axis].clone();
+    localAxis.applyQuaternion(S.clippingHelper.quaternion);
+    const center = S.clippingHelper.position.clone();
+    const planePt = new THREE.Plane().setFromNormalAndCoplanarPoint(localAxis, center);
+    const intersection = new THREE.Vector3();
+    raycaster.ray.intersectPlane(planePt, intersection);
+    if (!intersection) return 0;
+    const offset = intersection.clone().sub(center);
+    // Choose two reference vectors perpendicular to the axis for angle computation
+    let ref = localAxis.clone().cross(new THREE.Vector3(0, 1, 0));
+    if (ref.length() < 0.01) ref = localAxis.clone().cross(new THREE.Vector3(1, 0, 0));
+    ref.normalize();
+    const perp1 = ref;
+    const perp2 = localAxis.clone().cross(perp1).normalize();
+    return Math.atan2(offset.dot(perp2), offset.dot(perp1));
+  }
+
   S.renderer.domElement.addEventListener('pointerdown', (e) => {
     pointerDownTime = performance.now();
     pointerDownPos.set(e.clientX, e.clientY);
+
+    // Check arc handles first
+    const arcAxis = hitTestArcHandles(e.clientX, e.clientY);
+    if (arcAxis) {
+      e.preventDefault();
+      S.controls.enabled = false;
+      const startAngle = getArcPointerAngle(e.clientX, e.clientY, arcAxis);
+      S.clippingArcDrag = {
+        axis: arcAxis,
+        startAngle,
+        startQuat: S.clippingHelper.quaternion.clone()
+      };
+      return;
+    }
+
     handleWidgetPointerDown(e);
   });
+
   S.renderer.domElement.addEventListener('pointermove', (e) => {
+    // Update cursor when hovering over arc handles
+    if (!S.clippingArcDrag) {
+      const axis = hitTestArcHandles(e.clientX, e.clientY);
+      S.renderer.domElement.style.cursor = axis ? 'grab' : '';
+    }
+
+    if (S.clippingArcDrag) {
+      e.preventDefault();
+      const { axis, startAngle, startQuat } = S.clippingArcDrag;
+      const currentAngle = getArcPointerAngle(e.clientX, e.clientY, axis);
+      const delta = currentAngle - startAngle;
+
+      // Build rotation quaternion around world-space axis (local to helper)
+      const worldAxisMap = { x: new THREE.Vector3(1,0,0), y: new THREE.Vector3(0,1,0), z: new THREE.Vector3(0,0,1) };
+      const localAxis = worldAxisMap[axis].clone().applyQuaternion(startQuat).normalize();
+      const rotQ = new THREE.Quaternion().setFromAxisAngle(localAxis, delta);
+
+      // Apply rotation to helper
+      S.clippingHelper.quaternion.copy(rotQ).multiply(startQuat);
+      S.clippingHelper.updateMatrixWorld(true);
+
+      // Update base quaternion since user manually rotated the gizmo
+      S.clippingBaseQuaternion = S.clippingHelper.quaternion.clone();
+
+      // Reset active axis to 'z' (custom coordinate system)
+      S.clipAxis = 'z';
+      document.querySelectorAll('.clip-axis-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.axis === 'z');
+      });
+
+      // Update clipping plane (negating if clipFlipped is active)
+      const normal = new THREE.Vector3(0, 0, 1).applyQuaternion(S.clippingHelper.quaternion).normalize();
+      if (S.clipFlipped) normal.negate();
+      S.clippingPlane.normal.copy(normal);
+      S.clippingPlane.constant = -normal.dot(S.clippingHelper.position);
+
+      // Sync scene-level arc handles to follow helper rotation
+      S.clippingArcHandles.forEach(h => {
+        h.mesh.quaternion.copy(S.clippingHelper.quaternion);
+        h.hitMesh.quaternion.copy(S.clippingHelper.quaternion);
+      });
+      return;
+    }
+
     handleWidgetPointerMove(e);
-    updateTempDistanceLine(e);
-    updateDistanceGhost(e);
+    if (S.distanceToolState) {
+      updateTempDistanceLine(e);
+      updateDistanceGhost(e);
+    } else if (S.angleToolState) {
+      updateTempAngleWidget(e);
+      updateAngleGhost(e);
+    }
   });
+
   S.renderer.domElement.addEventListener('pointerup', (e) => {
+    if (S.clippingArcDrag) {
+      S.clippingArcDrag = null;
+      S.controls.enabled = true;
+      S.renderer.domElement.style.cursor = '';
+
+      // Immediately refresh TransformControls to snap handles to the new rotation!
+      if (S.clippingTransformControls && S.clippingHelper) {
+        S.clippingTransformControls.detach();
+        S.clippingTransformControls.attach(S.clippingHelper);
+        S.clippingTransformControls.getHelper().visible = true;
+      }
+      return;
+    }
+
     handleWidgetPointerUp();
     const timeDiff = performance.now() - pointerDownTime;
     const dist = pointerDownPos.distanceTo(new THREE.Vector2(e.clientX, e.clientY));
@@ -1150,7 +1542,7 @@ function bindUI() {
         settingsRightPanel?.classList.contains('panel-open');
       if (anyPanelOpen) { closeAllPanels(); return; }
       document.querySelectorAll('.dropdown-menu:not(.hidden)').forEach(m => m.classList.add('hidden'));
-      if (S.distanceToolState) {
+      if (S.distanceToolState || S.angleToolState) {
         onCanvasClick(e);
       } else {
         onPointerDown(e);
@@ -1212,6 +1604,60 @@ function bindUI() {
 // ── Core render loop ───────────────────────────────────────────────────────
 function animate() {
   requestAnimationFrame(animate);
+  if (S.clippingTransformControls) {
+    // Enforce hiding negative direction arrowheads permanently!
+    try {
+      const gizmoTranslate = S.clippingTransformControls._gizmo?.gizmo?.['translate'];
+      if (gizmoTranslate) {
+        gizmoTranslate.traverse(child => {
+          if (child.userData.isNegArrow || child.userData.isPlaneHandle) {
+            // Keep on layer 31 (hidden layer) so the camera never renders it!
+            child.layers.set(31);
+            
+            // If the material has been swapped by TransformControls during drag/hover,
+            // clone and keep it fully transparent.
+            if (child.material && child.material !== child.userData.clonedNegMat) {
+              const clonedMat = child.material.clone();
+              clonedMat.transparent = true;
+              clonedMat.opacity = 0;
+              clonedMat.needsUpdate = true;
+              child.material = clonedMat;
+              child.userData.clonedNegMat = clonedMat;
+            } else if (child.material && child.material.opacity !== 0) {
+              child.material.opacity = 0;
+            }
+          }
+        });
+      }
+    } catch (e) {}
+
+    // Sync arc handle scale with the TransformControls screen-space scale.
+    // TransformControls sets scale on each individual handle child every frame
+    // via: handle.scale.set(1,1,1).multiplyScalar(factor * size / 4)
+    // We read that scale from the first child of the translate gizmo group.
+    if (S.clippingEnabled && S.clippingArcHandles && S.clippingArcHandles.length > 0) {
+      try {
+        const gizmoTranslate = S.clippingTransformControls._gizmo?.gizmo?.['translate'];
+        let handleScale = 1;
+        if (gizmoTranslate && gizmoTranslate.children.length > 0) {
+          handleScale = gizmoTranslate.children[0].scale.x;
+        }
+        // arcRadius base = 10.0 units, gizmo arrows are 0.5 units at scale 1.0
+        // We want arc radius ≈ arrow length in world space
+        // arrow world length = handleScale * 0.5, arc world radius = handleScale * 0.5
+        // arcMesh.scale needed = (handleScale * 0.5) / 10.0 = handleScale * 0.05
+        const targetScale = Math.max(0.001, handleScale) * 0.05;
+        S.clippingArcHandles.forEach(h => {
+          if (h.mesh && h.hitMesh) {
+            h.mesh.scale.set(targetScale, targetScale, targetScale);
+            h.hitMesh.scale.set(targetScale, targetScale, targetScale);
+          }
+        });
+      } catch (err) {
+        console.warn('Arc scale sync error:', err);
+      }
+    }
+  }
   if (S.cameraTransition) {
     const now     = performance.now();
     const elapsed = now - S.cameraTransition.startTime;
@@ -1228,6 +1674,16 @@ function animate() {
   }
   S.controls.update();
   S.composer.render();
+
+  // Render arc overlay scene on top — no clipping planes active
+  if (S.clippingEnabled && S.arcOverlayScene && S.arcOverlayScene.children.length > 0) {
+    const savedPlanes = S.renderer.clippingPlanes;
+    S.renderer.clippingPlanes = [];           // disable clipping for overlay
+    S.renderer.autoClear = false;             // don't clear what composer already drew
+    S.renderer.render(S.arcOverlayScene, S.camera);
+    S.renderer.autoClear = true;              // restore
+    S.renderer.clippingPlanes = savedPlanes;  // restore clipping for next frame
+  }
 }
 
 // ── Window resize ──────────────────────────────────────────────────────────

@@ -16,6 +16,19 @@ export function deactivateAllTools() {
     if (S.distanceToolState.tempBillboard) S.measurementGroup.remove(S.distanceToolState.tempBillboard);
     S.distanceToolState = null;
   }
+  if (S.angleToolState) {
+    if (S.angleToolState.spheres) {
+      S.angleToolState.spheres.forEach(o => {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) o.material.dispose();
+        S.measurementGroup.remove(o);
+      });
+    }
+    if (S.angleToolState.tempLine)      S.measurementGroup.remove(S.angleToolState.tempLine);
+    if (S.angleToolState.tempArc)       S.measurementGroup.remove(S.angleToolState.tempArc);
+    if (S.angleToolState.tempBillboard) S.measurementGroup.remove(S.angleToolState.tempBillboard);
+    S.angleToolState = null;
+  }
   if (S.distanceGhostSphere) {
     if (S.distanceGhostSphere.geometry) S.distanceGhostSphere.geometry.dispose();
     if (S.distanceGhostSphere.material) S.distanceGhostSphere.material.dispose();
@@ -40,6 +53,7 @@ export function deactivateAllTools() {
   document.getElementById('btn-tool-find')?.classList.remove('active');
   document.getElementById('btn-tool-distance')?.classList.remove('active');
   document.getElementById('btn-tool-angle')?.classList.remove('active');
+  syncMeasurementTabsUI();
 }
 
 // ── Measurements ──────────────────────────────────────────────────────────────
@@ -74,24 +88,73 @@ export function deleteMeasurement(id) {
   renderMeasurementListUI();
 }
 
+export function syncMeasurementTabsUI() {
+  const tabDist = document.getElementById('btn-measure-tab-dist');
+  const tabAngle = document.getElementById('btn-measure-tab-angle');
+  const btnDist = document.getElementById('btn-tool-distance');
+  const btnAngle = document.getElementById('btn-tool-angle');
+
+  if (tabDist && tabAngle && btnDist && btnAngle) {
+    if (S.distanceToolState) {
+      tabDist.classList.add('active');
+      tabAngle.classList.remove('active');
+      btnDist.classList.add('active');
+      btnAngle.classList.remove('active');
+    } else if (S.angleToolState) {
+      tabDist.classList.remove('active');
+      tabAngle.classList.add('active');
+      btnDist.classList.remove('active');
+      btnAngle.classList.add('active');
+    } else {
+      tabDist.classList.remove('active');
+      tabAngle.classList.remove('active');
+      btnDist.classList.remove('active');
+      btnAngle.classList.remove('active');
+    }
+  }
+}
+
 export function renderMeasurementListUI() {
   const panel = document.getElementById('measurement-list-panel');
   if (!panel) return;
-  if (!S.distanceToolState || S.completedMeasurements.length === 0) {
+  if (!S.distanceToolState && !S.angleToolState && S.completedMeasurements.length === 0) {
     panel.classList.add('hidden');
     return;
   }
   panel.classList.remove('hidden');
+  syncMeasurementTabsUI();
+
+  // Update hint text dynamically based on active tool state!
+  const hintEl = panel.querySelector('.measure-list-hint');
+  if (hintEl) {
+    if (S.distanceToolState) {
+      const pts = S.distanceToolState.points.length;
+      if (pts === 0) hintEl.textContent = "Click to place start point";
+      else if (pts === 1) hintEl.textContent = "Click to place end point";
+    } else if (S.angleToolState) {
+      const pts = S.angleToolState.points.length;
+      if (pts === 0) hintEl.textContent = "Click to place Angle Vertex (Center)";
+      else if (pts === 1) hintEl.textContent = "Click to place Reference Point 1";
+      else if (pts === 2) hintEl.textContent = "Click to place Reference Point 2";
+    } else {
+      hintEl.textContent = "Activate a tool to start measuring";
+    }
+  }
+
   const list = panel.querySelector('#measurement-list-items');
   if (!list) return;
   list.innerHTML = '';
   S.completedMeasurements.forEach((m, i) => {
     const row = document.createElement('div');
     row.className = 'measure-row';
+    const isAngle = m.type === 'angle';
+    const valText = isAngle ? `${m.angle.toFixed(1)}°` : `${m.dist.toFixed(2)} mm`;
+    const labelText = isAngle ? `Angle` : `Dist`;
     row.innerHTML = `
-      <span class="measure-idx">${i + 1}</span>
-      <span class="measure-val">${m.dist.toFixed(2)} mm</span>
-      <button class="measure-del-btn" data-id="${m.id}" title="삭제">
+      <span class="measure-idx" style="background:${isAngle ? '#ef4444' : '#10b981'}; color:#ffffff; display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; border-radius:50%; font-size:0.65rem; margin-right:4px;">${i + 1}</span>
+      <span class="measure-label" style="font-size:0.68rem; color:var(--text-2); margin-right:8px; font-weight:500;">${labelText}</span>
+      <span class="measure-val" style="flex:1; font-weight:600;">${valText}</span>
+      <button class="measure-del-btn" data-id="${m.id}" title="Delete">
         <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
           <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
         </svg>
@@ -124,8 +187,10 @@ function makeMeasurementBillboard(text, position) {
   ctx.textBaseline = 'middle';
   ctx.fillText(text, 80, 26);
   const texture  = new THREE.CanvasTexture(canvas);
-  const mat      = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false });
+  const mat      = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false, depthWrite: false });
   const sprite   = new THREE.Sprite(mat);
+  sprite.castShadow = false;
+  sprite.receiveShadow = false;
   sprite.position.copy(position);
   const modelSize = S.currentModel
     ? new THREE.Box3().setFromObject(S.currentModel).getSize(new THREE.Vector3()).length()
@@ -141,14 +206,14 @@ export function spawnAngleWidget() {
   const box    = new THREE.Box3().setFromObject(S.currentModel);
   const center = box.getCenter(new THREE.Vector3());
   const size   = box.getSize(new THREE.Vector3());
-  const radius = size.length() * 0.008;
+  const radius = size.length() * 0.003;
 
   const g   = new THREE.Group();
   g.name    = 'angle-widget-group';
   const geo = new THREE.SphereGeometry(radius, 16, 16);
-  const hCenter = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xef4444, depthTest: false }));
-  const hA      = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x10b981, depthTest: false }));
-  const hB      = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x3b82f6, depthTest: false }));
+  const hCenter = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xef4444, depthTest: false, depthWrite: false }));
+  const hA      = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x10b981, depthTest: false, depthWrite: false }));
+  const hB      = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x3b82f6, depthTest: false, depthWrite: false }));
 
   hCenter.position.copy(center);
   hA.position.set(center.x + size.x * 0.2, center.y, center.z);
@@ -158,11 +223,14 @@ export function spawnAngleWidget() {
   hB.userData      = { role: 'ptB' };
   g.add(hCenter, hA, hB);
 
-  const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 2, depthTest: false });
+  const lineMat = new THREE.LineBasicMaterial({ color: 0xff6600, linewidth: 2, depthTest: false, depthWrite: false });
   const lineGeo = new THREE.BufferGeometry().setFromPoints([
     hA.position, hCenter.position, hCenter.position, hB.position
   ]);
   const lines = new THREE.LineSegments(lineGeo, lineMat);
+  lines.castShadow = false;
+  lines.receiveShadow = false;
+  lines.renderOrder = 999;
   g.add(lines);
 
   S.scene.add(g);
@@ -270,6 +338,35 @@ export function handleWidgetPointerUp() {
   }
 }
 
+// ── Snapping math helper ──────────────────────────────────────────────────────
+
+export function snapToVertex(hit) {
+  let p = hit.point.clone();
+  if (hit.object.geometry?.attributes.position && hit.faceIndex !== undefined) {
+    const geom    = hit.object.geometry;
+    const posAttr = geom.attributes.position;
+    const localPt = hit.object.worldToLocal(p.clone());
+    let minDist = Infinity, snapPt = localPt.clone();
+    const checkVert = (idx) => {
+      const v = new THREE.Vector3(posAttr.getX(idx), posAttr.getY(idx), posAttr.getZ(idx));
+      const d = v.distanceTo(localPt);
+      if (d < minDist) { minDist = d; snapPt.copy(v); }
+    };
+    const fi = hit.faceIndex * 3;
+    if (geom.index) {
+      checkVert(geom.index.getX(fi));
+      checkVert(geom.index.getX(fi+1));
+      checkVert(geom.index.getX(fi+2));
+    } else {
+      checkVert(fi); checkVert(fi+1); checkVert(fi+2);
+    }
+    const worldSnap = hit.object.localToWorld(snapPt.clone());
+    const size = new THREE.Box3().setFromObject(S.currentModel).getSize(new THREE.Vector3());
+    if (worldSnap.distanceTo(p) < size.length() * 0.05) p.copy(worldSnap);
+  }
+  return p;
+}
+
 // ── Distance tool helpers ─────────────────────────────────────────────────────
 
 export function updateTempDistanceLine(event) {
@@ -282,17 +379,14 @@ export function updateTempDistanceLine(event) {
     !['ground-plane', 'rhino-edges', 'rhino-outline', 'selection-outline'].includes(i.object.name));
   if (hit) {
     const p1 = S.distanceToolState.points[0];
-    const p2 = hit.point;
+    const p2 = snapToVertex(hit);
     if (S.distanceToolState.tempLine)      S.measurementGroup.remove(S.distanceToolState.tempLine);
     if (S.distanceToolState.tempBillboard) S.measurementGroup.remove(S.distanceToolState.tempBillboard);
     const lineGeo = new THREE.BufferGeometry().setFromPoints([p1, p2]);
-    const modelLen = S.currentModel
-      ? new THREE.Box3().setFromObject(S.currentModel).getSize(new THREE.Vector3()).length()
-      : 100;
-    const dashSize = modelLen * 0.02;
-    const lineMat = new THREE.LineDashedMaterial({ color: 0x10b981, linewidth: 2, dashSize, gapSize: dashSize * 0.5 });
+    const lineMat = new THREE.LineBasicMaterial({ color: 0x10b981, linewidth: 2, depthTest: false, depthWrite: false });
     const line    = new THREE.Line(lineGeo, lineMat);
-    line.computeLineDistances();
+    line.castShadow = false;
+    line.receiveShadow = false;
     S.distanceToolState.tempLine = line;
     S.measurementGroup.add(line);
     const dist      = p1.distanceTo(p2);
@@ -317,13 +411,15 @@ export function updateDistanceGhost(event) {
   const hit = intersects.find(i => i.object.isMesh &&
     !['ground-plane', 'rhino-edges', 'rhino-outline', 'selection-outline'].includes(i.object.name));
   if (hit) {
-    const p = hit.point.clone();
+    const p = snapToVertex(hit);
     if (!S.distanceGhostSphere) {
       const size = new THREE.Box3().setFromObject(S.currentModel).getSize(new THREE.Vector3());
-      const r    = size.length() * 0.007;
+      const r    = size.length() * 0.003;
       const geo  = new THREE.SphereGeometry(r, 12, 12);
-      const mat  = new THREE.MeshBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.5 });
+      const mat  = new THREE.MeshBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.5, depthTest: false, depthWrite: false });
       S.distanceGhostSphere = new THREE.Mesh(geo, mat);
+      S.distanceGhostSphere.castShadow = false;
+      S.distanceGhostSphere.receiveShadow = false;
       S.distanceGhostSphere.name = 'distance-ghost';
       S.measurementGroup.add(S.distanceGhostSphere);
     }
@@ -334,8 +430,151 @@ export function updateDistanceGhost(event) {
   }
 }
 
+// ── Angle tool helpers ────────────────────────────────────────────────────────
+
+export function updateTempAngleWidget(event) {
+  if (!S.angleToolState || !S.currentModel) return;
+  S.mouse.x = (event.clientX / window.innerWidth)  * 2 - 1;
+  S.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+  S.raycaster.setFromCamera(S.mouse, S.camera);
+  const intersects = S.raycaster.intersectObject(S.currentModel, true);
+  const hit = intersects.find(i => i.object.isMesh &&
+    !['ground-plane', 'rhino-edges', 'rhino-outline', 'selection-outline'].includes(i.object.name));
+
+  const clickIdx = S.angleToolState.points.length;
+  if (clickIdx === 0) return;
+
+  if (hit) {
+    const cursorPt = snapToVertex(hit);
+
+    if (clickIdx === 1) {
+      // Hovering Reference 1 after placing Center (Vertex)
+      const p1 = S.angleToolState.points[0];
+      const p2 = cursorPt;
+
+      if (S.angleToolState.tempLine) S.measurementGroup.remove(S.angleToolState.tempLine);
+      if (S.angleToolState.tempArc) S.measurementGroup.remove(S.angleToolState.tempArc);
+      if (S.angleToolState.tempBillboard) S.measurementGroup.remove(S.angleToolState.tempBillboard);
+
+      const lineGeo = new THREE.BufferGeometry().setFromPoints([p1, p2]);
+      const lineMat = new THREE.LineBasicMaterial({ color: 0xef4444, linewidth: 2, depthTest: false, depthWrite: false });
+      const line = new THREE.Line(lineGeo, lineMat);
+      line.castShadow = false; line.receiveShadow = false;
+      S.angleToolState.tempLine = line;
+      S.measurementGroup.add(line);
+    } else if (clickIdx === 2) {
+      // Hovering Reference 2 after placing Center and Reference 1
+      const C = S.angleToolState.points[0];
+      const P1 = S.angleToolState.points[1];
+      const P2 = cursorPt;
+
+      if (S.angleToolState.tempLine) S.measurementGroup.remove(S.angleToolState.tempLine);
+      if (S.angleToolState.tempArc) S.measurementGroup.remove(S.angleToolState.tempArc);
+      if (S.angleToolState.tempBillboard) S.measurementGroup.remove(S.angleToolState.tempBillboard);
+
+      const lineGeo = new THREE.BufferGeometry().setFromPoints([P1, C, C, P2]);
+      const lineMat = new THREE.LineBasicMaterial({ color: 0xffaa00, linewidth: 2, depthTest: false, depthWrite: false });
+      const line = new THREE.LineSegments(lineGeo, lineMat);
+      line.castShadow = false; line.receiveShadow = false;
+      S.angleToolState.tempLine = line;
+      S.measurementGroup.add(line);
+
+      // Angle math & Arc line drawing
+      const v1 = new THREE.Vector3().subVectors(P1, C);
+      const v2 = new THREE.Vector3().subVectors(P2, C);
+      const d1 = v1.length();
+      const d2 = v2.length();
+      if (d1 > 0.0001 && d2 > 0.0001) {
+        const v1_norm = v1.clone().normalize();
+        const v2_norm = v2.clone().normalize();
+        const cosTheta = v1_norm.dot(v2_norm);
+        const theta = Math.acos(Math.max(-1, Math.min(1, cosTheta)));
+        const angleDeg = theta * (180 / Math.PI);
+
+        if (theta > 0.001) {
+          let normal = new THREE.Vector3().crossVectors(v1_norm, v2_norm).normalize();
+          if (normal.lengthSq() < 0.0001) {
+            normal.set(0, 1, 0).cross(v1_norm).normalize();
+            if (normal.lengthSq() < 0.0001) normal.set(1, 0, 0).cross(v1_norm).normalize();
+          }
+          const xAxis = v1_norm.clone();
+          const yAxis = new THREE.Vector3().crossVectors(normal, xAxis).normalize();
+          const arcRadius = Math.min(d1, d2) * 0.25;
+          const arcPoints = [];
+          const segments = 32;
+          for (let i = 0; i <= segments; i++) {
+            const t = (i / segments) * theta;
+            const x = arcRadius * Math.cos(t);
+            const y = arcRadius * Math.sin(t);
+            const pt = C.clone().addScaledVector(xAxis, x).addScaledVector(yAxis, y);
+            arcPoints.push(pt);
+          }
+          const arcGeo = new THREE.BufferGeometry().setFromPoints(arcPoints);
+          const arcMat = new THREE.LineBasicMaterial({ color: 0xff6600, linewidth: 2.5, depthTest: false, depthWrite: false });
+          const arcLine = new THREE.Line(arcGeo, arcMat);
+          arcLine.castShadow = false; arcLine.receiveShadow = false;
+          S.angleToolState.tempArc = arcLine;
+          S.measurementGroup.add(arcLine);
+
+          // Billboard positioned elegantly at the bisector
+          const modelSize = new THREE.Box3().setFromObject(S.currentModel).getSize(new THREE.Vector3()).length();
+          const halfTheta = theta / 2;
+          const offsetDist = arcRadius + modelSize * 0.02;
+          const xBisect = offsetDist * Math.cos(halfTheta);
+          const yBisect = offsetDist * Math.sin(halfTheta);
+          const billboardPos = C.clone().addScaledVector(xAxis, xBisect).addScaledVector(yAxis, yBisect);
+
+          const billboard = makeMeasurementBillboard(`${angleDeg.toFixed(1)}°`, billboardPos);
+          S.angleToolState.tempBillboard = billboard;
+          S.measurementGroup.add(billboard);
+        }
+      }
+    }
+  }
+}
+
+export function updateAngleGhost(event) {
+  if (!S.angleToolState || !S.currentModel) {
+    if (S.distanceGhostSphere) {
+      S.measurementGroup.remove(S.distanceGhostSphere);
+      S.distanceGhostSphere = null;
+    }
+    return;
+  }
+  S.mouse.x = (event.clientX / window.innerWidth)  * 2 - 1;
+  S.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+  S.raycaster.setFromCamera(S.mouse, S.camera);
+  const intersects = S.raycaster.intersectObject(S.currentModel, true);
+  const hit = intersects.find(i => i.object.isMesh &&
+    !['ground-plane', 'rhino-edges', 'rhino-outline', 'selection-outline'].includes(i.object.name));
+  if (hit) {
+    const p = snapToVertex(hit);
+    if (!S.distanceGhostSphere) {
+      const size = new THREE.Box3().setFromObject(S.currentModel).getSize(new THREE.Vector3());
+      const r    = size.length() * 0.003;
+      const geo  = new THREE.SphereGeometry(r, 12, 12);
+      const mat  = new THREE.MeshBasicMaterial({ color: 0xef4444, transparent: true, opacity: 0.5, depthTest: false, depthWrite: false });
+      S.distanceGhostSphere = new THREE.Mesh(geo, mat);
+      S.distanceGhostSphere.castShadow = false;
+      S.distanceGhostSphere.receiveShadow = false;
+      S.distanceGhostSphere.name = 'distance-ghost';
+      S.measurementGroup.add(S.distanceGhostSphere);
+    }
+    // Update color depending on click step!
+    const stepColors = [0xef4444, 0x10b981, 0x3b82f6];
+    const clickIdx = S.angleToolState.points.length;
+    S.distanceGhostSphere.material.color.setHex(stepColors[clickIdx]);
+    S.distanceGhostSphere.visible = true;
+    S.distanceGhostSphere.position.copy(p);
+  } else if (S.distanceGhostSphere) {
+    S.distanceGhostSphere.visible = false;
+  }
+}
+
+// ── Core Canvas Click router ──────────────────────────────────────────────────
+
 export function onCanvasClick(event) {
-  if (!S.distanceToolState) return;
+  if (!S.distanceToolState && !S.angleToolState) return;
   S.mouse.x = (event.clientX / window.innerWidth)  * 2 - 1;
   S.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
   S.raycaster.setFromCamera(S.mouse, S.camera);
@@ -344,70 +583,157 @@ export function onCanvasClick(event) {
     !['ground-plane', 'rhino-edges', 'rhino-outline', 'selection-outline'].includes(i.object.name));
   if (!hit) return;
 
-  let p = hit.point.clone();
-  if (hit.object.geometry?.attributes.position && hit.faceIndex !== undefined) {
-    const geom    = hit.object.geometry;
-    const posAttr = geom.attributes.position;
-    const localPt = hit.object.worldToLocal(p.clone());
-    let minDist = Infinity, snapPt = localPt.clone();
-    const checkVert = (idx) => {
-      const v = new THREE.Vector3(posAttr.getX(idx), posAttr.getY(idx), posAttr.getZ(idx));
-      const d = v.distanceTo(localPt);
-      if (d < minDist) { minDist = d; snapPt.copy(v); }
-    };
-    const fi = hit.faceIndex * 3;
-    if (geom.index) {
-      checkVert(geom.index.getX(fi));
-      checkVert(geom.index.getX(fi+1));
-      checkVert(geom.index.getX(fi+2));
-    } else {
-      checkVert(fi); checkVert(fi+1); checkVert(fi+2);
+  const p = snapToVertex(hit);
+  const size = new THREE.Box3().setFromObject(S.currentModel).getSize(new THREE.Vector3());
+
+  if (S.distanceToolState) {
+    // --- Distance Tool Logic ---
+    const sphereGeo = new THREE.SphereGeometry(size.length() * 0.003, 16, 16);
+    const sphere = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: 0x10b981, depthTest: false, depthWrite: false }));
+    sphere.castShadow = false; sphere.receiveShadow = false;
+    sphere.position.copy(p);
+    S.measurementGroup.add(sphere);
+    S.distanceToolState.points.push(p);
+    S.distanceToolState.spheres = S.distanceToolState.spheres || [];
+    S.distanceToolState.spheres.push(sphere);
+
+    if (S.distanceToolState.points.length === 2) {
+      const p1 = S.distanceToolState.points[0];
+      const p2 = S.distanceToolState.points[1];
+      if (S.distanceToolState.tempLine) S.measurementGroup.remove(S.distanceToolState.tempLine);
+      if (S.distanceToolState.tempBillboard) S.measurementGroup.remove(S.distanceToolState.tempBillboard);
+
+      const lineGeo = new THREE.BufferGeometry().setFromPoints([p1, p2]);
+      const lineMat = new THREE.LineBasicMaterial({ color: 0x10b981, linewidth: 2, depthTest: false, depthWrite: false });
+      const line = new THREE.Line(lineGeo, lineMat);
+      line.castShadow = false; line.receiveShadow = false;
+      S.measurementGroup.add(line);
+
+      const dist = p1.distanceTo(p2);
+      const billboard = makeMeasurementBillboard(`${dist.toFixed(2)} mm`, p1.clone().add(p2).multiplyScalar(0.5));
+      S.measurementGroup.add(billboard);
+
+      S.completedMeasurements.push({
+        id: Date.now(),
+        type: 'distance',
+        p1: p1.clone(), p2: p2.clone(),
+        dist,
+        objects: [...(S.distanceToolState.spheres || []), line, billboard]
+      });
+      S.distanceToolState.points = [];
+      S.distanceToolState.spheres = [];
+      S.distanceToolState.tempLine = null;
+      S.distanceToolState.tempBillboard = null;
+      renderMeasurementListUI();
     }
-    const worldSnap = hit.object.localToWorld(snapPt.clone());
-    const size = new THREE.Box3().setFromObject(S.currentModel).getSize(new THREE.Vector3());
-    if (worldSnap.distanceTo(p) < size.length() * 0.05) p.copy(worldSnap);
-  }
+  } else if (S.angleToolState) {
+    // --- Angle Tool Logic ---
+    // Colors for sequential clicking:
+    // Pt 0 (Center): Red (0xef4444)
+    // Pt 1 (Ref 1): Green (0x10b981)
+    // Pt 2 (Ref 2): Blue (0x3b82f6)
+    const stepColors = [0xef4444, 0x10b981, 0x3b82f6];
+    const clickIdx = S.angleToolState.points.length;
+    const sphereGeo = new THREE.SphereGeometry(size.length() * 0.003, 16, 16);
+    const sphere = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: stepColors[clickIdx], depthTest: false, depthWrite: false }));
+    sphere.castShadow = false; sphere.receiveShadow = false;
+    sphere.position.copy(p);
+    S.measurementGroup.add(sphere);
 
-  const size     = new THREE.Box3().setFromObject(S.currentModel).getSize(new THREE.Vector3());
-  const sphereGeo = new THREE.SphereGeometry(size.length() * 0.008, 16, 16);
-  const sphere    = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: 0x10b981 }));
-  sphere.position.copy(p);
-  S.measurementGroup.add(sphere);
-  S.distanceToolState.points.push(p);
-  S.distanceToolState.spheres = S.distanceToolState.spheres || [];
-  S.distanceToolState.spheres.push(sphere);
+    S.angleToolState.points.push(p);
+    S.angleToolState.spheres = S.angleToolState.spheres || [];
+    S.angleToolState.spheres.push(sphere);
+    renderMeasurementListUI(); // Trigger UI hint update!
 
-  if (S.distanceToolState.points.length === 2) {
-    const p1 = S.distanceToolState.points[0];
-    const p2 = S.distanceToolState.points[1];
-    if (S.distanceToolState.tempLine)      S.measurementGroup.remove(S.distanceToolState.tempLine);
-    if (S.distanceToolState.tempBillboard) S.measurementGroup.remove(S.distanceToolState.tempBillboard);
+    if (S.angleToolState.points.length === 3) {
+      const C = S.angleToolState.points[0];
+      const P1 = S.angleToolState.points[1];
+      const P2 = S.angleToolState.points[2];
 
-    const lineGeo = new THREE.BufferGeometry().setFromPoints([p1, p2]);
-    const modelLen2 = S.currentModel
-      ? new THREE.Box3().setFromObject(S.currentModel).getSize(new THREE.Vector3()).length()
-      : 100;
-    const ds = modelLen2 * 0.02;
-    const lineMat = new THREE.LineDashedMaterial({ color: 0x10b981, linewidth: 2, dashSize: ds, gapSize: ds * 0.5 });
-    const line    = new THREE.Line(lineGeo, lineMat);
-    line.computeLineDistances();
-    S.measurementGroup.add(line);
+      if (S.angleToolState.tempLine) S.measurementGroup.remove(S.angleToolState.tempLine);
+      if (S.angleToolState.tempArc) S.measurementGroup.remove(S.angleToolState.tempArc);
+      if (S.angleToolState.tempBillboard) S.measurementGroup.remove(S.angleToolState.tempBillboard);
 
-    const dist      = p1.distanceTo(p2);
-    const billboard = makeMeasurementBillboard(`${dist.toFixed(2)} mm`, p1.clone().add(p2).multiplyScalar(0.5));
-    S.measurementGroup.add(billboard);
+      // Create permanent lines
+      const lineGeo = new THREE.BufferGeometry().setFromPoints([P1, C, C, P2]);
+      const lineMat = new THREE.LineBasicMaterial({ color: 0xffaa00, linewidth: 2, depthTest: false, depthWrite: false });
+      const line = new THREE.LineSegments(lineGeo, lineMat);
+      line.castShadow = false; line.receiveShadow = false;
+      S.measurementGroup.add(line);
 
-    S.completedMeasurements.push({
-      id:      Date.now(),
-      p1:      p1.clone(), p2: p2.clone(),
-      dist,
-      objects: [...(S.distanceToolState.spheres || []), line, billboard]
-    });
-    S.distanceToolState.points       = [];
-    S.distanceToolState.spheres      = [];
-    S.distanceToolState.tempLine     = null;
-    S.distanceToolState.tempBillboard = null;
-    renderMeasurementListUI();
+      // Calculate angle and arc
+      const v1 = new THREE.Vector3().subVectors(P1, C);
+      const v2 = new THREE.Vector3().subVectors(P2, C);
+      const d1 = v1.length();
+      const d2 = v2.length();
+      let angleDeg = 0;
+      let arcLine = null;
+      let billboard = null;
+
+      if (d1 > 0.0001 && d2 > 0.0001) {
+        const v1_norm = v1.clone().normalize();
+        const v2_norm = v2.clone().normalize();
+        const cosTheta = v1_norm.dot(v2_norm);
+        const theta = Math.acos(Math.max(-1, Math.min(1, cosTheta)));
+        angleDeg = theta * (180 / Math.PI);
+
+        if (theta > 0.001) {
+          let normal = new THREE.Vector3().crossVectors(v1_norm, v2_norm).normalize();
+          if (normal.lengthSq() < 0.0001) {
+            normal.set(0, 1, 0).cross(v1_norm).normalize();
+            if (normal.lengthSq() < 0.0001) normal.set(1, 0, 0).cross(v1_norm).normalize();
+          }
+          const xAxis = v1_norm.clone();
+          const yAxis = new THREE.Vector3().crossVectors(normal, xAxis).normalize();
+          const arcRadius = Math.min(d1, d2) * 0.25;
+          const arcPoints = [];
+          const segments = 32;
+          for (let i = 0; i <= segments; i++) {
+            const t = (i / segments) * theta;
+            const x = arcRadius * Math.cos(t);
+            const y = arcRadius * Math.sin(t);
+            const pt = C.clone().addScaledVector(xAxis, x).addScaledVector(yAxis, y);
+            arcPoints.push(pt);
+          }
+          const arcGeo = new THREE.BufferGeometry().setFromPoints(arcPoints);
+          const arcMat = new THREE.LineBasicMaterial({ color: 0xff6600, linewidth: 2.5, depthTest: false, depthWrite: false });
+          arcLine = new THREE.Line(arcGeo, arcMat);
+          arcLine.castShadow = false; arcLine.receiveShadow = false;
+          S.measurementGroup.add(arcLine);
+
+          // Billboard at the bisector
+          const halfTheta = theta / 2;
+          const offsetDist = arcRadius + size.length() * 0.02;
+          const xBisect = offsetDist * Math.cos(halfTheta);
+          const yBisect = offsetDist * Math.sin(halfTheta);
+          const billboardPos = C.clone().addScaledVector(xAxis, xBisect).addScaledVector(yAxis, yBisect);
+
+          billboard = makeMeasurementBillboard(`${angleDeg.toFixed(1)}°`, billboardPos);
+          S.measurementGroup.add(billboard);
+        }
+      }
+
+      const mObjects = [...(S.angleToolState.spheres || []), line];
+      if (arcLine) mObjects.push(arcLine);
+      if (billboard) mObjects.push(billboard);
+
+      S.completedMeasurements.push({
+        id: Date.now(),
+        type: 'angle',
+        center: C.clone(),
+        p1: P1.clone(),
+        p2: P2.clone(),
+        angle: angleDeg,
+        objects: mObjects
+      });
+
+      S.angleToolState.points = [];
+      S.angleToolState.spheres = [];
+      S.angleToolState.tempLine = null;
+      S.angleToolState.tempArc = null;
+      S.angleToolState.tempBillboard = null;
+      renderMeasurementListUI();
+    }
   }
 }
 
@@ -435,22 +761,36 @@ export function updateClippingPlane() {
 
 export function setupClippingHelper() {
   if (S.clippingTransformControls) S.clippingTransformControls.detach();
-  if (S.clippingHelper) { S.scene.remove(S.clippingHelper); S.clippingHelper = null; }
+
+  // Remove old arc handles from the overlay scene
+  S.clippingArcHandles.forEach(h => {
+    S.arcOverlayScene.remove(h.mesh);
+    S.arcOverlayScene.remove(h.hitMesh);
+    h.mesh.geometry.dispose();
+    h.mesh.material.dispose();
+    h.hitMesh.geometry.dispose();
+    h.hitMesh.material.dispose();
+  });
+  S.clippingArcHandles = [];
+  S.clippingArcDrag = null;
+
+  if (S.clippingHelper) { S.arcOverlayScene.remove(S.clippingHelper); S.clippingHelper = null; }
+  S.clippingBaseQuaternion = null;
   if (!S.clippingEnabled) return;
 
-  const size = S.currentModel
+  const size = (S.currentModel
     ? new THREE.Box3().setFromObject(S.currentModel).getSize(new THREE.Vector3()).length() * 0.65
-    : 50;
+    : 50) * 0.60;
 
   // Build clipping plane grid (white/light blue grid)
   const div = 5, pts = [];
   for (let i = -div; i <= div; i++) {
     const t = (i / div) * size;
-    pts.push(-size, 0, t, size, 0, t);
-    pts.push(t, 0, -size, t, 0, size);
+    pts.push(-size, t, 0, size, t, 0);
+    pts.push(t, -size, 0, t, size, 0);
   }
   const b = size;
-  pts.push(-b,0,-b, b,0,-b, b,0,-b, b,0,b, b,0,b, -b,0,b, -b,0,b, -b,0,-b);
+  pts.push(-b,-b,0, b,-b,0, b,-b,0, b,b,0, b,b,0, -b,b,0, -b,b,0, -b,-b,0);
 
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
@@ -460,24 +800,11 @@ export function setupClippingHelper() {
   S.clippingHelper = new THREE.LineSegments(geo, mat);
   S.clippingHelper.renderOrder = 999;
 
-  // Add normal direction arrow (blue = Z / cut direction)
-  // Arrow points along +Y (local) which maps to plane normal after pose update
-  const arrowLen = size * 0.55;
-  const arrowPts = [
-    0, 0, 0,        0, arrowLen, 0,            // shaft
-    0, arrowLen, 0, -size*0.08, arrowLen*0.82, 0, // left head
-    0, arrowLen, 0,  size*0.08, arrowLen*0.82, 0  // right head
-  ];
-  const arrowGeo = new THREE.BufferGeometry();
-  arrowGeo.setAttribute('position', new THREE.Float32BufferAttribute(arrowPts, 3));
-  const arrowMat = new THREE.LineBasicMaterial({
-    color: 0x4da6ff, depthTest: false, depthWrite: false, linewidth: 2
-  });
-  const arrow = new THREE.LineSegments(arrowGeo, arrowMat);
-  arrow.renderOrder = 999;
-  S.clippingHelper.add(arrow);
+  S.arcOverlayScene.add(S.clippingHelper);
 
-  S.scene.add(S.clippingHelper);
+  // Arc handles are added directly to S.scene to avoid being cut by clipping planes
+  buildClippingArcHandles(size);
+
   updateClippingHelperPose();
 
   if (S.clippingTransformControls) {
@@ -486,10 +813,139 @@ export function setupClippingHelper() {
   }
 }
 
+// Creates quarter-circle (90°) arc handle tubes directly from parametric equations.
+// Positioned in the NEGATIVE quadrant (opposite the translate arrows).
+//   X arc → YZ plane, from -Y to -Z
+//   Y arc → XZ plane, from -X to -Z
+//   Z arc → XY plane, from -X to -Y
+export function buildClippingArcHandles(size) {
+  const arcRadius = 10.0;           // robust unit base radius
+  const arcTube   = 0.20;           // thicker tube (2% of radius) to prevent sub-pixel thinning
+  const pathSegs  = 32;            // path smoothness
+  const tubeSegs  = 6;             // cross-section roundness
+
+  // Parametric arc curve — computes points directly, no quaternion rotation needed
+  class ArcCurve extends THREE.Curve {
+    constructor(axis, r) { super(); this.axis = axis; this.r = r; }
+    getPoint(t) {
+      const a = (Math.PI / 2) * t; // 0 → π/2
+      const r = this.r;
+      if (this.axis === 'x') {
+        // YZ plane: -Y direction at t=0, -Z direction at t=1
+        return new THREE.Vector3(0,  -r * Math.cos(a), -r * Math.sin(a));
+      } else if (this.axis === 'y') {
+        // XZ plane: -X direction at t=0, -Z direction at t=1
+        return new THREE.Vector3(-r * Math.cos(a),  0, -r * Math.sin(a));
+      } else {
+        // XY plane: -X direction at t=0, -Y direction at t=1
+        return new THREE.Vector3(-r * Math.cos(a), -r * Math.sin(a),  0);
+      }
+    }
+  }
+
+  const axes = [
+    { axis: 'x', color: 0xff3b30 },  // Red   — rotates clipping plane around local X
+    { axis: 'y', color: 0x34c759 },  // Green — rotates clipping plane around local Y
+    { axis: 'z', color: 0x007aff }   // Blue  — rotates clipping plane around local Z
+  ];
+
+  axes.forEach(cfg => {
+    const curve = new ArcCurve(cfg.axis, arcRadius);
+
+    // ── Visible tube ──────────────────────────────────────────────────────────
+    const arcGeo = new THREE.TubeGeometry(curve, pathSegs, arcTube, tubeSegs, false);
+    const arcMat = new THREE.MeshBasicMaterial({
+      color: cfg.color,
+      depthTest: false, depthWrite: false,
+      transparent: true, opacity: 0.92,
+      side: THREE.DoubleSide
+    });
+    const arcMesh = new THREE.Mesh(arcGeo, arcMat);
+    arcMesh.castShadow    = false;
+    arcMesh.receiveShadow = false;
+    arcMesh.renderOrder   = 1000;
+    arcMesh.userData.clipArcAxis = cfg.axis;
+
+    // ── Invisible fat hit-area (same curve, larger tube) ─────────────────────
+    const hitGeo = new THREE.TubeGeometry(curve, pathSegs, arcRadius * 0.12, tubeSegs, false);
+    const hitMat = new THREE.MeshBasicMaterial({
+      transparent: true, opacity: 0,
+      depthTest: false, depthWrite: false,
+      side: THREE.DoubleSide
+    });
+    const hitMesh = new THREE.Mesh(hitGeo, hitMat);
+    hitMesh.castShadow    = false;
+    hitMesh.receiveShadow = false;
+    hitMesh.renderOrder   = 1001;
+    hitMesh.userData.clipArcAxis    = cfg.axis;
+    hitMesh.userData.isArcHitArea   = true;
+
+    // Add to the arc overlay scene — rendered separately with NO clipping planes
+    S.arcOverlayScene.add(arcMesh);
+    S.arcOverlayScene.add(hitMesh);
+    S.clippingArcHandles.push({ mesh: arcMesh, hitMesh, axis: cfg.axis });
+  });
+}
+
 export function updateClippingHelperPose() {
   if (!S.clippingHelper) return;
   const normal = S.clippingPlane.normal.clone().normalize();
-  S.clippingHelper.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
+  S.clippingHelper.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
+  if (!S.clippingBaseQuaternion) {
+    S.clippingBaseQuaternion = S.clippingHelper.quaternion.clone();
+  }
   const d = -S.clippingPlane.constant;
   S.clippingHelper.position.copy(normal.clone().multiplyScalar(d));
+
+  // Sync arc handles: they live in scene-space to avoid clipping, so copy world transform
+  S.clippingHelper.updateMatrixWorld(true);
+  S.clippingArcHandles.forEach(h => {
+    h.mesh.position.copy(S.clippingHelper.position);
+    h.mesh.quaternion.copy(S.clippingHelper.quaternion);
+    h.hitMesh.position.copy(S.clippingHelper.position);
+    h.hitMesh.quaternion.copy(S.clippingHelper.quaternion);
+  });
+}
+
+export function reconstructMeasurements(measurements) {
+  clearMeasurements();
+  if (!measurements || !S.currentModel) return;
+  measurements.forEach(m => {
+    const p1 = new THREE.Vector3(...m.p1);
+    const p2 = new THREE.Vector3(...m.p2);
+    const size = new THREE.Box3().setFromObject(S.currentModel).getSize(new THREE.Vector3());
+    const r = size.length() * 0.003;
+    const sphereGeo = new THREE.SphereGeometry(r, 16, 16);
+    
+    const sphere1 = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: 0x10b981, depthTest: false, depthWrite: false }));
+    sphere1.castShadow = false;
+    sphere1.receiveShadow = false;
+    sphere1.position.copy(p1);
+    S.measurementGroup.add(sphere1);
+    
+    const sphere2 = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: 0x10b981, depthTest: false, depthWrite: false }));
+    sphere2.castShadow = false;
+    sphere2.receiveShadow = false;
+    sphere2.position.copy(p2);
+    S.measurementGroup.add(sphere2);
+
+    const lineGeo = new THREE.BufferGeometry().setFromPoints([p1, p2]);
+    const lineMat = new THREE.LineBasicMaterial({ color: 0x10b981, linewidth: 2, depthTest: false, depthWrite: false });
+    const line = new THREE.Line(lineGeo, lineMat);
+    line.castShadow = false;
+    line.receiveShadow = false;
+    S.measurementGroup.add(line);
+
+    const billboard = makeMeasurementBillboard(`${m.dist.toFixed(2)} mm`, p1.clone().add(p2).multiplyScalar(0.5));
+    S.measurementGroup.add(billboard);
+
+    S.completedMeasurements.push({
+      id: m.id,
+      p1: p1,
+      p2: p2,
+      dist: m.dist,
+      objects: [sphere1, sphere2, line, billboard]
+    });
+  });
+  renderMeasurementListUI();
 }

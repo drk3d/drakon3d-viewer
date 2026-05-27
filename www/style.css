@@ -400,17 +400,29 @@ input[type="file"] { display: none; }
   top: 72px;
   right: 12px;
   width: 290px;
+  height: 350px;
+  min-width: 240px;
+  min-height: 150px;
+  resize: both;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   background: var(--surface);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
   border: 1px solid var(--border);
   border-radius: var(--r);
   z-index: 15;
-  max-height: 60vh;
-  overflow-y: auto;
-  overflow-x: hidden;
   box-shadow: 0 4px 24px rgba(0,0,0,0.45);
   touch-action: none;
+}
+.prop-float-panel.hidden { display: none !important; }
+
+#prop-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
 }
 
 .prop-drag-handle {
@@ -443,11 +455,15 @@ input[type="file"] { display: none; }
 /* ── Measurement List Panel ── */
 .measure-list-panel {
   position: fixed;
-  bottom: 80px;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 72px;
+  right: 12px;
+  width: 260px;
   min-width: 220px;
-  max-width: 320px;
+  min-height: 120px;
+  resize: both;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   background: var(--surface);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -456,6 +472,39 @@ input[type="file"] { display: none; }
   z-index: 14;
   padding: 8px 10px;
   box-shadow: 0 4px 20px rgba(0,0,0,0.35);
+}
+.measure-list-panel.hidden { display: none !important; }
+#measurement-list-items {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  margin-bottom: 4px;
+}
+.measure-tab-btn {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-2);
+  font-size: 0.7rem;
+  padding: 4px 0;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.15s;
+  font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.measure-tab-btn:hover {
+  color: var(--text);
+}
+.measure-tab-btn.active {
+  background: var(--surface) !important;
+  color: var(--text) !important;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+  font-weight: 600;
 }
 .measure-list-header {
   display: flex;
@@ -643,6 +692,12 @@ input[type="file"] { display: none; }
   bottom: 16px;
   right: 10px;
   width: 260px;
+  min-width: 240px;
+  min-height: 120px;
+  resize: both;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   background: var(--surface);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
@@ -653,12 +708,12 @@ input[type="file"] { display: none; }
   transform: translateY(0);
   transition: opacity 0.2s, transform 0.2s;
 }
-.cg-panel.hidden { display: none; }
+.cg-panel.hidden { display: none !important; }
 
 .cg-header {
   display: flex;
   align-items: center;
-  padding: 9px 10px 9px 12px;
+  padding: 5px 10px 5px 12px;
   border-bottom: 1px solid var(--border);
   gap: 6px;
   cursor: grab;
@@ -675,6 +730,9 @@ input[type="file"] { display: none; }
   display: flex;
   flex-direction: column;
   gap: 10px;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .cg-row {
@@ -1137,6 +1195,17 @@ input[type="range"]::-moz-range-thumb {
   font-weight: 600;
   color: var(--text);
   letter-spacing: 0.02em;
+}
+.app-version-tag {
+  margin-left: auto;   /* h2 바로 뒤, 닫기 버튼 바로 앞에 밀착 */
+  margin-right: 8px;
+  font-size: 0.62rem;
+  font-weight: 400;
+  color: var(--text-2);
+  opacity: 0.6;
+  letter-spacing: 0.03em;
+  font-family: monospace;
+  user-select: none;
 }
 
 .right-panel-content {
@@ -2042,4 +2111,209 @@ body.light-theme .metadata-table td.meta-label {
   background: var(--primary-dim);
   color: var(--primary);
   border-color: rgba(59,130,246,0.35);
+}
+
+/* Specific positioning for clipping settings panel (top right quadrant) */
+#clipping-panel {
+  top: 90px;
+  right: 60px;
+  bottom: auto;
+}
+
+/* Specific positioning for find object panel (top right quadrant) */
+#find-panel {
+  top: 72px;
+  right: 12px;
+  bottom: auto;
+  width: 290px;
+  min-width: 280px;
+}
+
+/* Custom Color Picker HSL Sliders */
+.picker-range-slider {
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  height: 8px !important;
+  border-radius: 4px !important;
+  outline: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+  background-clip: border-box !important;
+  cursor: pointer !important;
+}
+.picker-range-slider::-webkit-slider-thumb {
+  -webkit-appearance: none !important;
+  width: 14px !important;
+  height: 14px !important;
+  border-radius: 50% !important;
+  background: #ffffff !important;
+  border: 1px solid rgba(0, 0, 0, 0.3) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4) !important;
+  cursor: pointer !important;
+  transform: none !important;
+  margin-top: 0 !important;
+  transition: transform 0.1s !important;
+}
+.picker-range-slider:active::-webkit-slider-thumb {
+  transform: scale(1.2) !important;
+}
+/* Coloris CAD Swatch Style Override */
+.clr-field {
+  width: 14px !important;
+  height: 14px !important;
+  border-radius: 3px !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  flex-shrink: 0 !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  align-self: center !important; /* Force vertical centering inside flex row */
+  position: relative !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+}
+.clr-field button {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 2px !important;
+  border: none !important;
+  box-shadow: none !important;
+  cursor: pointer !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  pointer-events: auto !important;
+}
+.clr-field input {
+  position: absolute !important;
+  width: 0 !important;
+  height: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Properties Panel Specific Coloris Swatch Styles */
+#object-properties .clr-field {
+  width: 28px !important;
+  height: 18px !important;
+  border-radius: 4px !important;
+  border: 1px solid rgba(255, 255, 255, 0.22) !important;
+  margin: 0 !important;
+  margin-left: 2px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  vertical-align: middle !important; /* 안전장치: flex 미적용 환경도 커버 */
+}
+#object-properties .clr-field button {
+  border-radius: 3px !important;
+  margin: 0 !important;       /* Coloris 기본 button의 margin/top 강제 제거 */
+  top: auto !important;
+  transform: none !important;
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+#object-properties .mat-editor {
+  gap: 6px !important;
+  margin-top: 5px !important;
+  margin-bottom: 5px !important;
+}
+#object-properties .mat-row {
+  display: flex !important;        /* flex 컨테이너 */
+  align-items: center !important;  /* 자식 전체를 수직 중앙 정렬 */
+  min-height: 22px !important;
+  gap: 6px !important;
+  padding: 2px 0 !important;
+}
+#object-properties .mat-label {
+  line-height: 1 !important;       /* 텍스트의 불필요한 행간 제거 */
+  vertical-align: middle !important;
+}
+
+/* Force Coloris picker width so 6 swatches (20px each + 6px gap) fit perfectly in one row! */
+.clr-picker {
+  width: 212px !important;
+}
+
+/* Coloris Swatches: center-aligned grid with uniform gap */
+.clr-picker .clr-swatches div {
+  justify-content: center !important;
+  align-items: center !important;
+  padding-left: 10px !important;
+  padding-right: 10px !important;
+  gap: 6px !important;
+}
+
+/* Custom Swatch Add Button: override ALL Coloris button defaults (Default Light Mode style) */
+#clr-custom-add-btn {
+  position: relative !important;
+  width: 20px !important;
+  height: 20px !important;
+  margin: 0 !important; /* Rely on container gap */
+  padding: 0 !important;
+  border-radius: 50% !important;
+  border: 1.5px dashed #4b5563 !important; /* Visible dark grey border in Light Mode */
+  background: #f3f4f6 !important; /* Light grey background */
+  text-indent: 0 !important;
+  overflow: visible !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  box-shadow: none !important;
+  flex-shrink: 0 !important;
+  transition: background 0.15s, border-color 0.15s, transform 0.15s !important;
+  box-sizing: border-box !important;
+}
+
+/* CRITICAL: Hide the ::after overlay that Coloris paints currentColor over the button */
+#clr-custom-add-btn::after {
+  display: none !important;
+}
+
+/* The span inside carries the + text, visible above any overlay (Default Light Mode style) */
+#clr-custom-add-btn > span {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+  height: 100% !important;
+  color: #1f2937 !important; /* Very dark grey plus sign */
+  font-size: 15px !important;
+  font-weight: bold !important;
+  line-height: 1 !important;
+  pointer-events: none !important;
+  text-indent: 0 !important;
+}
+
+#clr-custom-add-btn:hover {
+  background: #e5e7eb !important;
+  border-color: #111827 !important;
+  transform: scale(1.08) !important;
+}
+
+/* Custom Swatch Add Button: Premium Dark Mode styling (inside .clr-dark) */
+.clr-dark #clr-custom-add-btn {
+  border: 1.5px dashed rgba(255, 255, 255, 0.45) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.clr-dark #clr-custom-add-btn > span {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+
+.clr-dark #clr-custom-add-btn:hover {
+  background: rgba(255, 255, 255, 0.2) !important;
+  border-color: rgba(255, 255, 255, 0.9) !important;
+}
+
+/* Keep normal swatches aligned with a consistent margin/gap */
+.clr-picker .clr-swatches button {
+  margin: 0 !important; /* Let the container gap handle it! */
 }
