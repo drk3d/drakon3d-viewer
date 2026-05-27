@@ -55,8 +55,8 @@ export const TRANSLATIONS = {
     'panel.settings':     'Settings',
 
     'file.open':          'Open',
-    'file.save':          'Save',
-    'file.save_as':       'Save As',
+    'file.save':          'Save Session',
+    'file.save_as':       'Save As...',
     'file.save_glb':      'Save GLB',
     'file.save_as_title': 'Save Session As',
     'file.filename_label': 'File Name',
@@ -226,9 +226,9 @@ export const TRANSLATIONS = {
     'panel.settings':     '설정',
 
     'file.open':          '열기',
-    'file.save':          '저장',
+    'file.save':          '세션 저장',
     'file.save_as':       '다른 이름으로 저장',
-    'file.save_glb':      'GLB 저장',
+    'file.save_glb':      'Save GLB',
     'file.save_as_title': '다른 이름으로 저장',
     'file.filename_label': '파일 이름',
     'file.close':         '닫기',
