@@ -88,3 +88,15 @@ The custom viewer logic, CSS styling, and integration layer of **byRhinoView** a
 Copyright © 2026 Plus Plastic. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files...
+
+---
+
+## 🔒 Privacy Policy (개인정보처리방침)
+
+**byRhinoView** values user privacy and operates completely offline and locally.
+
+The dedicated, bilingual privacy policies are available in separate files:
+* **Web Page (HTML):** [privacy.html](privacy.html)
+* **Markdown (MD):** [privacy.md](privacy.md)
+
+These files can be deployed directly to your static hosting domain (e.g., `https://<your-domain>/privacy.html`) to fulfill Google Play Store metadata requirements.

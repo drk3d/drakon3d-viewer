@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>byRhinoView - Privacy Policy</title>
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      /* Theme variables - Light Mode */
+      --bg-color: hsl(210, 20%, 98%);
+      --card-bg: hsla(0, 0%, 100%, 0.85);
+      --card-border: hsla(210, 15%, 90%, 0.8);
+      --text-main: hsl(220, 15%, 15%);
+      --text-muted: hsl(220, 10%, 45%);
+      --accent-color: hsl(215, 90%, 50%);
+      --accent-subtle: hsl(215, 90%, 96%);
+      --divider-color: hsl(210, 15%, 90%);
+      
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      line-height: 1.6;
+      color: var(--text-main);
+      background-color: var(--bg-color);
+      transition: background-color 0.3s, color 0.3s;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        /* Theme variables - Dark Mode */
+        --bg-color: hsl(220, 20%, 10%);
+        --card-bg: hsla(220, 20%, 14%, 0.8);
+        --card-border: hsla(220, 20%, 20%, 0.8);
+        --text-main: hsl(210, 15%, 88%);
+        --text-muted: hsl(210, 10%, 60%);
+        --accent-color: hsl(210, 100%, 65%);
+        --accent-subtle: hsl(210, 30%, 16%);
+        --divider-color: hsl(220, 20%, 20%);
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2.5rem 1.25rem;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+
+    header h1 {
+      font-size: 2.25rem;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, var(--text-main), var(--accent-color));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    header p {
+      font-size: 1rem;
+      color: var(--text-muted);
+      font-weight: 400;
+    }
+
+    .privacy-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 2.5rem;
+      box-shadow: 0 10px 30px -15px rgba(0, 0, 0, 0.1);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }
+
+    .section {
+      padding: 2rem 0;
+      border-bottom: 1px solid var(--divider-color);
+    }
+
+    .section:first-child {
+      padding-top: 0;
+    }
+
+    .section:last-child {
+      padding-bottom: 0;
+      border-bottom: none;
+    }
+
+    .section-title-block {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .section-num {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background-color: var(--accent-subtle);
+      color: var(--accent-color);
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+
+    .section h2 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+
+    .grid-lang {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+    }
+
+    @media (max-width: 768px) {
+      .grid-lang {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+      }
+      
+      .privacy-card {
+        padding: 1.5rem;
+      }
+      
+      header h1 {
+        font-size: 1.75rem;
+      }
+    }
+
+    .lang-col {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .lang-badge {
+      align-self: flex-start;
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      background-color: var(--accent-subtle);
+      color: var(--accent-color);
+      letter-spacing: 0.05em;
+    }
+
+    .lang-badge.ko {
+      background-color: hsla(140, 70%, 50%, 0.1);
+      color: hsl(140, 70%, 40%);
+    }
+    
+    @media (prefers-color-scheme: dark) {
+      .lang-badge.ko {
+        background-color: hsla(140, 70%, 50%, 0.15);
+        color: hsl(140, 75%, 60%);
+      }
+    }
+
+    p.desc {
+      font-size: 0.95rem;
+      line-height: 1.6;
+      color: var(--text-main);
+    }
+
+    ul {
+      list-style-type: none;
+      padding-left: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    li {
+      font-size: 0.95rem;
+      position: relative;
+      padding-left: 1.25rem;
+    }
+
+    li::before {
+      content: "•";
+      position: absolute;
+      left: 0.25rem;
+      color: var(--accent-color);
+      font-weight: bold;
+    }
+
+    footer {
+      text-align: center;
+      margin-top: 3rem;
+      padding-bottom: 1rem;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    footer a {
+      color: var(--accent-color);
+      text-decoration: none;
+      font-weight: 500;
+      transition: opacity 0.2s;
+    }
+
+    footer a:hover {
+      opacity: 0.8;
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <header>
+      <h1>Privacy Policy / 개인정보처리방침</h1>
+      <p>Last Updated: May 28, 2026</p>
+    </header>
+
+    <main class="privacy-card">
+      
+      <!-- Introduction -->
+      <div class="section">
+        <div class="grid-lang">
+          <div class="lang-col">
+            <span class="lang-badge">English</span>
+            <p class="desc"><strong>byRhinoView</strong> values your privacy. This Privacy Policy explains how we handle data within the application. We are committed to maintaining the highest standards of data security and user privacy.</p>
+          </div>
+          <div class="lang-col">
+            <span class="lang-badge ko">한국어</span>
+            <p class="desc"><strong>byRhinoView</strong>는 사용자의 개인정보를 소중히 다루며, 관련 법령을 철저히 준수합니다. 본 방침을 통해 앱 내에서 사용자의 데이터가 어떻게 처리되는지 투명하게 알려드립니다.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 1. Personal Data Collection -->
+      <div class="section">
+        <div class="section-title-block">
+          <div class="section-num">1</div>
+          <h2>Personal Data Collection / 개인정보 수집 및 이용</h2>
+        </div>
+        <div class="grid-lang">
+          <div class="lang-col">
+            <span class="lang-badge">English</span>
+            <p class="desc">We do <strong>NOT</strong> collect, store, share, or transmit any personal data (such as names, email addresses, phone numbers, location data, or unique device identifiers). The application runs completely serverless and requires no user registration.</p>
+          </div>
+          <div class="lang-col">
+            <span class="lang-badge ko">한국어</span>
+            <p class="desc">본 앱은 어떠한 회원 가입 기능이나 계정 연동을 요구하지 않으며, 사용자의 개인 정보(이름, 이메일, 전화번호, 위치 정보, 기기 고유 식별자 등)를 <strong>일체 수집, 저장, 공유 또는 외부로 전송하지 않습니다.</strong></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Processing of 3D & Session Files -->
+      <div class="section">
+        <div class="section-title-block">
+          <div class="section-num">2</div>
+          <h2>Processing of 3D & Session Files / 3D 모델 및 세션 파일 처리</h2>
+        </div>
+        <div class="grid-lang">
+          <div class="lang-col">
+            <span class="lang-badge">English</span>
+            <p class="desc">All 3D models (such as <code>.3dm</code>, <code>.glb</code>, <code>.gltf</code>, <code>.stl</code>, <code>.3mf</code>, <code>.stp</code>, <code>.step</code>) and session packages (<code>.rhinoview</code>) opened within the app are processed entirely <strong>offline and locally</strong> on your device's webview. No files, geometry, or meshes are ever uploaded or transmitted to any external server.</p>
+          </div>
+          <div class="lang-col">
+            <span class="lang-badge ko">한국어</span>
+            <p class="desc">앱 내에서 열어보거나 불러오는 모든 3D 모델 파일(<code>.3dm</code>, <code>.glb</code>, <code>.stl</code>, <code>.3mf</code>, <code>.stp</code> 등) 및 세션 패키지 파일(<code>.rhinoview</code>)은 외부 서버로 절대 업로드되거나 전송되지 않으며, 오직 사용자의 모바일 기기 내부(Local Webview)에서만 <strong>100% 오프라인 로컬 환경에서 안전하게 처리</strong>됩니다.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Device Permissions -->
+      <div class="section">
+        <div class="section-title-block">
+          <div class="section-num">3</div>
+          <h2>Device Permissions / 기기 권한</h2>
+        </div>
+        <div class="grid-lang">
+          <div class="lang-col">
+            <span class="lang-badge">English</span>
+            <p class="desc">The application only accesses the system's file chooser interface to allow you to select and load your local 3D files. We do not request or access any unnecessary device hardware features or background permissions (such as camera, microphone, or location).</p>
+          </div>
+          <div class="lang-col">
+            <span class="lang-badge ko">한국어</span>
+            <p class="desc">본 앱은 기기 내부에 저장된 3D 모델 파일을 사용자가 직접 선택해서 열어볼 수 있도록 돕기 위해 안드로이드 시스템의 표준 파일 선택 도구만 사용합니다. 그 외에 카메라, 마이크, 주소록, 실시간 위치 등 <strong>어떠한 불필요한 기기 권한도 요구하거나 접근하지 않습니다.</strong></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. Data Safety Summary -->
+      <div class="section">
+        <div class="section-title-block">
+          <div class="section-num">4</div>
+          <h2>Data Safety Summary / 데이터 보안 요약</h2>
+        </div>
+        <div class="grid-lang">
+          <div class="lang-col">
+            <span class="lang-badge">English</span>
+            <ul>
+              <li><strong>Data Shared:</strong> No data is shared with third parties.</li>
+              <li><strong>Data Collected:</strong> No data is collected by the application.</li>
+              <li><strong>Data Encryption:</strong> Not applicable, as no data is transmitted or transferred from your device.</li>
+            </ul>
+          </div>
+          <div class="lang-col">
+            <span class="lang-badge ko">한국어</span>
+            <ul>
+              <li><strong>제3자 데이터 공유:</strong> 외부 제3자나 서버와 공유하는 데이터가 전혀 없습니다.</li>
+              <li><strong>데이터 수집:</strong> 앱 개발사 및 타 기관에서 수집하는 데이터가 전혀 없습니다.</li>
+              <li><strong>데이터 암호화:</strong> 기기 외부로 송수신하는 데이터 자체가 존재하지 않으므로 보안 전송(Encryption) 해당 사항 없음.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5. Contact & Support -->
+      <div class="section">
+        <div class="section-title-block">
+          <div class="section-num">5</div>
+          <h2>Contact & Support / 문의 사항</h2>
+        </div>
+        <div class="grid-lang">
+          <div class="lang-col">
+            <span class="lang-badge">English</span>
+            <p class="desc">If you have any questions regarding this Privacy Policy, the data handling of the application, or require any assistance, please contact the developer via the official repository or support channels.</p>
+          </div>
+          <div class="lang-col">
+            <span class="lang-badge ko">한국어</span>
+            <p class="desc">본 개인정보처리방침 및 앱의 데이터 로컬 처리 환경과 관련하여 궁금한 점이 있으시거나 문의 사항이 있으실 경우, 언제든지 공식 저장소 또는 지원 채널의 개발자 이메일을 통해 문의해 주시기 바랍니다.</p>
+          </div>
+        </div>
+      </div>
+
+    </main>
+
+    <footer>
+      <p>Copyright © 2026 Plus Plastic. All rights reserved.</p>
+      <p>byRhinoView is built and powered by modern open-source technologies.</p>
+    </footer>
+  </div>
+
+</body>
+</html>
