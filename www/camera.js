@@ -199,7 +199,10 @@ export function renderNamedViewsUI() {
   container.innerHTML = '';
 
   const deletedNames = getDeletedRhinoViewNames();
-  const rhinoViews   = (S.parsedNamedViews || []).filter(v => !deletedNames.includes(v.name));
+  const fixedNames   = ['perspective', 'top', 'front', 'right'];
+  const rhinoViews   = (S.parsedNamedViews || [])
+    .filter(v => !deletedNames.includes(v.name))
+    .filter(v => !fixedNames.includes(v.name.toLowerCase()));
   const customViews  = getCustomViews();
 
   // Merge: custom views override rhino views of the same name
