@@ -594,6 +594,12 @@
       <button id="btn-measure-tab-dist" class="measure-tab-btn active" data-i18n="measure.distance">Distance</button>
       <button id="btn-measure-tab-angle" class="measure-tab-btn" data-i18n="measure.angle">Angle</button>
     </div>
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; padding:0 4px; font-size:0.68rem; color:var(--text-2); border-bottom:1px solid var(--border); padding-bottom:6px; flex-shrink:0;">
+      <label style="display:flex; align-items:center; gap:6px; cursor:pointer; user-select:none;">
+        <input type="checkbox" id="chk-measure-snap" checked style="cursor:pointer; width:12px; height:12px; margin:0; accent-color:var(--primary);">
+        <span data-i18n="measure.snap_vertex">Snap to Vertex</span>
+      </label>
+    </div>
     <div id="measurement-list-items"></div>
     <div class="measure-list-hint" data-i18n="measure.hint">Click on surface to place points</div>
   </div>

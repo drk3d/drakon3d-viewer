@@ -283,7 +283,8 @@ export function handleWidgetPointerMove(event) {
       && !['ground-plane', 'rhino-edges', 'rhino-outline', 'selection-outline'].includes(i.object.name));
     if (modelHit) {
       let snapPt = modelHit.point.clone();
-      if (modelHit.object.geometry?.attributes.position && modelHit.faceIndex !== undefined) {
+      const snapEnabled = document.getElementById('chk-measure-snap')?.checked ?? true;
+      if (snapEnabled && modelHit.object.geometry?.attributes.position && modelHit.faceIndex !== undefined) {
         const geom    = modelHit.object.geometry;
         const posAttr = geom.attributes.position;
         const localPt = modelHit.object.worldToLocal(snapPt.clone());
@@ -300,7 +301,7 @@ export function handleWidgetPointerMove(event) {
           checkV(fi); checkV(fi+1); checkV(fi+2);
         }
         const modelSize = new THREE.Box3().setFromObject(S.currentModel).getSize(new THREE.Vector3()).length();
-        if (minDist > modelSize * 0.05) snapPt.copy(modelHit.point);
+        if (minDist > modelSize * 0.015) snapPt.copy(modelHit.point);
       }
       S.draggedHandle.position.copy(snapPt);
       if (role === 'ptA') S.angleWidget.ptA.copy(snapPt);
@@ -342,6 +343,9 @@ export function handleWidgetPointerUp() {
 
 export function snapToVertex(hit) {
   let p = hit.point.clone();
+  const snapEnabled = document.getElementById('chk-measure-snap')?.checked ?? true;
+  if (!snapEnabled) return p;
+
   if (hit.object.geometry?.attributes.position && hit.faceIndex !== undefined) {
     const geom    = hit.object.geometry;
     const posAttr = geom.attributes.position;
@@ -362,7 +366,7 @@ export function snapToVertex(hit) {
     }
     const worldSnap = hit.object.localToWorld(snapPt.clone());
     const size = new THREE.Box3().setFromObject(S.currentModel).getSize(new THREE.Vector3());
-    if (worldSnap.distanceTo(p) < size.length() * 0.05) p.copy(worldSnap);
+    if (worldSnap.distanceTo(p) < size.length() * 0.015) p.copy(worldSnap);
   }
   return p;
 }
