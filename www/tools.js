@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { S } from './state.js';
+import { t } from './i18n.js';
 
 // ── Tool deactivation ─────────────────────────────────────────────────────────
 
@@ -72,6 +73,43 @@ export function clearMeasurements() {
   renderMeasurementListUI();
 }
 
+export function cancelCurrentInProgressMeasurement() {
+  if (S.distanceToolState) {
+    if (S.distanceToolState.spheres) {
+      S.distanceToolState.spheres.forEach(o => {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) o.material.dispose();
+        S.measurementGroup.remove(o);
+      });
+    }
+    if (S.distanceToolState.tempLine)      S.measurementGroup.remove(S.distanceToolState.tempLine);
+    if (S.distanceToolState.tempBillboard) S.measurementGroup.remove(S.distanceToolState.tempBillboard);
+    S.distanceToolState.points = [];
+    S.distanceToolState.spheres = [];
+    S.distanceToolState.tempLine = null;
+    S.distanceToolState.tempBillboard = null;
+  }
+  if (S.angleToolState) {
+    if (S.angleToolState.spheres) {
+      S.angleToolState.spheres.forEach(o => {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) o.material.dispose();
+        S.measurementGroup.remove(o);
+      });
+    }
+    if (S.angleToolState.tempLine)      S.measurementGroup.remove(S.angleToolState.tempLine);
+    if (S.angleToolState.tempArc)       S.measurementGroup.remove(S.angleToolState.tempArc);
+    if (S.angleToolState.tempBillboard) S.measurementGroup.remove(S.angleToolState.tempBillboard);
+    S.angleToolState.points = [];
+    S.angleToolState.spheres = [];
+    S.angleToolState.tempLine = null;
+    S.angleToolState.tempArc = null;
+    S.angleToolState.tempBillboard = null;
+  }
+  if (S.distanceGhostSphere) S.distanceGhostSphere.visible = false;
+  renderMeasurementListUI();
+}
+
 export function deleteMeasurement(id) {
   const idx = S.completedMeasurements.findIndex(m => m.id === id);
   if (idx === -1) return;
@@ -127,17 +165,26 @@ export function renderMeasurementListUI() {
   // Update hint text dynamically based on active tool state!
   const hintEl = panel.querySelector('.measure-list-hint');
   if (hintEl) {
+    const cancelBtnHTML = ` <button id="btn-cancel-measure" class="text-btn active" style="margin:0 0 0 8px; font-size:0.63rem; padding:1px 5px; background:rgba(239,68,68,0.12); color:#ef4444; border:1px solid rgba(239,68,68,0.25); border-radius:4px; cursor:pointer; font-weight:600; display:inline-flex; align-items:center;">${t('common.cancel')}</button>`;
     if (S.distanceToolState) {
       const pts = S.distanceToolState.points.length;
-      if (pts === 0) hintEl.textContent = "Click to place start point";
-      else if (pts === 1) hintEl.textContent = "Click to place end point";
+      if (pts === 0) hintEl.innerHTML = "<span>Click to place start point</span>";
+      else if (pts === 1) hintEl.innerHTML = `<span>Click to place end point</span>${cancelBtnHTML}`;
     } else if (S.angleToolState) {
       const pts = S.angleToolState.points.length;
-      if (pts === 0) hintEl.textContent = "Click to place Angle Vertex (Center)";
-      else if (pts === 1) hintEl.textContent = "Click to place Reference Point 1";
-      else if (pts === 2) hintEl.textContent = "Click to place Reference Point 2";
+      if (pts === 0) hintEl.innerHTML = "<span>Click to place Angle Vertex (Center)</span>";
+      else if (pts === 1) hintEl.innerHTML = `<span>Click to place Reference Point 1</span>${cancelBtnHTML}`;
+      else if (pts === 2) hintEl.innerHTML = `<span>Click to place Reference Point 2</span>${cancelBtnHTML}`;
     } else {
-      hintEl.textContent = "Activate a tool to start measuring";
+      hintEl.innerHTML = "<span>Activate a tool to start measuring</span>";
+    }
+
+    const cancelBtn = hintEl.querySelector('#btn-cancel-measure');
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        cancelCurrentInProgressMeasurement();
+      });
     }
   }
 

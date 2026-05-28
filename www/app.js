@@ -31,7 +31,8 @@ import {
   handleWidgetPointerUp, updateTempDistanceLine, updateDistanceGhost,
   updateTempAngleWidget, updateAngleGhost,
   syncMeasurementTabsUI,
-  onCanvasClick, updateClippingPlane, setupClippingHelper, updateClippingHelperPose
+  onCanvasClick, updateClippingPlane, setupClippingHelper, updateClippingHelperPose,
+  cancelCurrentInProgressMeasurement
 } from './tools.js';
 import { onPointerDown, clearSelection, updatePropertiesPanel, addSelectionOutline } from './selection.js?v=1.2.88';
 
@@ -1623,6 +1624,22 @@ function bindUI() {
       const f = files[0];
       if (f.name.toLowerCase().endsWith('.rhinoview')) loadSession(f);
       else handleFile(f, rhinoLoader, gltfLoader);
+    }
+  });
+
+  // ── Escape key & Right-click to cancel active measurements ──
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      cancelCurrentInProgressMeasurement();
+    }
+  });
+
+  window.addEventListener('contextmenu', (e) => {
+    // Only intercept right-click if a measurement is actively in progress
+    if ((S.distanceToolState && S.distanceToolState.points.length > 0) ||
+        (S.angleToolState && S.angleToolState.points.length > 0)) {
+      e.preventDefault();
+      cancelCurrentInProgressMeasurement();
     }
   });
 }
