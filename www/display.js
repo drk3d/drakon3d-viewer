@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { S } from './state.js';
 import { setupLights, updateGroundAppearance } from './lighting.js';
+import { isPageVisuallyDark } from './helpers.js';
 
 // ── Skybox sphere for rendered mode (bypasses tone mapping) ─────────────────
 // In rendered mode with ACES tone mapping, scene.background color gets compressed.
@@ -21,10 +22,11 @@ export function updateBgSkybox() {
   }
 }
 
-// ── Scene Background ─────────────────────────────────────────────────────────
-
 export function applySceneBackground() {
-  if (S.currentMode === 'technical') { S.scene.background = new THREE.Color(0xffffff); return; }
+  if (S.currentMode === 'technical') { 
+    S.scene.background = new THREE.Color(0xffffff); 
+    return; 
+  }
 
   const bgType = document.getElementById('bg-type-select')?.value || 'solid';
 
@@ -117,6 +119,7 @@ export function applySceneBackground() {
 
   // Update skybox to reflect new bg color (rendered mode only)
   updateBgSkybox();
+
 }
 
 export function applyFileBackground() {
@@ -132,19 +135,22 @@ export function applyFileBackground() {
   }
   bgSel.value = newType;
 
-  // S.rhinoBackgroundColor comes from renderSettings (Rhino's *render* background),
-  // NOT the viewport background — Rhino's render default is black, viewport is white.
-  // Only apply if the color is meaningfully light (luminance > 5%); otherwise
-  // fall back to white which matches the typical Rhino viewport appearance.
+  const isDark = isPageVisuallyDark();
+
   if (c1Input) {
-    let hex = '#ffffff'; // default: white (matches Rhino viewport default)
-    if (S.rhinoBackgroundColor) {
-      const c   = S.rhinoBackgroundColor;
-      const lum = c.r * 0.299 + c.g * 0.587 + c.b * 0.114;
-      if (lum > 0.05) hex = '#' + c.getHexString();
-    }
+    let hex = isDark ? '#24252a' : '#ffffff'; // default: soft charcoal for dark mode, white for light mode
     c1Input.value = hex;
     if (c1Swatch) c1Swatch.style.background = hex;
+    
+    // Also update Coloris parent wrapper color if present
+    const wrapper = c1Input.parentNode;
+    if (wrapper && wrapper.classList.contains('clr-field')) {
+      wrapper.style.color = hex;
+      const btn = wrapper.querySelector('button');
+      if (btn) btn.style.backgroundColor = hex;
+    }
+    
+    c1Input.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
   const isSolid  = newType === 'solid';
@@ -342,8 +348,8 @@ export function applyDisplayMode() {
     if (child.name === 'selection-outline') return;
     child.renderOrder = 0;
 
-    // Helper: raw color from layer/object (PRESERVES black, no auto-white).
-    // Used by wireframe mode where the user expects black-on-black if specified.
+    // Helper: raw color from layer/object (PRESERVES black/white, with automatic theme inversion).
+    // In dark mode, pure black/very dark curves map to white. In light mode, pure white/very light curves map to black.
     const childAttrs = child.userData.attributes || {};
     const childLayer = S.parsedLayers.find(l => l.index === childAttrs.layerIndex);
     const rawColor = () => {
@@ -355,6 +361,16 @@ export function applyDisplayMode() {
       } else if (childLayer?.color) {
         const lc = childLayer.color;
         out.setRGB((lc.r ?? lc.R ?? 0) / 255, (lc.g ?? lc.G ?? 0) / 255, (lc.b ?? lc.B ?? 0) / 255);
+      }
+
+      if (isPageVisuallyDark()) {
+        if (out.r < 0.08 && out.g < 0.08 && out.b < 0.08) {
+          out.setHex(0xffffff); // Map invisible black/dark curves to white in dark mode
+        }
+      } else {
+        if (out.r > 0.92 && out.g > 0.92 && out.b > 0.92) {
+          out.setHex(0x000000); // Map invisible white/light curves to black in light mode
+        }
       }
       return out;
     };
@@ -368,7 +384,7 @@ export function applyDisplayMode() {
     const edges = child.getObjectByName('rhino-edges');
     if (edges) edges.renderOrder = 0;
 
-
+    const darkThemeActive = isPageVisuallyDark();
 
     switch (S.currentMode) {
 
@@ -384,7 +400,7 @@ export function applyDisplayMode() {
         }
         if (edges) {
           edges.visible = edgeOverlay;
-          // Use raw color so black layer/object stays black in wireframe
+          // Use raw color which has automatic theme inversion for black/white lines
           edges.material.color.copy(rawColor());
         }
         break;
@@ -502,6 +518,7 @@ export function addEdges(mesh) {
 
 export function applyLayerColorsToModel(model) {
   if (!S.parsedLayers.length) return;
+  const darkThemeActive = isPageVisuallyDark();
   model.traverse(child => {
     if (child.name === 'rhino-edges' || child.name === 'rhino-outline' || child.name === 'selection-outline') return;
     if ((!child.isMesh && !child.isLine) || !child.userData.originalMaterial) return;
@@ -515,7 +532,24 @@ export function applyLayerColorsToModel(model) {
           (lc.g ?? lc.G ?? 0) / 255,
           (lc.b ?? lc.B ?? 0) / 255
         );
-        if (col.r < 0.02 && col.g < 0.02 && col.b < 0.02) col.setHex(0xffffff);
+        
+        if (!child.isLine) {
+          // Geometry (mesh) black -> white mapping is always active regardless of mode
+          if (col.r < 0.08 && col.g < 0.08 && col.b < 0.08) {
+            col.setHex(0xffffff);
+          }
+        } else {
+          // Curve black -> white mapping only in dark mode, white -> black only in light mode
+          if (darkThemeActive) {
+            if (col.r < 0.08 && col.g < 0.08 && col.b < 0.08) {
+              col.setHex(0xffffff);
+            }
+          } else {
+            if (col.r > 0.92 && col.g > 0.92 && col.b > 0.92) {
+              col.setHex(0x000000);
+            }
+          }
+        }
         
         if (child.isLine) {
           // Update line color directly

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { FontLoader } from 'three/addons/loaders/FontLoader.js';
 import { S } from './state.js';
+import { isPageVisuallyDark } from './helpers.js';
 
 // ── Font (lazy singleton) ─────────────────────────────────────────────────────
 
@@ -83,6 +84,16 @@ export async function createAnnotationSprites() {
         color.setRGB(ann.objectColor.r / 255, ann.objectColor.g / 255, ann.objectColor.b / 255);
       } else if (layer?.color) {
         color.setRGB(layer.color.r / 255, layer.color.g / 255, layer.color.b / 255);
+      }
+
+      if (isPageVisuallyDark()) {
+        if (color.r < 0.08 && color.g < 0.08 && color.b < 0.08) {
+          color.setHex(0xffffff); // In dark mode, map black/very-dark annotations to white
+        }
+      } else {
+        if (color.r > 0.92 && color.g > 0.92 && color.b > 0.92) {
+          color.setHex(0x000000); // In light mode, map white/very-light annotations to black
+        }
       }
 
       const textVal = String(ann.text || '');

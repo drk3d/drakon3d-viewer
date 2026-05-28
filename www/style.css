@@ -1,21 +1,21 @@
 /* ── Design Tokens ── */
 :root {
-  --bg:           #2a2b2f;
-  --surface:      rgba(18, 18, 22, 0.90);
-  --surface-hi:   rgba(255,255,255,0.05);
-  --border:       rgba(255,255,255,0.08);
-  --primary:      #3b82f6;
-  --primary-dim:  rgba(59,130,246,0.15);
-  --primary-hi:   #2563eb;
-  --text:         #e4e4e7;
-  --text-2:       #71717a;
-  --text-3:       #3f3f46;
-  --bar-h:        58px;
-  --mode-h:       62px;
-  --r:            10px;
-  --r-sm:         7px;
-  --panel-bg:           #27272b;
-  --panel-border-color: rgba(255,255,255,0.07);
+  --bg:                 #10141d;
+  --surface:            rgba(20, 26, 37, 0.93);
+  --surface-hi:         rgba(255, 255, 255, 0.05);
+  --border:             #20293a;
+  --primary:            #00b4d8;
+  --primary-dim:        rgba(0, 180, 216, 0.15);
+  --primary-hi:         #0096c7;
+  --text:               #e4e4e7;
+  --text-2:             #8fa0b5;
+  --text-3:             #3a4759;
+  --bar-h:              58px;
+  --mode-h:             62px;
+  --r:                  10px;
+  --r-sm:               7px;
+  --panel-bg:           #151b26;
+  --panel-border-color: #20293a;
 }
 
 /* ── Light Theme ── */
@@ -36,18 +36,18 @@
 
 /* ── Dark Theme (explicit — prevents @media light from bleeding) ── */
 [data-theme="dark"] {
-  --bg:           #1e1e22;
-  --surface:      rgba(18,18,22,0.90);
-  --surface-hi:   rgba(255,255,255,0.05);
-  --border:       rgba(255,255,255,0.08);
-  --primary:      #3b82f6;
-  --primary-dim:  rgba(59,130,246,0.15);
-  --primary-hi:   #2563eb;
-  --text:         #e4e4e7;
-  --text-2:       #71717a;
-  --text-3:       #3f3f46;
-  --panel-bg:           #27272b;
-  --panel-border-color: rgba(255,255,255,0.07);
+  --bg:                 #10141d;
+  --surface:            rgba(20, 26, 37, 0.93);
+  --surface-hi:         rgba(255, 255, 255, 0.05);
+  --border:             #20293a;
+  --primary:            #00b4d8;
+  --primary-dim:        rgba(0, 180, 216, 0.15);
+  --primary-hi:         #0096c7;
+  --text:               #e4e4e7;
+  --text-2:             #8fa0b5;
+  --text-3:             #3a4759;
+  --panel-bg:           #151b26;
+  --panel-border-color: #20293a;
 }
 
 /* ── Reset ── */
@@ -768,11 +768,12 @@ input[type="file"] { display: none; }
 /* color grading panel range thumb inherits base */
 .cg-val {
   font-size: 0.66rem;
-  color: var(--text-2);
+  color: var(--primary);
   width: 26px;
   text-align: right;
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
+  font-weight: 600;
 }
 
 /* ── Selection Dropdown ── */
@@ -1583,9 +1584,9 @@ input[type="range"]::-moz-range-thumb {
 }
 .slider-val {
   font-size: 0.60rem;
-  color: var(--text);
+  color: var(--primary);
   font-variant-numeric: tabular-nums;
-  font-weight: 400;
+  font-weight: 600;
   min-width: 20px;
   text-align: left;
   margin-left: 2px;
@@ -2325,4 +2326,107 @@ body.light-theme .metadata-table td.meta-label {
 /* Keep normal swatches aligned with a consistent margin/gap */
 .clr-picker .clr-swatches button {
   margin: 0 !important; /* Let the container gap handle it! */
+}
+
+/* ── Bottom Floating View Tools Bar ── */
+.bottom-tools-bar {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 99;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border);
+  padding: 6px 8px;
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+  pointer-events: auto;
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+.bottom-tool-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: transparent;
+  border: none;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.bottom-tool-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.bottom-tool-btn:hover {
+  background: var(--surface-hi);
+  color: var(--text);
+}
+
+.bottom-tool-btn:active {
+  background: var(--border);
+}
+
+.bottom-tool-separator {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+  margin: 0 4px;
+}
+
+/* Coloris override inside Settings background color picker */
+.color-circle .clr-field {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 50% !important;
+  border: none !important;
+  position: absolute !important;
+  inset: 0 !important;
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+.color-circle .clr-field button {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 50% !important;
+  border: none !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+/* Force flat 2D color circles with absolutely no glossy/crescent shapes or bevels */
+.color-circle,
+.color-circle * {
+  box-shadow: none !important;
+  background-image: none !important;
+}
+
+/* Hide any pseudo-element decorations, shadows, or gradients */
+.color-circle .clr-field::after,
+.color-circle .clr-field button::after,
+.color-circle .clr-field::before,
+.color-circle .clr-field button::before {
+  display: none !important;
+  content: none !important;
+  box-shadow: none !important;
+  background: none !important;
+  background-image: none !important;
+}
+
+/* Clear contrast borders for color swatches in light mode */
+body.light-theme .color-circle {
+  border: 2px solid rgba(0, 0, 0, 0.12) !important;
 }

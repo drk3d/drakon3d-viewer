@@ -71,6 +71,8 @@ export const S = {
 
   // ── File / session ───────────────────────────────────────────────────────
   currentFileName: '',
+  currentFileNameWithExt: '',
+  modelUnit: 'Unknown',
 
   // ── Background ───────────────────────────────────────────────────────────
   bgGradient:  false,
@@ -107,5 +109,11 @@ export const S = {
 
   // ── Theme ────────────────────────────────────────────────────────────────
   THEME_KEY:    'byrhinoview_theme',
-  currentTheme: localStorage.getItem('byrhinoview_theme') || 'system',
+  currentTheme: (() => {
+    try {
+      return localStorage.getItem('byrhinoview_theme') || 'system';
+    } catch (e) {
+      return 'system';
+    }
+  })(),
 };

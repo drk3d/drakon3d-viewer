@@ -1950,7 +1950,11 @@ export function t(key) {
 export function setLang(code) {
   if (TRANSLATIONS[code]) {
     currentLang = code;
-    localStorage.setItem('byrhinoview_lang', code);
+    try {
+      localStorage.setItem('byrhinoview_lang', code);
+    } catch (e) {
+      console.warn('Failed to save language to localStorage:', e);
+    }
     applyI18n();
   }
 }
@@ -1980,7 +1984,12 @@ export function applyI18n() {
  * locale.  Call this once on startup before the first render.
  */
 export function initI18n() {
-  const saved = localStorage.getItem('byrhinoview_lang');
+  let saved = null;
+  try {
+    saved = localStorage.getItem('byrhinoview_lang');
+  } catch (e) {
+    console.warn('Failed to read language from localStorage:', e);
+  }
   if (saved && TRANSLATIONS[saved]) {
     currentLang = saved;
   } else {

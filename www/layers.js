@@ -209,7 +209,9 @@ try {
     // If user has old swatches count (< 12), auto-upgrade so they get the even layout instantly
     if (customSwatches.length < 12 && !customSwatches.some(c => c.toLowerCase() === '#7209b7')) {
       customSwatches.push('#7209b7');
-      localStorage.setItem('byrhinoview_custom_swatches', JSON.stringify(customSwatches));
+      try {
+        localStorage.setItem('byrhinoview_custom_swatches', JSON.stringify(customSwatches));
+      } catch (err) {}
     }
   } else {
     customSwatches = [...defaultSwatches];

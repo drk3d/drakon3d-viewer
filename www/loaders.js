@@ -4,12 +4,12 @@ import { applyDisplayMode, applyFileBackground, applyLayerColorsToModel,
          addEdges, fixMaterialTransparency, clearTechnicalOutlines } from './display.js';
 import { setupModelShadowFrustum, addGroundPlane, removeGroundPlane } from './lighting.js';
 import { fitCameraToObject } from './camera.js';
-import { renderLayerUI, updateLayerVisibility } from './layers.js?v=1.2.88';
+import { renderLayerUI, updateLayerVisibility } from './layers.js';
 import { createAnnotationSprites } from './annotations.js';
 import { renderNamedViewsUI } from './camera.js';
 import { resetSettingsToDefault } from './session.js';
 import { showLoading, hideLoading, setProgress, setFileName, showModelInfo } from './helpers.js';
-import { setToolbarModelState } from './app.js?v=1.2.88';
+import { setToolbarModelState } from './app.js';
 
 // ── Dynamic OCCT loader ───────────────────────────────────────────────────────
 
@@ -29,6 +29,7 @@ export async function loadOCCT() {
 export async function loadCADFile(file, isSTEP, extractEdges) {
   try {
     showLoading(isSTEP ? 'Parsing STEP file…' : 'Parsing IGES file…');
+    S.modelUnit = 'Millimeters';
     S.parsedLayers = [];
     renderLayerUI();
     document.getElementById('file-info-content')?.classList.add('hidden');
@@ -279,7 +280,7 @@ export async function loadCADFile(file, isSTEP, extractEdges) {
 
       // Check if this geometry represents a 3D curve or wireframe element
       const hasNormals = resultMesh.attributes && resultMesh.attributes.normal && resultMesh.attributes.normal.array && resultMesh.attributes.normal.array.length > 0;
-      const isCurve = !hasNormals || (resultMesh.name && (
+      const isCurve = (!hasNormals && !resultMesh.index) || (resultMesh.name && (
         resultMesh.name.toLowerCase().includes('crv') || 
         resultMesh.name.toLowerCase().includes('curve') || 
         resultMesh.name.toLowerCase().includes('line') ||
@@ -319,6 +320,7 @@ export async function loadCADFile(file, isSTEP, extractEdges) {
     const box = new THREE.Box3().setFromObject(S.currentModel);
     setupModelShadowFrustum(box);
     if (S.groundEnabled) addGroundPlane(box);
+    applyFileBackground();
     applyDisplayMode();
     setFileName(file.name);
     showModelInfo(S.currentModel, file.size);
@@ -336,6 +338,7 @@ export async function loadCADFile(file, isSTEP, extractEdges) {
 export async function loadSTLFile(file, extractEdges) {
   try {
     showLoading('Parsing STL file…');
+    S.modelUnit = 'Millimeters / Unitless';
     S.parsedLayers = [];
     renderLayerUI();
     document.getElementById('file-info-content')?.classList.add('hidden');
@@ -365,6 +368,7 @@ export async function loadSTLFile(file, extractEdges) {
     const box = new THREE.Box3().setFromObject(S.currentModel);
     setupModelShadowFrustum(box);
     if (S.groundEnabled) addGroundPlane(box);
+    applyFileBackground();
     applyDisplayMode();
     setFileName(file.name);
     showModelInfo(S.currentModel, file.size);
@@ -382,6 +386,7 @@ export async function loadSTLFile(file, extractEdges) {
 export async function load3MFFile(file, extractEdges) {
   try {
     showLoading('Parsing 3MF file…');
+    S.modelUnit = 'Millimeters';
     S.parsedLayers = [];
     renderLayerUI();
     document.getElementById('file-info-content')?.classList.add('hidden');
@@ -404,6 +409,7 @@ export async function load3MFFile(file, extractEdges) {
     const box = new THREE.Box3().setFromObject(S.currentModel);
     setupModelShadowFrustum(box);
     if (S.groundEnabled) addGroundPlane(box);
+    applyFileBackground();
     applyDisplayMode();
     setFileName(file.name);
     showModelInfo(S.currentModel, file.size);
@@ -480,6 +486,71 @@ export async function preprocess3dm(file, skipLayerParse) {
           : null;
         S.fileDefaultBgStyle = rs?.backgroundStyle ?? null;
       } catch { S.rhinoBackgroundColor = null; S.fileDefaultBgStyle = null; }
+
+      try {
+        const us = doc.settings()?.modelUnitSystem;
+        if (us !== undefined && us !== null) {
+          let foundName = null;
+          if (S.rhinoInstance && S.rhinoInstance.UnitSystem) {
+            for (const key in S.rhinoInstance.UnitSystem) {
+              if (S.rhinoInstance.UnitSystem[key] === us || 
+                  (us.value !== undefined && S.rhinoInstance.UnitSystem[key]?.value === us.value)) {
+                foundName = key;
+                break;
+              }
+            }
+          }
+          if (foundName) {
+            const nameMap = {
+              'None': 'None',
+              'Angstroms': 'Angstroms',
+              'Nanometers': 'Nanometers',
+              'Microns': 'Microns',
+              'Millimeters': 'mm',
+              'Centimeters': 'cm',
+              'Decimeters': 'dm',
+              'Meters': 'm',
+              'Dekameters': 'Dekameters',
+              'Hectometers': 'Hectometers',
+              'Kilometers': 'km',
+              'Megameters': 'Megameters',
+              'Gigameters': 'Gigameters',
+              'Inches': 'in',
+              'Feet': 'ft',
+              'Yards': 'yd',
+              'Miles': 'mi',
+              'PrinterPoints': 'pt',
+              'PrinterPicas': 'pc',
+              'NauticalMiles': 'Nautical Miles',
+              'AstronomicalUnits': 'AU',
+              'LightYears': 'Light Years',
+              'Parsecs': 'Parsecs',
+              'CustomUnits': 'Custom'
+            };
+            S.modelUnit = nameMap[foundName] || foundName;
+          } else {
+            // Numeric or direct value fallback
+            const val = (typeof us === 'number') ? us : (typeof us.value === 'number') ? us.value : null;
+            if (val !== null) {
+              const unitMap = {
+                0: 'None', 1: 'Angstroms', 2: 'Nanometers', 3: 'Microns', 4: 'mm',
+                5: 'cm', 6: 'dm', 7: 'm', 8: 'Dekameters', 9: 'Hectometers',
+                10: 'km', 11: 'Megameters', 12: 'Gigameters', 13: 'in', 14: 'ft',
+                15: 'yd', 16: 'mi', 17: 'pt', 18: 'pc', 19: 'Nautical Miles',
+                20: 'AU', 21: 'Light Years', 22: 'Parsecs', 23: 'Custom'
+              };
+              S.modelUnit = unitMap[val] || `Unknown (${val})`;
+            } else {
+              S.modelUnit = us.name || String(us);
+            }
+          }
+        } else {
+          S.modelUnit = 'Unknown';
+        }
+      } catch (err) {
+        S.modelUnit = 'Unknown';
+        console.warn('[pre] unit system err:', err);
+      }
 
       try {
         const fi = doc.applicationDetails;
@@ -828,9 +899,72 @@ export function postProcessModel(model, addEdgesFlag) {
       attrs.layerIndex = realLayerIndex;
     }
 
+    // ── Clean up curve spikes / failed [0,0,0] evaluation chords ──────────────
+    if (child.isLine && child.geometry && child.geometry.attributes.position) {
+      const posAttr = child.geometry.attributes.position;
+      const arr = posAttr.array;
+      const count = posAttr.count;
+      if (count > 2) {
+        const cleanCoords = [];
+        let hasSpikes = false;
+        
+        // Helper to check if a point is exactly or very close to [0,0,0]
+        const isOrigin = (x, y, z) => Math.abs(x) < 1e-7 && Math.abs(y) < 1e-7 && Math.abs(z) < 1e-7;
+        
+        for (let i = 0; i < count; i++) {
+          const x = arr[i * 3];
+          const y = arr[i * 3 + 1];
+          const z = arr[i * 3 + 2];
+          
+          if (isNaN(x) || isNaN(y) || isNaN(z)) {
+            hasSpikes = true;
+            continue;
+          }
+          
+          if (isOrigin(x, y, z)) {
+            // A point exactly at the origin is a spike if neighboring points are far from origin
+            let prevFar = true;
+            let nextFar = true;
+            
+            if (i > 0) {
+              const px = arr[(i - 1) * 3];
+              const py = arr[(i - 1) * 3 + 1];
+              const pz = arr[(i - 1) * 3 + 2];
+              if (!isOrigin(px, py, pz) && (px * px + py * py + pz * pz) < 1e-4) {
+                prevFar = false; // neighbor is also very close to origin
+              }
+            }
+            if (i < count - 1) {
+              const nx = arr[(i + 1) * 3];
+              const ny = arr[(i + 1) * 3 + 1];
+              const nz = arr[(i + 1) * 3 + 2];
+              if (!isOrigin(nx, ny, nz) && (nx * nx + ny * ny + nz * nz) < 1e-4) {
+                nextFar = false; // neighbor is also very close to origin
+              }
+            }
+            
+            if (prevFar && nextFar && count > 3) {
+              hasSpikes = true;
+              continue; // Skip this spike point
+            }
+          }
+          
+          cleanCoords.push(x, y, z);
+        }
+        
+        if (hasSpikes && cleanCoords.length >= 6) {
+          const newArr = new Float32Array(cleanCoords);
+          child.geometry.setAttribute('position', new THREE.BufferAttribute(newArr, 3));
+          child.geometry.attributes.position.needsUpdate = true;
+          if (child.geometry.computeBoundingBox) child.geometry.computeBoundingBox();
+          if (child.geometry.computeBoundingSphere) child.geometry.computeBoundingSphere();
+        }
+      }
+    }
+
     if (!child.isMesh && !child.isLine) return;
 
-    if (child.material?.color) {
+    if (child.isMesh && child.material?.color) {
       const mc = child.material.color;
       if (mc.r < 0.02 && mc.g < 0.02 && mc.b < 0.02) child.material.color.setHex(0xffffff);
     }
@@ -877,7 +1011,9 @@ export function postProcessModel(model, addEdgesFlag) {
     } else {
       shadedColor.setHex(0xffffff);
     }
-    if (shadedColor.r < 0.02 && shadedColor.g < 0.02 && shadedColor.b < 0.02) shadedColor.setHex(0xffffff);
+    if (child.isMesh && shadedColor.r < 0.02 && shadedColor.g < 0.02 && shadedColor.b < 0.02) {
+      shadedColor.setHex(0xffffff);
+    }
 
     child.userData.shadedMaterial = new THREE.MeshStandardMaterial({
       color:      shadedColor.clone(),
@@ -893,7 +1029,10 @@ export function postProcessModel(model, addEdgesFlag) {
     fixMaterialTransparency(child.userData.renderedMaterial);
 
     if (addEdgesFlag && child.geometry && child.isMesh && !child.isLine) addEdges(child);
-    if (S.bvhReady && child.geometry) child.geometry.computeBoundsTree();
+    // BVH is triangle-based — running it on Line geometry reorders the index
+    // buffer as if it were triangles, corrupting LINE_STRIP vertex order and
+    // producing dashed/zigzag curves.
+    if (S.bvhReady && child.geometry && child.isMesh && !child.isLine) child.geometry.computeBoundsTree();
     child.castShadow    = S.shadowsEnabled;
     child.receiveShadow = S.shadowsEnabled;
   });
@@ -904,7 +1043,7 @@ export function postProcessModel(model, addEdgesFlag) {
 export function clearCurrentModel() {
   if (!S.currentModel) return;
   // Clear selection outlines (dynamic import avoids circular at parse time)
-  import('./selection.js?v=1.2.88').then(m => m.clearSelection()).catch(() => {});
+  import('./selection.js').then(m => m.clearSelection()).catch(() => {});
   clearTechnicalOutlines();
   S.currentModel.traverse(child => {
     if (child.name === 'rhino-outline') return;
@@ -975,12 +1114,14 @@ export async function handleFile(file, rhinoLoader, gltfLoader) {
 
   resetSettingsToDefault();
   clearCurrentModel();
+  S.modelUnit = 'Unknown';
   showLoading('Reading file…');
   document.getElementById('empty-state')?.classList.add('hidden');
 
   const extractEdges = document.getElementById('chk-edges-panel')?.checked ?? true;
 
   if (fileName.endsWith('.glb') || fileName.endsWith('.gltf')) {
+    S.modelUnit = 'Meters';
     S.parsedLayers = [];
     renderLayerUI();
     document.getElementById('file-info-content')?.classList.add('hidden');
@@ -998,6 +1139,7 @@ export async function handleFile(file, rhinoLoader, gltfLoader) {
         const box = new THREE.Box3().setFromObject(S.currentModel);
         setupModelShadowFrustum(box);
         if (S.groundEnabled) addGroundPlane(box);
+        applyFileBackground();
         applyDisplayMode();
         setFileName(file.name);
         showModelInfo(S.currentModel, file.size);
@@ -1102,6 +1244,7 @@ export async function loadGeometryFromGLB(glbBuffer, fileName, fileSize) {
   const box = new THREE.Box3().setFromObject(S.currentModel);
   setupModelShadowFrustum(box);
   if (S.groundEnabled) addGroundPlane(box);
+  applyFileBackground();
   applyDisplayMode();
   setFileName(fileName);
   showModelInfo(S.currentModel, fileSize);

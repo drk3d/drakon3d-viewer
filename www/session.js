@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { S } from './state.js';
 import { applyDisplayMode } from './display.js';
 import { switchToPersp, getCustomViews } from './camera.js';
-import { updateSliderFill } from './helpers.js';
+import { updateSliderFill, isPageVisuallyDark } from './helpers.js';
 
 // ── IndexedDB for last-used file handle ──────────────────────────────────────
 
@@ -75,6 +75,7 @@ export async function saveSession(customFileName = null) {
       bgC3:               document.getElementById('bg-panel-c3')?.value || '#2d3748',
       bgC4:               document.getElementById('bg-panel-c4')?.value || '#1a202c',
       bgRadialSpread:     parseFloat(document.getElementById('bg-radial-spread')?.value ?? 0.5),
+      modelUnit:          S.modelUnit,
       
       // Clipping Plane Settings
       clippingEnabled:    S.clippingEnabled,
@@ -266,6 +267,7 @@ export async function loadSession(file) {
       S.currentMode    = s.displayMode    || 'shaded';
       S.shadowsEnabled = s.shadowsEnabled ?? true;
       S.groundEnabled  = s.groundEnabled  ?? false;
+      S.modelUnit      = s.modelUnit       || 'Unknown';
 
       const setCheck = (id, val) => {
         const el = document.getElementById(id);
@@ -315,7 +317,13 @@ export async function loadSession(file) {
           el.value = val;
           const swatch = document.getElementById(swatchId);
           if (swatch) swatch.style.background = val;
-          el.dispatchEvent(new Event('input'));
+          const wrapper = el.parentNode;
+          if (wrapper && wrapper.classList.contains('clr-field')) {
+            wrapper.style.color = val;
+            const btn = wrapper.querySelector('button');
+            if (btn) btn.style.backgroundColor = val;
+          }
+          el.dispatchEvent(new Event('input', { bubbles: true }));
         }
       };
 
@@ -391,7 +399,7 @@ export async function loadSession(file) {
     // 3. Restore CAD layers
     if (data.parsedLayers) {
       S.parsedLayers = data.parsedLayers;
-      const { renderLayerUI, updateLayerVisibility } = await import('./layers.js?v=1.2.87');
+      const { renderLayerUI, updateLayerVisibility } = await import('./layers.js');
       renderLayerUI();
       updateLayerVisibility();
     }
@@ -404,7 +412,11 @@ export async function loadSession(file) {
     // 5. Restore custom named views
     if (data.namedViews) {
       const base = file.name.replace(/\.[^.]+$/, '');
-      localStorage.setItem(`rhino_custom_views_${base}`, JSON.stringify(data.namedViews));
+      try {
+        localStorage.setItem(`rhino_custom_views_${base}`, JSON.stringify(data.namedViews));
+      } catch (e) {
+        console.warn('Failed to save session views to localStorage:', e);
+      }
       const { renderNamedViewsUI } = await import('./camera.js');
       renderNamedViewsUI();
     }
@@ -491,7 +503,7 @@ export function resetSettingsToDefault() {
   import('./tools.js').then(m => m.clearMeasurements()).catch(() => {});
 
   // Clear selection outlines
-  import('./selection.js?v=1.2.87').then(m => m.clearSelection()).catch(() => {});
+  import('./selection.js').then(m => m.clearSelection()).catch(() => {});
 
   document.querySelectorAll('#mode-dropdown .dropdown-item').forEach(b => {
     b.classList.toggle('active', b.dataset.mode === 'shaded');
@@ -545,19 +557,30 @@ export function resetSettingsToDefault() {
 
   document.getElementById('btn-cg-reset')?.click();
 
+  const isDark = isPageVisuallyDark();
+
+  const defaultBg  = isDark ? '#24252a' : '#ffffff';
+  const defaultBg2 = isDark ? '#1c1d22' : '#f3f4f6';
+  const defaultBg3 = isDark ? '#1e293b' : '#e5e7eb';
+  const defaultBg4 = isDark ? '#0f172a' : '#d1d5db';
+
   const resetBgColor = (id, swatchId, val) => {
     const el = document.getElementById(id);
     if (el) {
       el.value = val;
       const swatch = document.getElementById(swatchId);
       if (swatch) swatch.style.background = val;
-      el.dispatchEvent(new Event('input'));
+      const wrapper = el.parentNode;
+      if (wrapper && wrapper.classList.contains('clr-field')) {
+        wrapper.style.color = val;
+      }
+      el.dispatchEvent(new Event('input', { bubbles: true }));
     }
   };
-  resetBgColor('bg-panel-c1', 'bg-panel-swatch-c1', '#ffffff');
-  resetBgColor('bg-panel-c2', 'bg-panel-swatch-c2', '#e0e0e0');
-  resetBgColor('bg-panel-c3', 'bg-panel-swatch-c3', '#f0f0f0');
-  resetBgColor('bg-panel-c4', 'bg-panel-swatch-c4', '#cccccc');
+  resetBgColor('bg-panel-c1', 'bg-panel-swatch-c1', defaultBg);
+  resetBgColor('bg-panel-c2', 'bg-panel-swatch-c2', defaultBg2);
+  resetBgColor('bg-panel-c3', 'bg-panel-swatch-c3', defaultBg3);
+  resetBgColor('bg-panel-c4', 'bg-panel-swatch-c4', defaultBg4);
 
   const bgSel = document.getElementById('bg-type-select');
   if (bgSel) { bgSel.value = 'solid'; bgSel.dispatchEvent(new Event('change')); }

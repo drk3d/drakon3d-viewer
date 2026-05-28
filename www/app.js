@@ -20,8 +20,8 @@ import { S } from './state.js';
 import { updateSliderFill, updateAllSliderFills, updateSelectIcon, hideLoading } from './helpers.js';
 import { setupLights, updateSunLight, updateShadowCasting, addGroundPlane, removeGroundPlane } from './lighting.js';
 import { switchToOrtho, switchToPersp, setViewPreset, triggerCameraTransition, fitCameraToBox, fitCameraToObject, fitCameraToSelected, saveCustomView, renderNamedViewsUI } from './camera.js';
-import { applySceneBackground, applyFileBackground, applyDisplayMode } from './display.js';
-import { renderLayerUI, updateLayerVisibility } from './layers.js?v=1.2.88';
+import { applySceneBackground, applyFileBackground, applyDisplayMode, applyLayerColorsToModel } from './display.js';
+import { renderLayerUI, updateLayerVisibility } from './layers.js';
 import { createAnnotationSprites } from './annotations.js';
 import { saveSession, loadSession } from './session.js';
 import { handleFile, clearCurrentModel } from './loaders.js';
@@ -34,7 +34,7 @@ import {
   onCanvasClick, updateClippingPlane, setupClippingHelper, updateClippingHelperPose,
   cancelCurrentInProgressMeasurement
 } from './tools.js';
-import { onPointerDown, clearSelection, updatePropertiesPanel, addSelectionOutline } from './selection.js?v=1.2.88';
+import { onPointerDown, clearSelection, updatePropertiesPanel, addSelectionOutline } from './selection.js';
 
 // ── Color Grading Shader ───────────────────────────────────────────────────
 const ColorGradingShader = {
@@ -82,7 +82,13 @@ import('three-mesh-bvh').then(mod => {
   S.bvhReady = true;
 }).catch(() => console.warn('three-mesh-bvh not loaded'));
 
-window.addEventListener('error', e => console.error('Uncaught:', e.message, e.filename, e.lineno));
+window.addEventListener('error', e => {
+  console.error('Uncaught:', e.message, e.filename, e.lineno);
+});
+
+window.addEventListener('unhandledrejection', e => {
+  console.error('Unhandled Rejection:', e.reason);
+});
 
 // ── rhino3dm init ──────────────────────────────────────────────────────────
 if (window.rhino3dm) {
@@ -537,6 +543,10 @@ function bindUI() {
   if (saveGlbBtn) saveGlbBtn.addEventListener('click', () => exportGLB());
 
   // ── 3. Background color pickers ──
+  if (window.Coloris) {
+    Coloris.wrap('.bg-coloris-input');
+  }
+
   const bgTypeSelect  = document.getElementById('bg-type-select');
   const bgPanelC1 = document.getElementById('bg-panel-c1');
   const bgPanelC2 = document.getElementById('bg-panel-c2');
@@ -867,7 +877,7 @@ function bindUI() {
   });
   saveAsDlg?.addEventListener('click', (e) => { if (e.target === saveAsDlg) closeSaveAsDialog(); });
 
-  document.getElementById('btn-zoom-extents-drop').addEventListener('click', () => {
+  document.getElementById('btn-zoom-extents').addEventListener('click', () => {
     if (!S.currentModel) return;
     const box = new THREE.Box3();
     S.currentModel.traverse(child => {
@@ -879,9 +889,8 @@ function bindUI() {
     });
     if (!box.isEmpty()) fitCameraToBox(box, true, true);
     else fitCameraToObject(S.currentModel, true, true);
-    document.getElementById('view-dropdown')?.classList.add('hidden');
   });
-  document.getElementById('btn-zoom-selected-drop').addEventListener('click', fitCameraToSelected);
+  document.getElementById('btn-zoom-selected').addEventListener('click', fitCameraToSelected);
 
   // ── Turntable ──
   let ttContinuous = false;
@@ -961,17 +970,17 @@ function bindUI() {
   });
 
   // ── Show/hide ──
-  document.getElementById('btn-show-all-drop').addEventListener('click', () => {
+  document.getElementById('btn-show-all').addEventListener('click', () => {
     S.hiddenObjects.forEach(obj => { obj.visible = true; });
     S.hiddenObjects.clear();
     updateLayerVisibility();
   });
-  document.getElementById('btn-hide-selected-drop').addEventListener('click', () => {
+  document.getElementById('btn-hide-selected').addEventListener('click', () => {
     S.selectedObjects.forEach(child => { child.visible = false; S.hiddenObjects.add(child); });
     clearSelection();
     updatePropertiesPanel();
   });
-  document.getElementById('btn-isolate-selected-drop').addEventListener('click', () => {
+  document.getElementById('btn-isolate-selected').addEventListener('click', () => {
     if (!S.selectedObjects.length || !S.currentModel) return;
     S.currentModel.traverse(child => {
       if (child.isMesh && child.name !== 'rhino-edges' &&
@@ -1749,9 +1758,45 @@ function onWindowResize() {
 }
 
 // ── Theme ──────────────────────────────────────────────────────────────────
+function updateBgColors(isLight) {
+  const p1 = document.getElementById('bg-panel-c1');
+  const p2 = document.getElementById('bg-panel-c2');
+  const p3 = document.getElementById('bg-panel-c3');
+  const p4 = document.getElementById('bg-panel-c4');
+  if (isLight) {
+    if (p1 && (p1.value === '#2a2b2f' || p1.value === '#000000' || p1.value === '#1b1b1f' || p1.value === '#24252a')) p1.value = '#ffffff';
+    if (p2 && (p2.value === '#18181c' || p2.value === '#1c1d22')) p2.value = '#f3f4f6';
+    if (p3 && p3.value === '#1e293b') p3.value = '#e5e7eb';
+    if (p4 && p4.value === '#0f172a') p4.value = '#d1d5db';
+  } else {
+    if (p1 && p1.value === '#ffffff') p1.value = '#24252a';
+    if (p2 && p2.value === '#f3f4f6') p2.value = '#1c1d22';
+    if (p3 && p3.value === '#e5e7eb') p3.value = '#1e293b';
+    if (p4 && p4.value === '#d1d5db') p4.value = '#0f172a';
+  }
+  ['c1','c2','c3','c4'].forEach(id => {
+    const sw = document.getElementById('bg-panel-swatch-' + id);
+    const p  = document.getElementById('bg-panel-' + id);
+    if (sw && p) {
+      sw.style.background = p.value;
+      const wrapper = p.parentNode;
+      if (wrapper && wrapper.classList.contains('clr-field')) {
+        wrapper.style.color = p.value;
+        const btn = wrapper.querySelector('button');
+        if (btn) btn.style.backgroundColor = p.value;
+      }
+    }
+  });
+  if (S.scene) applySceneBackground();
+}
+
 function applyTheme(theme) {
   S.currentTheme = theme;
-  localStorage.setItem(S.THEME_KEY, theme);
+  try {
+    localStorage.setItem(S.THEME_KEY, theme);
+  } catch (e) {
+    console.warn('Failed to write theme to localStorage:', e);
+  }
   const root = document.documentElement;
   const isLight = theme === 'light' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: light)').matches);
   if (isLight) {
@@ -1765,6 +1810,14 @@ function applyTheme(theme) {
   }
   const themeSel = document.getElementById('theme-select');
   if (themeSel) themeSel.value = theme;
+
+  updateBgColors(isLight);
+
+  if (S.currentModel) {
+    applyLayerColorsToModel(S.currentModel);
+    applyDisplayMode();
+    createAnnotationSprites();
+  }
 }
 
 window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
@@ -1774,30 +1827,6 @@ window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', ()
 function initThemeSync() {
   const mediaQuery = window.matchMedia('(prefers-color-scheme: light)');
   applyTheme(S.currentTheme);
-
-  const updateBgColors = (isLight) => {
-    const p1 = document.getElementById('bg-panel-c1');
-    const p2 = document.getElementById('bg-panel-c2');
-    const p3 = document.getElementById('bg-panel-c3');
-    const p4 = document.getElementById('bg-panel-c4');
-    if (isLight) {
-      if (p1 && (p1.value === '#2a2b2f' || p1.value === '#000000')) p1.value = '#ffffff';
-      if (p2 && p2.value === '#18181c') p2.value = '#f3f4f6';
-      if (p3 && p3.value === '#1e293b') p3.value = '#e5e7eb';
-      if (p4 && p4.value === '#0f172a') p4.value = '#d1d5db';
-    } else {
-      if (p1 && p1.value === '#ffffff') p1.value = '#2a2b2f';
-      if (p2 && p2.value === '#f3f4f6') p2.value = '#18181c';
-      if (p3 && p3.value === '#e5e7eb') p3.value = '#1e293b';
-      if (p4 && p4.value === '#d1d5db') p4.value = '#0f172a';
-    }
-    ['c1','c2','c3','c4'].forEach(id => {
-      const sw = document.getElementById('bg-panel-swatch-' + id);
-      const p  = document.getElementById('bg-panel-' + id);
-      if (sw && p) sw.style.background = p.value;
-    });
-    if (S.scene) applySceneBackground();
-  };
 
   const isLightInitial = S.currentTheme === 'light' ||
     (S.currentTheme === 'system' && mediaQuery.matches);
@@ -1810,7 +1839,7 @@ function initThemeSync() {
   else if (mediaQuery.addListener)  mediaQuery.addListener(updateTheme);
 }
 
-// ── GLB export ─────────────────────────────────────────────────────────────
+
 function exportGLB() {
   if (!S.currentModel) { alert('No model loaded.'); return; }
   applyDisplayMode();

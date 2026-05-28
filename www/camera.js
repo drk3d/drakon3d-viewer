@@ -176,20 +176,32 @@ export function saveCustomView(name) {
     up:       S.camera.up.toArray(),
     isCustom: true
   });
-  localStorage.setItem(_customViewKey(), JSON.stringify(views));
+  try {
+    localStorage.setItem(_customViewKey(), JSON.stringify(views));
+  } catch (e) {
+    console.warn('Failed to save custom views to localStorage:', e);
+  }
   renderNamedViewsUI();
 }
 
 export function deleteCustomView(name) {
   const views = getCustomViews().filter(v => v.name !== name);
-  localStorage.setItem(_customViewKey(), JSON.stringify(views));
+  try {
+    localStorage.setItem(_customViewKey(), JSON.stringify(views));
+  } catch (e) {
+    console.warn('Failed to delete custom view from localStorage:', e);
+  }
   renderNamedViewsUI();
 }
 
 function deleteRhinoView(name) {
   const deleted = getDeletedRhinoViewNames();
   if (!deleted.includes(name)) deleted.push(name);
-  localStorage.setItem(_deletedRhinoViewKey(), JSON.stringify(deleted));
+  try {
+    localStorage.setItem(_deletedRhinoViewKey(), JSON.stringify(deleted));
+  } catch (e) {
+    console.warn('Failed to save deleted Rhino views to localStorage:', e);
+  }
   renderNamedViewsUI();
 }
 
