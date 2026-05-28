@@ -398,16 +398,20 @@ let pointerDownTime = 0;
 let pointerDownPos = new THREE.Vector2();
 
 function bindUI() {
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const fileAccept = isMobile ? '*/*' : '.3dm,.glb,.gltf,.stp,.step,.iges,.igs,.stl,.3mf,.rhinoview';
+  const sessionAccept = isMobile ? '*/*' : '.rhinoview';
+
   let fileInput = document.getElementById('file-upload');
   if (!fileInput) {
     fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.id = 'file-upload';
     fileInput.style.display = 'none';
-    fileInput.accept = '.3dm,.glb,.gltf,.stp,.step,.iges,.igs,.stl,.3mf,.rhinoview';
+    fileInput.accept = fileAccept;
     document.body.appendChild(fileInput);
   } else {
-    fileInput.accept = '.3dm,.glb,.gltf,.stp,.step,.iges,.igs,.stl,.3mf,.rhinoview';
+    fileInput.accept = fileAccept;
   }
   fileInput.addEventListener('change', async e => {
     const f = e.target.files[0];
@@ -426,8 +430,10 @@ function bindUI() {
     sessionInput.type = 'file';
     sessionInput.id = 'session-upload';
     sessionInput.style.display = 'none';
-    sessionInput.accept = '.rhinoview';
+    sessionInput.accept = sessionAccept;
     document.body.appendChild(sessionInput);
+  } else {
+    sessionInput.accept = sessionAccept;
   }
   sessionInput.addEventListener('change', async e => {
     const f = e.target.files[0]; if (f) { await loadSession(f); }

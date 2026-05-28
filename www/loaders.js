@@ -965,12 +965,19 @@ export function clearCurrentModel() {
 export async function handleFile(file, rhinoLoader, gltfLoader) {
   if (!file) return;
 
+  const fileName = file.name.toLowerCase();
+  const supportedExtensions = ['.3dm', '.glb', '.gltf', '.stl', '.3mf', '.stp', '.step', '.iges', '.igs', '.rhinoview'];
+  const hasValidExt = supportedExtensions.some(ext => fileName.endsWith(ext));
+  if (!hasValidExt) {
+    alert('지원되지 않는 파일 형식입니다.\n지원 포맷: .3dm, .glb, .gltf, .stl, .3mf, .stp, .step, .iges, .igs, .rhinoview');
+    return;
+  }
+
   resetSettingsToDefault();
   clearCurrentModel();
   showLoading('Reading file…');
   document.getElementById('empty-state')?.classList.add('hidden');
 
-  const fileName    = file.name.toLowerCase();
   const extractEdges = document.getElementById('chk-edges-panel')?.checked ?? true;
 
   if (fileName.endsWith('.glb') || fileName.endsWith('.gltf')) {
