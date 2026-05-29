@@ -17,8 +17,11 @@ export function switchToOrtho() {
   S.orthoCamera.updateProjectionMatrix();
   S.camera = S.orthoCamera;
   S.controls.object = S.camera;
-  if (S.composer?.passes[0]) S.composer.passes[0].camera = S.camera;
-  if (S.composer?.passes[1]) S.composer.passes[1].camera = S.camera;
+  if (S.composer?.passes) {
+    S.composer.passes.forEach(pass => {
+      if (pass.camera !== undefined) pass.camera = S.camera;
+    });
+  }
   const ps = document.getElementById('select-projection');
   if (ps) ps.value = 'parallel';
   S.controls.update();
@@ -27,8 +30,11 @@ export function switchToOrtho() {
 export function switchToPersp() {
   S.camera = S.perspCamera;
   S.controls.object = S.camera;
-  if (S.composer?.passes[0]) S.composer.passes[0].camera = S.camera;
-  if (S.composer?.passes[1]) S.composer.passes[1].camera = S.camera;
+  if (S.composer?.passes) {
+    S.composer.passes.forEach(pass => {
+      if (pass.camera !== undefined) pass.camera = S.camera;
+    });
+  }
   const ps = document.getElementById('select-projection');
   if (ps) ps.value = 'perspective';
   S.controls.update();
@@ -60,9 +66,32 @@ export function setViewPreset(preset) {
 
   triggerCameraTransition(targetPos, center, targetUp);
 
-  document.querySelectorAll('#view-dropdown .dropdown-item').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.view === preset);
-  });
+  // ── Sync the view preset dropdown button UI dynamically ──
+  const dropdown = document.getElementById('view-dropdown');
+  if (dropdown) {
+    const activeItem = dropdown.querySelector(`.dropdown-item[data-view="${preset}"]`);
+    if (activeItem) {
+      // Keep dropdown active classes in sync
+      dropdown.querySelectorAll('.dropdown-item').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.view === preset);
+      });
+      // Update top trigger button label & title
+      const triggerBtn = document.getElementById('btn-view-dropdown');
+      if (triggerBtn) {
+        const label = activeItem.querySelector('span').textContent.split(' ')[0];
+        const triggerLabel = triggerBtn.querySelector('span');
+        if (triggerLabel) triggerLabel.textContent = label;
+        triggerBtn.title = `View Preset (${label})`;
+
+        // Clone and swap the active view's SVG icon onto the trigger button
+        const svg = activeItem.querySelector('svg').cloneNode(true);
+        const oldSvg = triggerBtn.querySelector('svg');
+        if (oldSvg) {
+          triggerBtn.replaceChild(svg, oldSvg);
+        }
+      }
+    }
+  }
 }
 
 export function triggerCameraTransition(pos, target, up) {

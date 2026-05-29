@@ -45,6 +45,18 @@ function drawRoundedRect(ctx, x, y, w, h, r) {
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export async function createAnnotationSprites() {
+  const selectedIndices = [];
+  if (S.selectedObjects && S.selectedObjects.length > 0) {
+    const sel = await import('./selection.js');
+    S.selectedObjects.forEach(obj => {
+      if (obj.userData && typeof obj.userData.annIndex === 'number') {
+        selectedIndices.push(obj.userData.annIndex);
+        sel.clearSelectionOutline(obj);
+      }
+    });
+    S.selectedObjects = S.selectedObjects.filter(obj => !obj.userData || typeof obj.userData.annIndex !== 'number');
+  }
+
   if (S.annotationGroup) {
     if (S.annotationGroup.parent) S.annotationGroup.parent.remove(S.annotationGroup);
     else S.scene.remove(S.annotationGroup);
@@ -72,35 +84,39 @@ export async function createAnnotationSprites() {
 
   const annVisible = document.getElementById('chk-annotations-panel')?.checked ?? true;
 
-  S.parsedAnnotations.forEach(ann => {
+  S.parsedAnnotations.forEach((ann, index) => {
     try {
       const layer     = S.parsedLayers.find(l => l.index === ann.layerIndex);
       const isVisible = layer ? layer.visible : true;
 
-      // Resolve color: objectColor > layerColor > black
-      // Use the color as-is — black stays black, white stays white
+      // Resolve color: custom color > objectColor > layerColor > black
       let color = new THREE.Color(0x000000);
-      if (ann.objectColor) {
+      if (ann.objectColorCustom) {
+        color.set(ann.objectColorCustom);
+      } else if (ann.objectColor) {
         color.setRGB(ann.objectColor.r / 255, ann.objectColor.g / 255, ann.objectColor.b / 255);
       } else if (layer?.color) {
         color.setRGB(layer.color.r / 255, layer.color.g / 255, layer.color.b / 255);
       }
 
-      if (isPageVisuallyDark()) {
-        if (color.r < 0.08 && color.g < 0.08 && color.b < 0.08) {
-          color.setHex(0xffffff); // In dark mode, map black/very-dark annotations to white
-        }
-      } else {
-        if (color.r > 0.92 && color.g > 0.92 && color.b > 0.92) {
-          color.setHex(0x000000); // In light mode, map white/very-light annotations to black
+      if (!ann.objectColorCustom) {
+        if (isPageVisuallyDark()) {
+          if (color.r < 0.08 && color.g < 0.08 && color.b < 0.08) {
+            color.setHex(0xffffff); // In dark mode, map black/very-dark annotations to white
+          }
+        } else {
+          if (color.r > 0.92 && color.g > 0.92 && color.b > 0.92) {
+            color.setHex(0x000000); // In light mode, map white/very-light annotations to black
+          }
         }
       }
 
-      const textVal = String(ann.text || '');
+      const textVal    = String(ann.text || '');
+      const isSelected = selectedIndices.includes(index);
       let obj3d = null;
 
       if (ann.type === 'TextDot') {
-        obj3d = makeTextDot(textVal, color, baseH);
+        obj3d = makeTextDot(textVal, color, baseH, isSelected);
         if (obj3d) obj3d.position.set(...(ann.position || [0, 0, 0]));
 
       } else if (ann.isDimension && ann.dimPoints) {
@@ -116,7 +132,12 @@ export async function createAnnotationSprites() {
       }
 
       if (obj3d) {
-        obj3d.userData = { layerIndex: ann.layerIndex };
+        obj3d.userData = {
+          layerIndex: ann.layerIndex,
+          annIndex: index,
+          isColorByLayer: ann.isColorByLayer !== false,
+          objectColorCustom: ann.objectColorCustom
+        };
         obj3d.visible  = isVisible && annVisible;
         S.annotationGroup.add(obj3d);
       }
@@ -131,16 +152,27 @@ export async function createAnnotationSprites() {
 
   if (S.currentModel) S.currentModel.add(S.annotationGroup);
   else S.scene.add(S.annotationGroup);
+
+  if (selectedIndices.length > 0) {
+    const sel = await import('./selection.js');
+    S.annotationGroup.children.forEach(child => {
+      if (child.userData && selectedIndices.includes(child.userData.annIndex)) {
+        S.selectedObjects.push(child);
+        sel.addSelectionOutline(child);
+      }
+    });
+    sel.updatePropertiesPanel();
+  }
 }
 
 // ── TextDot ───────────────────────────────────────────────────────────────────
 // Rounded-pill sprite, background = objectColor/layerColor, auto-contrast text
 
-function makeTextDot(text, bgColor, baseH) {
+function makeTextDot(text, bgColor, baseH, isSelected = false) {
   const canvas = document.createElement('canvas');
   const ctx    = canvas.getContext('2d');
   const fs = 32;
-  ctx.font = `700 ${fs}px 'Inter', -apple-system, sans-serif`;
+  ctx.font = `700 ${fs}px Arial, 'Helvetica Neue', Helvetica, sans-serif`;
   const tw = ctx.measureText(text).width;
   const px = 22, py = 14;
   const cw = Math.ceil(tw + px * 2);
@@ -149,26 +181,33 @@ function makeTextDot(text, bgColor, baseH) {
   canvas.height = ch;
 
   ctx.clearRect(0, 0, cw, ch);          // transparent corners → enables round shape
-  ctx.font = `700 ${fs}px 'Inter', -apple-system, sans-serif`;
+  ctx.font = `700 ${fs}px Arial, 'Helvetica Neue', Helvetica, sans-serif`;
   ctx.textBaseline = 'middle';
   ctx.textAlign    = 'center';
 
   // Auto-contrast calculation for outline & text color
+  // THREE.Color r/g/b are in 0~1 range — correct for luminance
   const lum = bgColor.r * 0.299 + bgColor.g * 0.587 + bgColor.b * 0.114;
+  const textColor = lum > 0.5 ? '#000000' : '#ffffff';
 
   // Pill background (inset slightly to leave space for crisp stroke)
   ctx.beginPath();
-  drawRoundedRect(ctx, 1.5, 1.5, cw - 3, ch - 3, (ch - 3) / 2);
+  drawRoundedRect(ctx, 2, 2, cw - 4, ch - 4, (ch - 4) / 2);
   ctx.fillStyle = `#${bgColor.getHexString()}`;
   ctx.fill();
 
-  // Thin high-fidelity outline border matching Rhino
-  ctx.lineWidth = 3;
-  ctx.strokeStyle = lum > 0.55 ? '#000000' : '#ffffff';
+  // Border: thick electric-blue when selected, thin auto-contrast when not
+  if (isSelected) {
+    ctx.lineWidth   = 6;
+    ctx.strokeStyle = '#0066ff';
+  } else {
+    ctx.lineWidth   = 3;
+    ctx.strokeStyle = lum > 0.5 ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.35)';
+  }
   ctx.stroke();
 
-  // Auto-contrast text
-  ctx.fillStyle = lum > 0.55 ? '#000000' : '#ffffff';
+  // Auto-contrast text — always readable regardless of background color
+  ctx.fillStyle = textColor;
   ctx.fillText(text, cw / 2, ch / 2);
 
   const tex = new THREE.CanvasTexture(canvas);
@@ -237,13 +276,13 @@ function makeTextSprite(text, color, ann, baseH) {
   const canvas = document.createElement('canvas');
   const ctx    = canvas.getContext('2d');
   const fs = 44;
-  ctx.font = `500 ${fs}px 'Inter', -apple-system, sans-serif`;
+  ctx.font = `500 ${fs}px Arial, 'Helvetica Neue', Helvetica, sans-serif`;
   const tw = ctx.measureText(text).width;
   const px = 14, py = 10;
   const cw = Math.ceil(tw + px * 2);
   const ch = Math.ceil(fs + py * 2);
   canvas.width = cw; canvas.height = ch;
-  ctx.font = `500 ${fs}px 'Inter', -apple-system, sans-serif`;
+  ctx.font = `500 ${fs}px Arial, 'Helvetica Neue', Helvetica, sans-serif`;
   ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
   ctx.clearRect(0, 0, cw, ch);
   ctx.beginPath();
@@ -535,7 +574,7 @@ function _makeDimTextSprite(text, color, modelH) {
   const fsPx   = 64;  // canvas font size (px) — fixed for crisp rendering
   const canvas = document.createElement('canvas');
   const ctx    = canvas.getContext('2d');
-  ctx.font = `500 ${fsPx}px 'Inter', -apple-system, sans-serif`;
+  ctx.font = `500 ${fsPx}px Arial, 'Helvetica Neue', Helvetica, sans-serif`;
   const tw  = ctx.measureText(text).width;
   const pad = 6;
   const cw  = Math.ceil(tw + pad * 2);
@@ -543,7 +582,7 @@ function _makeDimTextSprite(text, color, modelH) {
   canvas.width  = cw;
   canvas.height = ch;
   // Resizing the canvas resets the ctx state — re-set font.
-  ctx.font = `500 ${fsPx}px 'Inter', -apple-system, sans-serif`;
+  ctx.font = `500 ${fsPx}px Arial, 'Helvetica Neue', Helvetica, sans-serif`;
   ctx.textBaseline = 'middle';
   ctx.textAlign    = 'center';
   ctx.clearRect(0, 0, cw, ch);

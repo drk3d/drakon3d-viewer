@@ -48,6 +48,31 @@ export function deactivateAllTools() {
   S.draggedHandle = null;
   S.controls.enabled = true;
 
+  if (S.gumballActive) {
+    S.gumballActive = false;
+    document.getElementById('btn-gumball')?.classList.remove('active');
+    if (S.gumballTransformControls) {
+      S.gumballTransformControls.detach();
+      S.gumballTransformControls.getHelper().visible = false;
+    }
+    if (S.gumballArcHandles) {
+      S.gumballArcHandles.forEach(h => {
+        S.arcOverlayScene.remove(h.mesh);
+        S.arcOverlayScene.remove(h.hitMesh);
+        h.mesh.geometry.dispose();
+        h.mesh.material.dispose();
+        h.hitMesh.geometry.dispose();
+        h.hitMesh.material.dispose();
+      });
+      S.gumballArcHandles = [];
+    }
+    S.gumballArcDrag = null;
+    if (S.gumballHelper) {
+      S.arcOverlayScene.remove(S.gumballHelper);
+      S.gumballHelper = null;
+    }
+  }
+
   document.getElementById('clipping-panel')?.classList.add('hidden');
   document.getElementById('btn-tool-clipping')?.classList.remove('active');
   document.getElementById('find-panel')?.classList.add('hidden');
@@ -962,41 +987,142 @@ export function reconstructMeasurements(measurements) {
   clearMeasurements();
   if (!measurements || !S.currentModel) return;
   measurements.forEach(m => {
-    const p1 = new THREE.Vector3(...m.p1);
-    const p2 = new THREE.Vector3(...m.p2);
+    const isAngle = m.type === 'angle';
     const size = new THREE.Box3().setFromObject(S.currentModel).getSize(new THREE.Vector3());
     const r = size.length() * 0.003;
     const sphereGeo = new THREE.SphereGeometry(r, 16, 16);
-    
-    const sphere1 = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: 0x10b981, depthTest: false, depthWrite: false }));
-    sphere1.castShadow = false;
-    sphere1.receiveShadow = false;
-    sphere1.position.copy(p1);
-    S.measurementGroup.add(sphere1);
-    
-    const sphere2 = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: 0x10b981, depthTest: false, depthWrite: false }));
-    sphere2.castShadow = false;
-    sphere2.receiveShadow = false;
-    sphere2.position.copy(p2);
-    S.measurementGroup.add(sphere2);
 
-    const lineGeo = new THREE.BufferGeometry().setFromPoints([p1, p2]);
-    const lineMat = new THREE.LineBasicMaterial({ color: 0x10b981, linewidth: 2, depthTest: false, depthWrite: false });
-    const line = new THREE.Line(lineGeo, lineMat);
-    line.castShadow = false;
-    line.receiveShadow = false;
-    S.measurementGroup.add(line);
+    if (isAngle) {
+      if (!m.center) return; // safety check
+      const C = new THREE.Vector3(...m.center);
+      const P1 = new THREE.Vector3(...m.p1);
+      const P2 = new THREE.Vector3(...m.p2);
 
-    const billboard = makeMeasurementBillboard(`${m.dist.toFixed(2)} mm`, p1.clone().add(p2).multiplyScalar(0.5));
-    S.measurementGroup.add(billboard);
+      const stepColors = [0xef4444, 0x10b981, 0x3b82f6];
+      const sphereC = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: stepColors[0], depthTest: false, depthWrite: false }));
+      sphereC.castShadow = false; sphereC.receiveShadow = false;
+      sphereC.position.copy(C);
+      S.measurementGroup.add(sphereC);
 
-    S.completedMeasurements.push({
-      id: m.id,
-      p1: p1,
-      p2: p2,
-      dist: m.dist,
-      objects: [sphere1, sphere2, line, billboard]
-    });
+      const sphereP1 = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: stepColors[1], depthTest: false, depthWrite: false }));
+      sphereP1.castShadow = false; sphereP1.receiveShadow = false;
+      sphereP1.position.copy(P1);
+      S.measurementGroup.add(sphereP1);
+
+      const sphereP2 = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: stepColors[2], depthTest: false, depthWrite: false }));
+      sphereP2.castShadow = false; sphereP2.receiveShadow = false;
+      sphereP2.position.copy(P2);
+      S.measurementGroup.add(sphereP2);
+
+      const lineGeo = new THREE.BufferGeometry().setFromPoints([P1, C, C, P2]);
+      const lineMat = new THREE.LineBasicMaterial({ color: 0xffaa00, linewidth: 2, depthTest: false, depthWrite: false });
+      const line = new THREE.LineSegments(lineGeo, lineMat);
+      line.castShadow = false; line.receiveShadow = false;
+      S.measurementGroup.add(line);
+
+      const v1 = new THREE.Vector3().subVectors(P1, C);
+      const v2 = new THREE.Vector3().subVectors(P2, C);
+      const d1 = v1.length();
+      const d2 = v2.length();
+      let angleDeg = m.angle !== undefined ? m.angle : 0;
+      let arcLine = null;
+      let billboard = null;
+
+      if (d1 > 0.0001 && d2 > 0.0001) {
+        const v1_norm = v1.clone().normalize();
+        const v2_norm = v2.clone().normalize();
+        const cosTheta = v1_norm.dot(v2_norm);
+        const theta = Math.acos(Math.max(-1, Math.min(1, cosTheta)));
+        if (m.angle === undefined) {
+          angleDeg = theta * (180 / Math.PI);
+        }
+
+        if (theta > 0.001) {
+          let normal = new THREE.Vector3().crossVectors(v1_norm, v2_norm).normalize();
+          if (normal.lengthSq() < 0.0001) {
+            normal.set(0, 1, 0).cross(v1_norm).normalize();
+            if (normal.lengthSq() < 0.0001) normal.set(1, 0, 0).cross(v1_norm).normalize();
+          }
+          const xAxis = v1_norm.clone();
+          const yAxis = new THREE.Vector3().crossVectors(normal, xAxis).normalize();
+          const arcRadius = Math.min(d1, d2) * 0.25;
+          const arcPoints = [];
+          const segments = 32;
+          for (let i = 0; i <= segments; i++) {
+            const t = (i / segments) * theta;
+            const x = arcRadius * Math.cos(t);
+            const y = arcRadius * Math.sin(t);
+            const pt = C.clone().addScaledVector(xAxis, x).addScaledVector(yAxis, y);
+            arcPoints.push(pt);
+          }
+          const arcGeo = new THREE.BufferGeometry().setFromPoints(arcPoints);
+          const arcMat = new THREE.LineBasicMaterial({ color: 0xff6600, linewidth: 2.5, depthTest: false, depthWrite: false });
+          arcLine = new THREE.Line(arcGeo, arcMat);
+          arcLine.castShadow = false; arcLine.receiveShadow = false;
+          S.measurementGroup.add(arcLine);
+
+          const halfTheta = theta / 2;
+          const offsetDist = arcRadius + size.length() * 0.02;
+          const xBisect = offsetDist * Math.cos(halfTheta);
+          const yBisect = offsetDist * Math.sin(halfTheta);
+          const billboardPos = C.clone().addScaledVector(xAxis, xBisect).addScaledVector(yAxis, yBisect);
+
+          billboard = makeMeasurementBillboard(`${angleDeg.toFixed(1)}°`, billboardPos);
+          S.measurementGroup.add(billboard);
+        }
+      }
+
+      const mObjects = [sphereC, sphereP1, sphereP2, line];
+      if (arcLine) mObjects.push(arcLine);
+      if (billboard) mObjects.push(billboard);
+
+      S.completedMeasurements.push({
+        id: m.id,
+        type: 'angle',
+        center: C,
+        p1: P1,
+        p2: P2,
+        angle: angleDeg,
+        objects: mObjects
+      });
+
+    } else {
+      const p1 = new THREE.Vector3(...m.p1);
+      const p2 = new THREE.Vector3(...m.p2);
+
+      const sphere1 = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: 0x10b981, depthTest: false, depthWrite: false }));
+      sphere1.castShadow = false;
+      sphere1.receiveShadow = false;
+      sphere1.position.copy(p1);
+      S.measurementGroup.add(sphere1);
+      
+      const sphere2 = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: 0x10b981, depthTest: false, depthWrite: false }));
+      sphere2.castShadow = false;
+      sphere2.receiveShadow = false;
+      sphere2.position.copy(p2);
+      S.measurementGroup.add(sphere2);
+
+      const lineGeo = new THREE.BufferGeometry().setFromPoints([p1, p2]);
+      const lineMat = new THREE.LineBasicMaterial({ color: 0x10b981, linewidth: 2, depthTest: false, depthWrite: false });
+      const line = new THREE.Line(lineGeo, lineMat);
+      line.castShadow = false;
+      line.receiveShadow = false;
+      S.measurementGroup.add(line);
+
+      const dist = m.dist !== undefined ? m.dist : p1.distanceTo(p2);
+
+      const billboard = makeMeasurementBillboard(`${dist.toFixed(2)} mm`, p1.clone().add(p2).multiplyScalar(0.5));
+      S.measurementGroup.add(billboard);
+
+      S.completedMeasurements.push({
+        id: m.id,
+        type: 'distance',
+        p1: p1,
+        p2: p2,
+        dist: dist,
+        objects: [sphere1, sphere2, line, billboard]
+      });
+    }
   });
   renderMeasurementListUI();
 }

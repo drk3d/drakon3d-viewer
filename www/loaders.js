@@ -638,6 +638,50 @@ export async function preprocess3dm(file, skipLayerParse) {
       }
     } catch (e) { console.warn('[pre] layer copy err:', e); }
 
+    try {
+      const srcMaterials = doc.materials();
+      if (srcMaterials) {
+        for (let i = 0; i < srcMaterials.count; i++) {
+          const mat = srcMaterials.get(i);
+          try { cleanDoc.materials().add(mat); } catch {}
+          mat.delete();
+        }
+      }
+    } catch (e) { console.warn('[pre] material copy err:', e); }
+
+    try {
+      const srcEmbeddedFiles = doc.embeddedFiles();
+      if (srcEmbeddedFiles) {
+        for (let i = 0; i < srcEmbeddedFiles.count; i++) {
+          const ef = srcEmbeddedFiles.get(i);
+          try { cleanDoc.embeddedFiles().add(ef); } catch {}
+          ef.delete();
+        }
+      }
+    } catch (e) { console.warn('[pre] embeddedFiles copy err:', e); }
+
+    try {
+      const srcBitmaps = doc.bitmaps();
+      if (srcBitmaps) {
+        for (let i = 0; i < srcBitmaps.count; i++) {
+          const bm = srcBitmaps.get(i);
+          try { cleanDoc.bitmaps().add(bm); } catch {}
+          bm.delete();
+        }
+      }
+    } catch (e) { console.warn('[pre] bitmaps copy err:', e); }
+
+    try {
+      const srcDefinitions = doc.instanceDefinitions();
+      if (srcDefinitions) {
+        for (let i = 0; i < srcDefinitions.count; i++) {
+          const idef = srcDefinitions.get(i);
+          try { cleanDoc.instanceDefinitions().add(idef); } catch {}
+          idef.delete();
+        }
+      }
+    } catch (e) { console.warn('[pre] instanceDefinitions copy err:', e); }
+
     // Helper: extract per-object color override
     // In rhino3dm WASM, attr.colorSource is an Object (enum proxy), not a number,
     // so we can't reliably check for "ByObject" source. Instead, accept any
@@ -1167,16 +1211,8 @@ export async function handleFile(file, rhinoLoader, gltfLoader) {
   }
 
   // ── 3DM ──────────────────────────────────────────────────────────────────
-  let skipLayerParse = false;
-  if (file.size > 50 * 1024 * 1024) {
-    const fullLoad = window.confirm(
-      `큰 파일 (${(file.size / 1048576).toFixed(0)} MB)\n\n` +
-      `[확인]  전체 로드 (레이어 포함, 느림)\n` +
-      `[취소]  빠른 로드 (레이어 없음)`
-    );
-    skipLayerParse = !fullLoad;
-  }
-
+  // Always perform full load with layers (no-op skipLayerParse)
+  const skipLayerParse = false;
   const processedBlob = await preprocess3dm(file, skipLayerParse);
 
   const loadingTextEl = document.getElementById('loading-text');

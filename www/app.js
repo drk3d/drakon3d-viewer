@@ -34,7 +34,7 @@ import {
   onCanvasClick, updateClippingPlane, setupClippingHelper, updateClippingHelperPose,
   cancelCurrentInProgressMeasurement
 } from './tools.js';
-import { onPointerDown, clearSelection, updatePropertiesPanel, addSelectionOutline } from './selection.js';
+import { onPointerDown, clearSelection, updatePropertiesPanel, addSelectionOutline, setupGumballHelper, clearGumballHelper } from './selection.js';
 
 // ── Color Grading Shader ───────────────────────────────────────────────────
 const ColorGradingShader = {
@@ -115,12 +115,15 @@ animate();
 export function setToolbarModelState(loaded) {
   const center = document.getElementById('top-bar-center');
   const layerBtn = document.getElementById('btn-layer-panel');
+  const bottomBar = document.getElementById('bottom-view-tools-bar');
   if (loaded) {
     center?.classList.remove('no-model');
     layerBtn?.classList.remove('no-model');
+    bottomBar?.classList.remove('no-model');
   } else {
     center?.classList.add('no-model');
     layerBtn?.classList.add('no-model');
+    bottomBar?.classList.add('no-model');
   }
 }
 
@@ -131,6 +134,8 @@ function init() {
   setToolbarModelState(false);
 
   S.scene = new THREE.Scene();
+  S.scene.backgroundRotation.x = Math.PI / 2;
+  S.scene.environmentRotation.x = Math.PI / 2;
   S.scene.background = null;
   S.measurementGroup = new THREE.Group();
   S.raycaster = new THREE.Raycaster();
@@ -246,6 +251,24 @@ function init() {
   S.outlinePass.enabled = false;
   S.composer.addPass(S.outlinePass);
 
+  // Dedicated selection outline pass (glowing vibrant electric blue silhouette)
+  S.selectionOutlinePass = new OutlinePass(
+    new THREE.Vector2(window.innerWidth, window.innerHeight),
+    S.scene, S.camera
+  );
+  S.selectionOutlinePass.edgeStrength      = 6.0;
+  S.selectionOutlinePass.edgeGlow          = 0.2;
+  S.selectionOutlinePass.edgeThickness     = 1.0;  // Delicate razor-thin precision outline
+  S.selectionOutlinePass.pulsePeriod       = 0;
+  S.selectionOutlinePass.visibleEdgeColor.set('#0066ff'); // Deep electric blue: excellent contrast on white, glows brilliantly on dark
+  S.selectionOutlinePass.hiddenEdgeColor.set('#002288');
+  
+  // Disable AdditiveBlending to ensure outlines are beautifully visible on white backgrounds
+  S.selectionOutlinePass.overlayMaterial.blending = THREE.CustomBlending;
+  
+  S.selectionOutlinePass.enabled = true; // Renders automatically when selectedObjects is populated
+  S.composer.addPass(S.selectionOutlinePass);
+
   S.cgPass = new ShaderPass(ColorGradingShader);
   S.composer.addPass(S.cgPass);
 
@@ -264,7 +287,8 @@ function init() {
   S.renderer.localClippingEnabled = true;
   S.scene.add(S.measurementGroup);
 
-  S.raycaster.params.Line.threshold = 0.5;
+  S.raycaster.params.Line.threshold = 2.5;
+  S.raycaster.layers.enableAll(); // Enable hit-testing on all layers including layer 1 (annotations)
 
   S.clippingTransformControls = new TransformControls(S.camera, S.renderer.domElement);
   S.clippingTransformControls.setSpace('local');
@@ -276,6 +300,83 @@ function init() {
   
   // Render gizmo helper in the arc overlay scene so it is never clipped
   S.arcOverlayScene.add(S.clippingTransformControls.getHelper());
+
+  // ── Gumball Transform Controls Setup ──
+  S.gumballTransformControls = new TransformControls(S.camera, S.renderer.domElement);
+  S.gumballTransformControls.setSpace('local');
+  S.gumballTransformControls.setMode('translate');
+  S.gumballTransformControls.size = 0.6; // Scale down translate gizmo to 60%
+  S.gumballTransformControls.showX = true;
+  S.gumballTransformControls.showY = true;
+  S.gumballTransformControls.showZ = true;
+  S.arcOverlayScene.add(S.gumballTransformControls.getHelper());
+
+  // Hide negative direction handles for gumball
+  try {
+    const gizmoTranslate = S.gumballTransformControls._gizmo.gizmo['translate'];
+    gizmoTranslate.traverse(child => {
+      const isPlane = child.name && (
+        child.name === 'XY' || child.name === 'YZ' || child.name === 'XZ' ||
+        child.name.includes('XY') || child.name.includes('YZ') || child.name.includes('XZ')
+      );
+      if (isPlane) {
+        child.userData.isPlaneHandle = true;
+      }
+
+      if (!child.geometry) return;
+      child.geometry.computeBoundingBox();
+      const center = child.geometry.boundingBox.getCenter(new THREE.Vector3());
+      const isGeometryNeg = (center.x < -0.02 || center.y < -0.02 || center.z < -0.02);
+      const isPositionNeg = (child.position.x < -0.02 || child.position.y < -0.02 || child.position.z < -0.02);
+      
+      const shouldHide = isPlane || isGeometryNeg || isPositionNeg;
+      if (shouldHide) {
+        child.layers.set(31); // hidden layer
+        const mat = child.material;
+        if (mat) {
+          const clonedMat = mat.clone();
+          clonedMat.transparent = true;
+          clonedMat.opacity = 0;
+          clonedMat.needsUpdate = true;
+          child.material = clonedMat;
+          child.userData.clonedNegMat = clonedMat;
+        }
+        if (isGeometryNeg || isPositionNeg) {
+          child.userData.isNegArrow = true;
+        }
+      }
+    });
+  } catch(e) { console.warn('Gumball negative arrow hide failed:', e); }
+
+  let lastGumballPos = new THREE.Vector3();
+  S.gumballTransformControls.addEventListener('dragging-changed', (event) => {
+    S.controls.enabled = !event.value;
+    if (event.value && S.gumballHelper) {
+      lastGumballPos.copy(S.gumballHelper.position);
+    }
+  });
+
+  S.gumballTransformControls.addEventListener('change', () => {
+    if (S.gumballHelper && S.gumballTransformControls.dragging) {
+      const delta = new THREE.Vector3().subVectors(S.gumballHelper.position, lastGumballPos);
+      
+      S.selectedObjects.forEach(obj => {
+        obj.position.add(delta);
+        obj.updateMatrixWorld(true);
+      });
+      
+      lastGumballPos.copy(S.gumballHelper.position);
+
+      if (S.selectionOutlinePass) {
+        S.selectionOutlinePass.selectedObjects = [...S.selectedObjects];
+      }
+      
+      S.gumballArcHandles.forEach(h => {
+        h.mesh.position.copy(S.gumballHelper.position);
+        h.hitMesh.position.copy(S.gumballHelper.position);
+      });
+    }
+  });
 
   // Hide negative-direction arrowheads permanently via material opacity.
   // TransformControls resets handle.visible = true every frame (source line 1233),
@@ -787,6 +888,29 @@ function bindUI() {
     dropdowns.forEach(dd => document.getElementById(dd.menuId)?.classList.add('hidden'));
   });
 
+  // ── Gumball Toggle ──
+  const gumballBtn = document.getElementById('btn-gumball');
+  gumballBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    // Hide all other dropdowns
+    dropdowns.forEach(dd => document.getElementById(dd.menuId)?.classList.add('hidden'));
+
+    S.gumballActive = !S.gumballActive;
+    gumballBtn.classList.toggle('active', S.gumballActive);
+
+    if (S.gumballActive) {
+      document.getElementById('object-properties').classList.add('hidden');
+      if (S.selectedObjects.length > 0) {
+        setupGumballHelper();
+      }
+    } else {
+      clearGumballHelper();
+      if (S.selectedObjects.length > 0) {
+        updatePropertiesPanel();
+      }
+    }
+  });
+
   document.getElementById('mode-dropdown').querySelectorAll('.dropdown-item').forEach(btn => {
     btn.addEventListener('click', () => {
       const mode = btn.dataset.mode;
@@ -798,6 +922,13 @@ function bindUI() {
       const triggerBtn = document.getElementById('btn-mode-dropdown');
       triggerBtn.querySelector('span').textContent = label;
       triggerBtn.title = `Display Mode (${label})`;
+      
+      // Dynamically replace trigger button icon with selected mode's icon
+      const svg = btn.querySelector('svg').cloneNode(true);
+      const oldSvg = triggerBtn.querySelector('svg');
+      if (oldSvg) {
+        triggerBtn.replaceChild(svg, oldSvg);
+      }
     });
   });
 
@@ -809,6 +940,13 @@ function bindUI() {
         const triggerBtn = document.getElementById('btn-view-dropdown');
         triggerBtn.querySelector('span').textContent = label;
         triggerBtn.title = `View Preset (${label})`;
+
+        // Dynamically replace trigger button icon with selected view's icon
+        const svg = btn.querySelector('svg').cloneNode(true);
+        const oldSvg = triggerBtn.querySelector('svg');
+        if (oldSvg) {
+          triggerBtn.replaceChild(svg, oldSvg);
+        }
       });
     }
   });
@@ -982,10 +1120,22 @@ function bindUI() {
   });
   document.getElementById('btn-isolate-selected').addEventListener('click', () => {
     if (!S.selectedObjects.length || !S.currentModel) return;
+    
+    const isNodeOrAncestorSelected = (node) => {
+      let curr = node;
+      while (curr) {
+        if (S.selectedObjects.includes(curr)) return true;
+        curr = curr.parent;
+      }
+      return false;
+    };
+
     S.currentModel.traverse(child => {
-      if (child.isMesh && child.name !== 'rhino-edges' &&
-          child.name !== 'rhino-outline' && child.name !== 'ground-plane') {
-        if (!S.selectedObjects.includes(child)) {
+      if (child.name === 'rhino-edges' || child.name === 'rhino-outline' || child.name === 'selection-outline' || child.name === 'ground-plane') return;
+
+      const isCandidate = child.isMesh || child.isLine || child.isLineSegments || (child.parent === S.annotationGroup);
+      if (isCandidate) {
+        if (!isNodeOrAncestorSelected(child)) {
           child.visible = false;
           S.hiddenObjects.add(child);
         }
@@ -993,6 +1143,7 @@ function bindUI() {
     });
     updatePropertiesPanel();
   });
+
 
   // ── 7. Tools ──
   document.getElementById('btn-tool-distance').addEventListener('click', (e) => {
@@ -1476,15 +1627,92 @@ function bindUI() {
     return Math.atan2(offset.dot(perp2), offset.dot(perp1));
   }
 
+  // Helper: raycast against gumball arc hit meshes
+  function hitTestGumballArcHandles(clientX, clientY) {
+    if (!S.gumballHelper || !S.gumballActive || S.gumballArcHandles.length === 0) return null;
+    const mouse = new THREE.Vector2(
+      (clientX / window.innerWidth) * 2 - 1,
+      -(clientY / window.innerHeight) * 2 + 1
+    );
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(mouse, S.camera);
+    // Collect all arc meshes (visible + hit areas)
+    const arcMeshes = [];
+    S.gumballArcHandles.forEach(h => { arcMeshes.push(h.mesh, h.hitMesh); });
+    const hits = raycaster.intersectObjects(arcMeshes, false);
+    if (hits.length > 0) {
+      const obj = hits[0].object;
+      const axis = obj.userData.gumballArcAxis;
+      return axis || null;
+    }
+    return null;
+  }
+
+  // Helper: get signed angle of pointer projected onto gumball arc plane
+  function getGumballArcPointerAngle(clientX, clientY, axis) {
+    if (!S.gumballHelper) return 0;
+    // Project screen ray onto the plane of the arc (local plane, world-space)
+    const mouse = new THREE.Vector2(
+      (clientX / window.innerWidth) * 2 - 1,
+      -(clientY / window.innerHeight) * 2 + 1
+    );
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(mouse, S.camera);
+
+    // Build a plane perpendicular to the axis in world space
+    const worldAxisMap = { x: new THREE.Vector3(1,0,0), y: new THREE.Vector3(0,1,0), z: new THREE.Vector3(0,0,1) };
+    const localAxis = worldAxisMap[axis].clone();
+    localAxis.applyQuaternion(S.gumballHelper.quaternion);
+    const center = S.gumballHelper.position.clone();
+    const planePt = new THREE.Plane().setFromNormalAndCoplanarPoint(localAxis, center);
+    const intersection = new THREE.Vector3();
+    raycaster.ray.intersectPlane(planePt, intersection);
+    if (!intersection) return 0;
+    const offset = intersection.clone().sub(center);
+    // Choose two reference vectors perpendicular to the axis for angle computation
+    let ref = localAxis.clone().cross(new THREE.Vector3(0, 1, 0));
+    if (ref.length() < 0.01) ref = localAxis.clone().cross(new THREE.Vector3(1, 0, 0));
+    ref.normalize();
+    const perp1 = ref;
+    const perp2 = localAxis.clone().cross(perp1).normalize();
+    return Math.atan2(offset.dot(perp2), offset.dot(perp1));
+  }
+
   S.renderer.domElement.addEventListener('pointerdown', (e) => {
     pointerDownTime = performance.now();
     pointerDownPos.set(e.clientX, e.clientY);
 
-    // Check arc handles first
+    // Check Gumball arc handles first
+    const gumballArcAxis = hitTestGumballArcHandles(e.clientX, e.clientY);
+    if (gumballArcAxis) {
+      e.preventDefault();
+      S.controls.enabled = false;
+      if (S.gumballTransformControls) S.gumballTransformControls.enabled = false;
+      const startAngle = getGumballArcPointerAngle(e.clientX, e.clientY, gumballArcAxis);
+      
+      const startObjectPositions = [];
+      const startObjectQuats = [];
+      S.selectedObjects.forEach(obj => {
+        startObjectPositions.push(obj.position.clone());
+        startObjectQuats.push(obj.quaternion.clone());
+      });
+
+      S.gumballArcDrag = {
+        axis: gumballArcAxis,
+        startAngle,
+        startQuat: S.gumballHelper.quaternion.clone(),
+        startObjectPositions,
+        startObjectQuats
+      };
+      return;
+    }
+
+    // Check clipping arc handles next
     const arcAxis = hitTestArcHandles(e.clientX, e.clientY);
     if (arcAxis) {
       e.preventDefault();
       S.controls.enabled = false;
+      if (S.clippingTransformControls) S.clippingTransformControls.enabled = false;
       const startAngle = getArcPointerAngle(e.clientX, e.clientY, arcAxis);
       S.clippingArcDrag = {
         axis: arcAxis,
@@ -1499,9 +1727,51 @@ function bindUI() {
 
   S.renderer.domElement.addEventListener('pointermove', (e) => {
     // Update cursor when hovering over arc handles
-    if (!S.clippingArcDrag) {
+    if (!S.clippingArcDrag && !S.gumballArcDrag) {
       const axis = hitTestArcHandles(e.clientX, e.clientY);
-      S.renderer.domElement.style.cursor = axis ? 'grab' : '';
+      const gAxis = hitTestGumballArcHandles(e.clientX, e.clientY);
+      S.renderer.domElement.style.cursor = (axis || gAxis) ? 'grab' : '';
+    }
+
+    if (S.gumballArcDrag) {
+      e.preventDefault();
+      const { axis, startAngle, startQuat, startObjectPositions, startObjectQuats } = S.gumballArcDrag;
+      const currentAngle = getGumballArcPointerAngle(e.clientX, e.clientY, axis);
+      const delta = currentAngle - startAngle;
+
+      // Build rotation quaternion around local-space axis of S.gumballHelper
+      const worldAxisMap = { x: new THREE.Vector3(1,0,0), y: new THREE.Vector3(0,1,0), z: new THREE.Vector3(0,0,1) };
+      const localAxis = worldAxisMap[axis].clone().applyQuaternion(startQuat).normalize();
+      const rotQ = new THREE.Quaternion().setFromAxisAngle(localAxis, delta);
+
+      // Rotate S.gumballHelper
+      S.gumballHelper.quaternion.copy(rotQ).multiply(startQuat);
+      S.gumballHelper.updateMatrixWorld(true);
+
+      // Rotate all selected objects around S.gumballHelper.position (pivot)
+      const pivot = S.gumballHelper.position.clone();
+      S.selectedObjects.forEach((obj, idx) => {
+        const startPos = startObjectPositions[idx].clone();
+        const startQuatObj = startObjectQuats[idx].clone();
+
+        const offset = startPos.sub(pivot);
+        offset.applyQuaternion(rotQ);
+        obj.position.copy(pivot).add(offset);
+
+        obj.quaternion.copy(rotQ).multiply(startQuatObj);
+        obj.updateMatrixWorld(true);
+      });
+
+      // Sync arc handles' orientations to match S.gumballHelper
+      S.gumballArcHandles.forEach(h => {
+        h.mesh.quaternion.copy(S.gumballHelper.quaternion);
+        h.hitMesh.quaternion.copy(S.gumballHelper.quaternion);
+      });
+
+      if (S.selectionOutlinePass) {
+        S.selectionOutlinePass.selectedObjects = [...S.selectedObjects];
+      }
+      return;
     }
 
     if (S.clippingArcDrag) {
@@ -1553,10 +1823,26 @@ function bindUI() {
   });
 
   S.renderer.domElement.addEventListener('pointerup', (e) => {
+    if (S.gumballArcDrag) {
+      S.gumballArcDrag = null;
+      S.controls.enabled = true;
+      S.renderer.domElement.style.cursor = '';
+      if (S.gumballTransformControls) S.gumballTransformControls.enabled = true;
+
+      // Immediately refresh TransformControls to snap handles to the new rotation!
+      if (S.gumballTransformControls && S.gumballHelper) {
+        S.gumballTransformControls.detach();
+        S.gumballTransformControls.attach(S.gumballHelper);
+        S.gumballTransformControls.getHelper().visible = true;
+      }
+      return;
+    }
+
     if (S.clippingArcDrag) {
       S.clippingArcDrag = null;
       S.controls.enabled = true;
       S.renderer.domElement.style.cursor = '';
+      if (S.clippingTransformControls) S.clippingTransformControls.enabled = true;
 
       // Immediately refresh TransformControls to snap handles to the new rotation!
       if (S.clippingTransformControls && S.clippingHelper) {
@@ -1656,6 +1942,16 @@ function bindUI() {
 // ── Core render loop ───────────────────────────────────────────────────────
 function animate() {
   requestAnimationFrame(animate);
+
+  // Exclude all measurement elements (lines, sprites, handles) from AO (SSAO/GTAO) and shadows by moving them to Layer 1
+  if (S.measurementGroup) {
+    S.measurementGroup.traverse(child => {
+      if (child.layers.mask !== 2) {
+        child.layers.set(1);
+      }
+    });
+  }
+
   if (S.clippingTransformControls) {
     // Enforce hiding negative direction arrowheads permanently!
     try {
@@ -1709,6 +2005,26 @@ function animate() {
         console.warn('Arc scale sync error:', err);
       }
     }
+
+    // Sync Gumball arc handle scale with the TransformControls screen-space scale
+    if (S.gumballActive && S.gumballArcHandles && S.gumballArcHandles.length > 0) {
+      try {
+        const gizmoTranslate = S.gumballTransformControls._gizmo?.gizmo?.['translate'];
+        let handleScale = 1;
+        if (gizmoTranslate && gizmoTranslate.children.length > 0) {
+          handleScale = gizmoTranslate.children[0].scale.x;
+        }
+        const targetScale = Math.max(0.001, handleScale) * 0.05;
+        S.gumballArcHandles.forEach(h => {
+          if (h.mesh && h.hitMesh) {
+            h.mesh.scale.set(targetScale, targetScale, targetScale);
+            h.hitMesh.scale.set(targetScale, targetScale, targetScale);
+          }
+        });
+      } catch (err) {
+        console.warn('Gumball arc scale sync error:', err);
+      }
+    }
   }
   if (S.cameraTransition) {
     const now     = performance.now();
@@ -1728,7 +2044,7 @@ function animate() {
   S.composer.render();
 
   // Render arc overlay scene on top — no clipping planes active
-  if (S.clippingEnabled && S.arcOverlayScene && S.arcOverlayScene.children.length > 0) {
+  if ((S.clippingEnabled || S.gumballActive) && S.arcOverlayScene && S.arcOverlayScene.children.length > 0) {
     const savedPlanes = S.renderer.clippingPlanes;
     S.renderer.clippingPlanes = [];           // disable clipping for overlay
     S.renderer.autoClear = false;             // don't clear what composer already drew
@@ -1752,6 +2068,7 @@ function onWindowResize() {
   S.renderer.setSize(window.innerWidth, window.innerHeight);
   S.composer.setSize(window.innerWidth, window.innerHeight);
   if (S.outlinePass?.setSize) S.outlinePass.setSize(window.innerWidth, window.innerHeight);
+  if (S.selectionOutlinePass?.setSize) S.selectionOutlinePass.setSize(window.innerWidth, window.innerHeight);
   if (S.smaaPass?.setSize)    S.smaaPass.setSize(window.innerWidth, window.innerHeight);
   if (S.gtaoPass?.setSize)    S.gtaoPass.setSize(window.innerWidth, window.innerHeight);
   if (S.ssaoPass?.setSize)    S.ssaoPass.setSize(window.innerWidth, window.innerHeight);

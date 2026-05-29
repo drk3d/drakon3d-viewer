@@ -100,12 +100,21 @@ export async function saveSession(customFileName = null) {
       projection: S.camera.isOrthographicCamera ? 'parallel' : 'perspective'
     };
 
-    const measurements = S.completedMeasurements.map(m => ({
-      id:   m.id,
-      p1:   [m.p1.x, m.p1.y, m.p1.z],
-      p2:   [m.p2.x, m.p2.y, m.p2.z],
-      dist: m.dist
-    }));
+    const measurements = S.completedMeasurements.map(m => {
+      const saved = {
+        id:   m.id,
+        type: m.type || 'distance',
+        p1:   [m.p1.x, m.p1.y, m.p1.z],
+        p2:   [m.p2.x, m.p2.y, m.p2.z]
+      };
+      if (m.type === 'angle') {
+        saved.center = [m.center.x, m.center.y, m.center.z];
+        saved.angle = m.angle;
+      } else {
+        saved.dist = m.dist;
+      }
+      return saved;
+    });
 
     const data = {
       version:             3, // version 3 includes unified geometry and annotations

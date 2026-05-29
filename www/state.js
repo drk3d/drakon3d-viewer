@@ -104,6 +104,13 @@ export const S = {
   clipAxis:                  'z',
   clipFlipped:               false,
 
+  // ── Gumball ──────────────────────────────────────────────────────────────
+  gumballActive:             false,
+  gumballTransformControls:  null,
+  gumballHelper:             null,
+  gumballArcHandles:         [],   // Array of {mesh, hitMesh, axis: 'x'|'y'|'z'} for custom rotation arcs
+  gumballArcDrag:            null, // Active drag state: {axis, startAngle, startQuat, startPositions, startQuats}
+
   // ── BVH ──────────────────────────────────────────────────────────────────
   bvhReady: false,
 

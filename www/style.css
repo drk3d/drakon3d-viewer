@@ -54,7 +54,7 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: 'Noto Sans KR', 'Noto Sans JP', 'Noto Sans SC', 'Noto Sans TC', 'Noto Sans', -apple-system, BlinkMacSystemFont, sans-serif;
   background: var(--bg);
   color: var(--text);
   overflow: hidden;
@@ -400,7 +400,7 @@ input[type="file"] { display: none; }
   top: 72px;
   right: 12px;
   width: 290px;
-  height: 350px;
+  height: 430px;
   min-width: 240px;
   min-height: 150px;
   resize: both;
@@ -1054,7 +1054,8 @@ input[type="range"]::-moz-range-thumb {
 
 /* ── No-model disabled state: center toolbar + layer button ── */
 #top-bar-center.no-model,
-#btn-layer-panel.no-model {
+#btn-layer-panel.no-model,
+#bottom-view-tools-bar.no-model {
   pointer-events: none;
   opacity: 0.35;
 }
@@ -1118,6 +1119,19 @@ input[type="range"]::-moz-range-thumb {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+.left-sidebar-footer {
+  padding: 16px;
+  font-size: 0.78rem; /* 약간 더 크게 */
+  font-weight: 700; /* 로고타입 형태의 볼드 서체 */
+  color: var(--text); /* 자동으로 어두운 배경에선 밝은색, 밝은 배경에선 어두운색 */
+  letter-spacing: 0.08em; /* 자간을 벌려 브랜드 느낌 강화 */
+  text-align: left;
+  flex-shrink: 0;
+  opacity: 0.8; /* 한층 더 또렷하고 선명하게 */
+  user-select: none;
+  font-family: 'Noto Sans', sans-serif;
+  border-top: 1px solid var(--panel-border-color);
 }
 
 .tab-section {
@@ -1207,15 +1221,15 @@ input[type="range"]::-moz-range-thumb {
 .app-version-tag {
   margin-left: auto;
   margin-right: 8px;
-  font-size: 0.62rem;
-  font-weight: 400;
+  font-size: 0.68rem;
+  font-weight: 500;
   color: var(--text-2);
-  opacity: 0.6;
-  letter-spacing: 0.03em;
-  font-family: monospace;
+  opacity: 0.7;
+  letter-spacing: 0.02em;
+  font-family: 'Noto Sans', sans-serif;
   user-select: none;
   position: relative;
-  top: 3px;  /* Settings 텍스트 베이스라인 쪽으로 살짝 내림 */
+  top: 1px;
 }
 
 .right-panel-content {
@@ -1479,7 +1493,7 @@ input[type="range"]::-moz-range-thumb {
   font-size: 0.66rem;
   font-weight: 700;
   cursor: pointer;
-  font-family: 'Inter', monospace;
+  font-family: 'Noto Sans', monospace;
   transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
 .clip-axis-btn:hover { background: var(--surface-hi); color: var(--text); }
@@ -1683,18 +1697,33 @@ input[type="range"]::-moz-range-thumb {
   position: fixed;
   bottom: 16px;
   right: 20px;
-  font-size: 0.82rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  color: rgba(255, 255, 255, 0.16);
+  font-size: 0.68rem; /* 조금 더 작고 컴팩트하게 조율 */
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  color: rgba(255, 255, 255, 0.55); /* 어두운 배경에서 한층 더 선명하고 밝은 기본 색상 */
   z-index: 5;
-  pointer-events: none;
-  font-family: 'Outfit', 'Inter', sans-serif;
+  pointer-events: auto; /* Clickable link */
+  font-family: 'Noto Sans', sans-serif;
   user-select: none;
   transition: color 0.2s;
 }
+#byrhinoview-watermark a {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+#byrhinoview-watermark a:hover {
+  text-decoration: underline;
+}
 #byrhinoview-watermark:hover {
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(255, 255, 255, 0.95); /* 어두운 배경에서 호버 시 매우 밝고 선명한 흰색 */
+}
+:not([data-theme="dark"]) #byrhinoview-watermark:hover {
+  color: rgba(0, 0, 0, 0.85) !important; /* 밝은 배경에서 호버 시 더욱 또렷한 검은색 */
+}
+body.light-theme #byrhinoview-watermark:hover {
+  color: rgba(0, 0, 0, 0.85) !important; /* 밝은 배경에서 호버 시 더욱 또렷한 검은색 */
 }
 
 /* ── Light Mode Color Overrides ── */
@@ -1725,9 +1754,19 @@ input[type="range"]::-moz-range-thumb {
     background: rgba(0, 0, 0, 0.02) !important;
     border-color: rgba(0, 0, 0, 0.06) !important;
   }
+  :not([data-theme="dark"]) .panel-action-btn.btn-primary {
+    background: var(--primary) !important;
+    border-color: var(--primary) !important;
+    color: #ffffff !important;
+  }
   :not([data-theme="dark"]) .panel-action-btn:hover {
     background: rgba(0, 0, 0, 0.04) !important;
     border-color: rgba(0, 0, 0, 0.12) !important;
+  }
+  :not([data-theme="dark"]) .panel-action-btn.btn-primary:hover {
+    background: var(--primary-hi) !important;
+    border-color: var(--primary-hi) !important;
+    color: #ffffff !important;
   }
   :not([data-theme="dark"]) .panel-action-btn:hover svg { color: #111827 !important; }
   :not([data-theme="dark"]) .panel-sub-card,
@@ -1744,7 +1783,7 @@ input[type="range"]::-moz-range-thumb {
   :not([data-theme="dark"]) .sliders-grid input[type="range"] { background: rgba(0, 0, 0, 0.08) !important; }
   :not([data-theme="dark"]) .layer-editable-name { color: #1f2937 !important; }
   :not([data-theme="dark"]) .layer-editable-name:focus { background: rgba(0, 0, 0, 0.04) !important; }
-  :not([data-theme="dark"]) #byrhinoview-watermark { color: rgba(0, 0, 0, 0.12) !important; }
+  :not([data-theme="dark"]) #byrhinoview-watermark { color: rgba(0, 0, 0, 0.45) !important; }
   :not([data-theme="dark"]) #empty-state { color: #6b7280 !important; }
 
   /* Popups premium white styling */
@@ -1834,9 +1873,19 @@ body.light-theme .panel-action-btn {
   background: rgba(0, 0, 0, 0.02) ;
   border-color: rgba(0, 0, 0, 0.06) ;
 }
+body.light-theme .panel-action-btn.btn-primary {
+  background: var(--primary) !important;
+  border-color: var(--primary) !important;
+  color: #ffffff !important;
+}
 body.light-theme .panel-action-btn:hover {
   background: rgba(0, 0, 0, 0.04) ;
   border-color: rgba(0, 0, 0, 0.12) ;
+}
+body.light-theme .panel-action-btn.btn-primary:hover {
+  background: var(--primary-hi) !important;
+  border-color: var(--primary-hi) !important;
+  color: #ffffff !important;
 }
 body.light-theme .panel-action-btn:hover svg { color: #111827 ; }
 body.light-theme .panel-sub-card, 
@@ -1853,7 +1902,7 @@ body.light-theme .setting-item-panel input[type="checkbox"]:not(:checked) { back
 body.light-theme .sliders-grid input[type="range"] { background: rgba(0, 0, 0, 0.08) ; }
 body.light-theme .layer-editable-name { color: #1f2937 ; }
 body.light-theme .layer-editable-name:focus { background: rgba(0, 0, 0, 0.04) ; }
-body.light-theme #byrhinoview-watermark { color: rgba(0, 0, 0, 0.12) ; }
+body.light-theme #byrhinoview-watermark { color: rgba(0, 0, 0, 0.45) ; }
 body.light-theme #empty-state { color: #6b7280 ; }
 body.light-theme #loading {
   background: rgba(255, 255, 255, 0.75) ;
@@ -2338,24 +2387,28 @@ body.light-theme .metadata-table td.meta-label {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: var(--surface);
+  background: rgba(255, 255, 255, 0.4);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--border);
-  padding: 6px 8px;
-  border-radius: 12px;
-  box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+  padding: 4px 6px;
+  border-radius: 10px;
+  box-shadow: none;
   pointer-events: auto;
   transition: opacity 0.2s, transform 0.2s;
+}
+
+body.dark-theme .bottom-tools-bar {
+  background: rgba(0, 0, 0, 0.4);
 }
 
 .bottom-tool-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
   background: transparent;
   border: none;
   color: var(--text-2);
@@ -2364,8 +2417,8 @@ body.light-theme .metadata-table td.meta-label {
 }
 
 .bottom-tool-btn svg {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
 }
 
 .bottom-tool-btn:hover {
@@ -2377,9 +2430,14 @@ body.light-theme .metadata-table td.meta-label {
   background: var(--border);
 }
 
+.bottom-tool-btn.active {
+  background: var(--primary-dim);
+  color: var(--primary);
+}
+
 .bottom-tool-separator {
   width: 1px;
-  height: 18px;
+  height: 14px;
   background: var(--border);
   margin: 0 4px;
 }
@@ -2402,27 +2460,34 @@ body.light-theme .metadata-table td.meta-label {
   height: 100% !important;
   border-radius: 50% !important;
   border: none !important;
+  background: transparent !important;
+  background-color: transparent !important;
   background-image: none !important;
   box-shadow: none !important;
   outline: none !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
 }
 
 /* Force flat 2D color circles with absolutely no glossy/crescent shapes or bevels */
 .color-circle,
 .color-circle * {
   box-shadow: none !important;
+  background: transparent !important;
   background-image: none !important;
 }
 
 /* Hide any pseudo-element decorations, shadows, or gradients */
 .color-circle .clr-field::after,
-.color-circle .clr-field button::after,
 .color-circle .clr-field::before,
-.color-circle .clr-field button::before {
+.color-circle .clr-field button::after,
+.color-circle .clr-field button::before,
+.color-circle .clr-field button:after,
+.color-circle .clr-field button:before {
   display: none !important;
   content: none !important;
   box-shadow: none !important;
-  background: none !important;
+  background: transparent !important;
   background-image: none !important;
 }
 
@@ -2430,3 +2495,19 @@ body.light-theme .metadata-table td.meta-label {
 body.light-theme .color-circle {
   border: 2px solid rgba(0, 0, 0, 0.12) !important;
 }
+
+/* ── Mobile Responsive Layout adjustments (Prevent watermark overlap) ── */
+@media (max-width: 560px) {
+  .bottom-tools-bar {
+    bottom: 52px !important; /* Push up slightly to prevent intersection */
+  }
+  #byrhinoview-watermark {
+    bottom: 18px !important;
+    right: auto !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    letter-spacing: 0.05em;
+    text-align: center;
+  }
+}
+

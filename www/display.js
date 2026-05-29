@@ -353,6 +353,9 @@ export function applyDisplayMode() {
     const childAttrs = child.userData.attributes || {};
     const childLayer = S.parsedLayers.find(l => l.index === childAttrs.layerIndex);
     const rawColor = () => {
+      if (child.userData.objectColorCustom) {
+        return new THREE.Color(child.userData.objectColorCustom);
+      }
       const oc = childAttrs.objectColor;
       const hasOverride = oc && ((oc.r ?? 0) > 0 || (oc.g ?? 0) > 0 || (oc.b ?? 0) > 0);
       const out = new THREE.Color(0, 0, 0);
@@ -496,6 +499,31 @@ export function applyDisplayMode() {
 
     }
   });
+
+  // ── Sync the display mode dropdown button UI dynamically ──
+  const dropdown = document.getElementById('mode-dropdown');
+  if (dropdown) {
+    const activeItem = dropdown.querySelector(`.dropdown-item[data-mode="${S.currentMode}"]`);
+    if (activeItem) {
+      // Keep dropdown active classes in sync
+      dropdown.querySelectorAll('.dropdown-item').forEach(b => b.classList.toggle('active', b === activeItem));
+      // Update top trigger button label & title
+      const triggerBtn = document.getElementById('btn-mode-dropdown');
+      if (triggerBtn) {
+        const label = activeItem.querySelector('span').textContent.split(' ')[0];
+        const triggerLabel = triggerBtn.querySelector('span');
+        if (triggerLabel) triggerLabel.textContent = label;
+        triggerBtn.title = `Display Mode (${label})`;
+        
+        // Clone and swap the active mode's SVG icon onto the trigger button
+        const svg = activeItem.querySelector('svg').cloneNode(true);
+        const oldSvg = triggerBtn.querySelector('svg');
+        if (oldSvg) {
+          triggerBtn.replaceChild(svg, oldSvg);
+        }
+      }
+    }
+  }
 }
 
 // ── Material Utilities ───────────────────────────────────────────────────────

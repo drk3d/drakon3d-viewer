@@ -94,7 +94,7 @@ export function updateAllSliderFills() {
 // ── Select icon ──────────────────────────────────────────────────────────────
 
 export function updateSelectIcon(mode) {
-  const btn = document.getElementById('btn-select');
+  const btn = document.getElementById('btn-select-dropdown');
   if (!btn) return;
   const iconSingle = btn.querySelector('.icon-select-single');
   const iconMulti  = btn.querySelector('.icon-select-multi');
