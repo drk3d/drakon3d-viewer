@@ -671,12 +671,71 @@ export async function preprocess3dm(file, skipLayerParse) {
       }
     } catch (e) { console.warn('[pre] bitmaps copy err:', e); }
 
+    const idefIdMap = new Map();
     try {
       const srcDefinitions = doc.instanceDefinitions();
       if (srcDefinitions) {
         for (let i = 0; i < srcDefinitions.count; i++) {
           const idef = srcDefinitions.get(i);
-          try { cleanDoc.instanceDefinitions().add(idef); } catch {}
+          if (idef) {
+            const name = idef.name || `Block_${i}`;
+            const description = idef.description || "";
+            const oldId = idef.id;
+
+            let url = "";
+            let urlTag = "";
+            try { url = idef.url || ""; } catch {}
+            try { urlTag = idef.urlTag || ""; } catch {}
+
+            const basePoint = [0, 0, 0];
+            try {
+              const bp = idef.basePoint;
+              if (bp) {
+                basePoint[0] = bp.X ?? bp.x ?? 0;
+                basePoint[1] = bp.Y ?? bp.y ?? 0;
+                basePoint[2] = bp.Z ?? bp.z ?? 0;
+              }
+            } catch {}
+
+            const geometryArray = [];
+            const attributesArray = [];
+            try {
+              const objectIds = idef.getObjectIds();
+              if (objectIds) {
+                objectIds.forEach(id => {
+                  const objInDoc = doc.objects().findId(id);
+                  if (objInDoc) {
+                    const geom = objInDoc.geometry();
+                    const attr = objInDoc.attributes();
+                    if (geom) {
+                      geometryArray.push(geom);
+                      attributesArray.push(attr || null);
+                    }
+                    try { objInDoc.delete(); } catch {}
+                  }
+                });
+              }
+            } catch (errIds) {
+              console.warn('[pre] idef getObjectIds err:', errIds);
+            }
+
+            try {
+              const cleanIdx = cleanDoc.instanceDefinitions().add(name, description, url, urlTag, basePoint, geometryArray, attributesArray);
+              if (cleanIdx >= 0) {
+                const cleanIdef = cleanDoc.instanceDefinitions().get(cleanIdx);
+                if (cleanIdef) {
+                  const newId = cleanIdef.id;
+                  if (oldId && newId) idefIdMap.set(oldId, newId);
+                  try { cleanIdef.delete(); } catch {}
+                }
+              }
+            } catch (errAdd) {
+              console.warn('[pre] cleanDoc.instanceDefinitions.add err:', errAdd);
+            } finally {
+              geometryArray.forEach(g => { try { g.delete(); } catch {} });
+              attributesArray.forEach(a => { if (a) { try { a.delete(); } catch {} } });
+            }
+          }
           idef.delete();
         }
       }
@@ -738,6 +797,9 @@ export async function preprocess3dm(file, skipLayerParse) {
           || geomName === 'Leader'     || geomNameLc.includes('annotation')
           || geomNameLc.includes('leader')
         );
+        const isInstanceReference = safeInst(geom, S.rhinoInstance.InstanceReference)
+          || geomName === 'InstanceReference'
+          || geomNameLc.includes('instancereference');
 
         if (isSubD) {
           hasSubD = true;
@@ -893,6 +955,24 @@ export async function preprocess3dm(file, skipLayerParse) {
               layerIndex: attr?.layerIndex ?? 0
             });
           } catch (e) { console.warn('[pre] Annotation err:', e.message); }
+
+        } else if (isInstanceReference) {
+          try {
+            const oldParentId = geom.parentIdefId;
+            const newParentId = idefIdMap.get(oldParentId);
+            if (newParentId) {
+              const newRef = new S.rhinoInstance.InstanceReference(newParentId, geom.xform);
+              attr ? cleanDoc.objects().add(newRef, attr) : cleanDoc.objects().add(newRef);
+              try { newRef.delete(); } catch {}
+            } else {
+              attr ? cleanDoc.objects().add(geom, attr) : cleanDoc.objects().add(geom);
+            }
+          } catch (e) {
+            console.warn('[pre] InstanceReference mapping err:', e.message);
+            try {
+              attr ? cleanDoc.objects().add(geom, attr) : cleanDoc.objects().add(geom);
+            } catch (e2) {}
+          }
 
         } else {
           try {

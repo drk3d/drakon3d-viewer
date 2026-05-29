@@ -602,5 +602,8 @@ export function applyCustomToMaterial(mat, custom) {
     mat.transparent = custom.opacity < 0.999;
     mat.depthWrite  = custom.opacity >= 0.999;
   }
+  if (custom.mapTexture !== undefined) {
+    mat.map = custom.mapTexture;
+  }
   mat.needsUpdate = true;
 }

@@ -280,6 +280,9 @@ export function updatePropertiesPanel() {
     const matMetalness = custom.metalness ?? (orig?.metalness ?? 0.0);
     const matOpacity   = custom.opacity   ?? (orig?.opacity   ?? 1.0);
     const hasCustom    = !!obj.userData.customMaterial;
+    const mapTexture   = custom.hasOwnProperty('mapTexture') ? custom.mapTexture : (orig?.map ?? null);
+    const hasTex       = !!mapTexture;
+    const texName      = custom.mapName ?? (orig?.map?.name || (orig?.map ? 'Texture' : 'None'));
 
     htmlContent += `
       <div class="mat-divider"></div>
@@ -305,6 +308,25 @@ export function updatePropertiesPanel() {
           <span class="mat-label">Opacity</span>
           <input type="range" id="mat-opacity" min="0" max="1" step="0.01" value="${matOpacity.toFixed(2)}" style="flex:1">
           <span class="mat-val" id="mat-opacity-val">${matOpacity.toFixed(2)}</span>
+        </div>
+        <div class="mat-row" style="align-items: center; gap: 8px;">
+          <span class="mat-label">Texture</span>
+          <div style="display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0;">
+            <button id="btn-mat-tex-upload" class="panel-action-btn" style="padding: 3px 8px; font-size: 0.68rem; margin: 0; background: var(--bg-3); border: 1px solid var(--border); border-radius: 4px; height: auto;">
+              Upload
+            </button>
+            <input type="file" id="mat-tex-file-input" accept="image/*" style="display: none;">
+            <span id="mat-tex-name" style="font-size: 0.65rem; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 110px;" title="${texName}">
+              ${texName}
+            </span>
+            ${hasTex ? `
+              <button id="btn-mat-tex-remove" style="background: none; border: none; color: var(--text-3); cursor: pointer; padding: 2px; display: inline-flex; align-items: center; margin-left: auto;">
+                <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            ` : ''}
+          </div>
         </div>
         <div class="mat-footer">
           <button id="btn-mat-reset" class="text-btn" style="font-size:0.74rem"${hasCustom ? '' : ' disabled'}>Reset</button>
@@ -440,6 +462,36 @@ export function updatePropertiesPanel() {
       enableResetBtn();
       applyDisplayMode();
     });
+    document.getElementById('btn-mat-tex-upload').addEventListener('click', () => {
+      document.getElementById('mat-tex-file-input').click();
+    });
+    document.getElementById('mat-tex-file-input').addEventListener('change', e => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const url = URL.createObjectURL(file);
+      new THREE.TextureLoader().load(url, texture => {
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.needsUpdate = true;
+        
+        ensureCustomMaterial(obj);
+        obj.userData.customMaterial.mapTexture = texture;
+        obj.userData.customMaterial.mapName = file.name;
+        
+        enableResetBtn();
+        applyDisplayMode();
+        updatePropertiesPanel();
+      });
+    });
+    document.getElementById('btn-mat-tex-remove')?.addEventListener('click', () => {
+      ensureCustomMaterial(obj);
+      obj.userData.customMaterial.mapTexture = null;
+      obj.userData.customMaterial.mapName = 'None';
+      enableResetBtn();
+      applyDisplayMode();
+      updatePropertiesPanel();
+    });
     document.getElementById('btn-mat-reset').addEventListener('click', () => {
       obj.userData.customMaterial = null;
       applyDisplayMode();
@@ -460,10 +512,12 @@ export function ensureCustomMaterial(obj) {
   if (!obj.userData.customMaterial) {
     const orig = obj.userData.renderedMaterial || obj.userData.originalMaterial;
     obj.userData.customMaterial = {
-      color:     '#' + (orig?.color?.getHexString() ?? 'ffffff'),
-      roughness: orig?.roughness ?? 0.5,
-      metalness: orig?.metalness ?? 0.0,
-      opacity:   orig?.opacity   ?? 1.0
+      color:      '#' + (orig?.color?.getHexString() ?? 'ffffff'),
+      roughness:  orig?.roughness ?? 0.5,
+      metalness:  orig?.metalness ?? 0.0,
+      opacity:    orig?.opacity   ?? 1.0,
+      mapTexture: orig?.map ?? null,
+      mapName:    orig?.map?.name || (orig?.map ? 'Texture' : 'None')
     };
   }
 }
