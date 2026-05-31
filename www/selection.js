@@ -206,108 +206,213 @@ export function updatePropertiesPanel() {
   const panel = document.getElementById('object-properties');
   if (!S.selectedObjects.length) { panel.classList.add('hidden'); return; }
 
-  if (S.selectedObjects.length > 1) {
-    document.getElementById('prop-content').innerHTML = `
-      <div style="grid-column:1/-1;text-align:center;padding:8px 0">
-        <b>${S.selectedObjects.length} objects selected</b><br><br>
-        <div style="display:flex;gap:8px;justify-content:center">
-          <button id="btn-clear-selection" class="text-btn">Clear Selection</button>
-        </div>
-      </div>`;
-    document.getElementById('btn-clear-selection').addEventListener('click', () => {
-      clearSelection(); updatePropertiesPanel();
+  const isMulti = S.selectedObjects.length > 1;
+
+  // ── Extract Name and Layer ───────────────────────────────────────────
+  let displayName = 'Unnamed';
+  if (isMulti) {
+    let commonName = null;
+    let nameSame = true;
+    S.selectedObjects.forEach((o, i) => {
+      const n = o.userData.attributes?.name || (o.userData.annIndex !== undefined ? (S.parsedAnnotations[o.userData.annIndex].type || 'Annotation') : 'Unnamed');
+      if (i === 0) commonName = n;
+      else if (commonName !== n) nameSame = false;
     });
-    panel.classList.remove('hidden');
-    return;
-  }
-
-  const obj   = S.selectedObjects[0];
-  const attrs = obj.userData.attributes || {};
-  const layerIndex = (obj.userData.layerIndex !== undefined) ? obj.userData.layerIndex : attrs.layerIndex;
-  const layer = S.parsedLayers.find(l => l.index === layerIndex);
-
-  const objColorCustom = obj.userData.objectColorCustom;
-  let objColorHex;
-  const isColorByLayer = obj.userData.isColorByLayer;
-  if (objColorCustom) {
-    objColorHex = objColorCustom;
-  } else if (isColorByLayer && layer) {
-    const lc = new THREE.Color(layer.color.r/255, layer.color.g/255, layer.color.b/255);
-    if (lc.r < 0.02 && lc.g < 0.02 && lc.b < 0.02) lc.setHex(0xffffff);
-    objColorHex = '#' + lc.getHexString();
-  } else if (obj.userData.annIndex !== undefined) {
-    const ann = S.parsedAnnotations[obj.userData.annIndex];
-    let c = new THREE.Color(0xffffff);
-    if (ann.objectColor) {
-      c.setRGB(ann.objectColor.r/255, ann.objectColor.g/255, ann.objectColor.b/255);
-    } else if (layer?.color) {
-      c.setRGB(layer.color.r/255, layer.color.g/255, layer.color.b/255);
-    }
-    objColorHex = '#' + c.getHexString();
+    displayName = nameSame ? (commonName || 'Unnamed') : 'Various';
   } else {
-    const shadedMat = obj.userData.shadedMaterial || obj.userData.originalMaterial;
-    objColorHex = '#' + (shadedMat?.color?.getHexString() ?? obj.material?.color?.getHexString() ?? 'ffffff');
+    const obj = S.selectedObjects[0];
+    displayName = obj.userData.attributes?.name || (obj.userData.annIndex !== undefined ? (S.parsedAnnotations[obj.userData.annIndex].type || 'Annotation') : 'Unnamed');
   }
 
-  const showMaterial = obj.isMesh;
+  let displayLayer = '—';
+  let layerIndex = -1;
+  if (isMulti) {
+    let commonLayerName = null;
+    let layerSame = true;
+    S.selectedObjects.forEach((o, i) => {
+      const li = (o.userData.layerIndex !== undefined) ? o.userData.layerIndex : (o.userData.attributes?.layerIndex);
+      const l = S.parsedLayers.find(pl => pl.index === li);
+      const ln = l?.name ?? '—';
+      if (i === 0) commonLayerName = ln;
+      else if (commonLayerName !== ln) layerSame = false;
+    });
+    displayLayer = layerSame ? (commonLayerName || '—') : 'Various';
+  } else {
+    const obj = S.selectedObjects[0];
+    layerIndex = (obj.userData.layerIndex !== undefined) ? obj.userData.layerIndex : (obj.userData.attributes?.layerIndex);
+    const layer = S.parsedLayers.find(l => l.index === layerIndex);
+    displayLayer = layer?.name ?? '—';
+  }
 
-  let htmlContent = `
-    <div class="prop-label">Name</div><div class="prop-value">${attrs.name || (obj.userData.annIndex !== undefined ? (S.parsedAnnotations[obj.userData.annIndex].type || 'Annotation') : 'Unnamed')}</div>
-    <div class="prop-label">Layer</div><div class="prop-value">${layer?.name ?? '—'}</div>
+  // ── Extract Object Color (Shaded) ────────────────────────────────────
+  const getObjColorHex = (o) => {
+    const li = (o.userData.layerIndex !== undefined) ? o.userData.layerIndex : (o.userData.attributes?.layerIndex);
+    const l = S.parsedLayers.find(pl => pl.index === li);
+    if (o.userData.objectColorCustom) {
+      return o.userData.objectColorCustom;
+    } else if (o.userData.isColorByLayer && l) {
+      const lc = new THREE.Color(l.color.r/255, l.color.g/255, l.color.b/255);
+      if (lc.r < 0.02 && lc.g < 0.02 && lc.b < 0.02) lc.setHex(0xffffff);
+      return '#' + lc.getHexString();
+    } else if (o.userData.annIndex !== undefined) {
+      const ann = S.parsedAnnotations[o.userData.annIndex];
+      let c = new THREE.Color(0xffffff);
+      if (ann.objectColor) {
+        c.setRGB(ann.objectColor.r/255, ann.objectColor.g/255, ann.objectColor.b/255);
+      } else if (l?.color) {
+        c.setRGB(l.color.r/255, l.color.g/255, l.color.b/255);
+      }
+      return '#' + c.getHexString();
+    } else {
+      const shadedMat = o.userData.shadedMaterial || o.userData.originalMaterial;
+      return '#' + (shadedMat?.color?.getHexString() ?? o.material?.color?.getHexString() ?? 'ffffff');
+    }
+  };
+
+  let allByLayer = S.selectedObjects.every(o => o.userData.isColorByLayer);
+  let hexSame = true;
+  let commonHex = null;
+  S.selectedObjects.forEach((o, i) => {
+    const hex = getObjColorHex(o);
+    if (i === 0) commonHex = hex;
+    else if (commonHex !== hex) hexSame = false;
+  });
+
+  const objColorHex = hexSame ? commonHex : '#888888';
+  const colorSwatchStyle = hexSame
+    ? `background: ${objColorHex};`
+    : `background: linear-gradient(135deg, #ff453a, #32d74b, #0a84ff);`;
+  const swatchLabel = hexSame ? '' : '<span style="font-size:0.65rem;color:var(--text-3);margin-left:4px;">Various</span>';
+
+  // ── HTML Construction ────────────────────────────────────────────────
+  let htmlContent = '';
+  if (isMulti) {
+    htmlContent += `
+      <div style="grid-column:1/-1;text-align:center;padding:4px 0 10px 0; border-bottom: 1px solid var(--border); margin-bottom: 8px;">
+        <span style="font-size:0.78rem;font-weight:600;color:var(--text-1);">${S.selectedObjects.length} objects selected</span>
+      </div>`;
+  }
+
+  htmlContent += `
+    <div class="prop-label">Name</div><div class="prop-value">${displayName}</div>
+    <div class="prop-label">Layer</div><div class="prop-value">${displayLayer}</div>
     <div class="mat-divider"></div>
     <div class="mat-section-title">Object Color <span style="font-size:0.68rem;opacity:0.6">(Shaded)</span></div>
     <div class="mat-editor">
       <div class="mat-row">
         <span class="mat-label">ByLayer</span>
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-          <input type="checkbox" id="prop-bylayer-toggle" ${obj.userData.isColorByLayer ? 'checked' : ''} style="width:14px;height:14px;accent-color:var(--primary);">
-          <span style="font-size:0.65rem;color:var(--text-2)">${obj.userData.isColorByLayer ? 'On' : 'Off'}</span>
+          <input type="checkbox" id="prop-bylayer-toggle" ${allByLayer ? 'checked' : ''} style="width:14px;height:14px;accent-color:var(--primary);">
+          <span style="font-size:0.65rem;color:var(--text-2)">${allByLayer ? 'On' : 'Off'}</span>
         </label>
       </div>
-      <div class="mat-row">
+      <div class="mat-row" style="align-items: center;">
         <span class="mat-label">Color</span>
-        <input type="text" id="prop-object-color" class="layer-color-picker-input" data-coloris value="${objColorHex}" inputmode="none"
-               style="width:14px; height:14px; border-radius:3px; border:1px solid rgba(255,255,255,0.18); cursor:pointer;
-                      background:${objColorHex}; color:transparent; outline:none; flex-shrink:0; box-sizing:border-box; font-size:0; caret-color:transparent;">
+        <div style="display:flex;align-items:center;gap:4px;">
+          <input type="text" id="prop-object-color" class="layer-color-picker-input" data-coloris value="${objColorHex}" inputmode="none"
+                 style="width:14px; height:14px; border-radius:3px; border:1px solid rgba(255,255,255,0.18); cursor:pointer;
+                        ${colorSwatchStyle} color:transparent; outline:none; flex-shrink:0; box-sizing:border-box; font-size:0; caret-color:transparent;">
+          ${swatchLabel}
+        </div>
       </div>
     </div>`;
 
+  // ── Rendered Material (shown if at least one selected mesh) ──────────
+  const showMaterial = S.selectedObjects.some(o => o.isMesh);
+  const selectedMeshes = S.selectedObjects.filter(o => o.isMesh);
+
   if (showMaterial) {
-    const orig = obj.userData.renderedMaterial || obj.userData.originalMaterial;
-    const custom      = obj.userData.customMaterial || {};
-    const matColor    = custom.color      ?? ('#' + (orig?.color?.getHexString() ?? 'ffffff'));
-    const matRoughness = custom.roughness ?? (orig?.roughness ?? 0.5);
-    const matMetalness = custom.metalness ?? (orig?.metalness ?? 0.0);
-    const matOpacity   = custom.opacity   ?? (orig?.opacity   ?? 1.0);
-    const hasCustom    = !!obj.userData.customMaterial;
-    const mapTexture   = custom.hasOwnProperty('mapTexture') ? custom.mapTexture : (orig?.map ?? null);
-    const hasTex       = !!mapTexture;
-    const texName      = custom.mapName ?? (orig?.map?.name || (orig?.map ? 'Texture' : 'None'));
+    const getMeshRenderedColor = (o) => {
+      const orig = o.userData.renderedMaterial || o.userData.originalMaterial;
+      const custom = o.userData.customMaterial || {};
+      return custom.color ?? ('#' + (orig?.color?.getHexString() ?? 'ffffff'));
+    };
+
+    let matHexSame = true;
+    let commonMatHex = null;
+    selectedMeshes.forEach((o, i) => {
+      const hex = getMeshRenderedColor(o);
+      if (i === 0) commonMatHex = hex;
+      else if (commonMatHex !== hex) matHexSame = false;
+    });
+
+    const matColorHex = matHexSame ? commonMatHex : '#ffffff';
+    const matColorSwatchStyle = matHexSame
+      ? `background: ${matColorHex};`
+      : `background: linear-gradient(135deg, #ff453a, #32d74b, #0a84ff);`;
+    const matSwatchLabel = matHexSame ? '' : '<span style="font-size:0.65rem;color:var(--text-3);margin-left:4px;">Various</span>';
+
+    const getMeshVal = (o, prop, def) => {
+      const orig = o.userData.renderedMaterial || o.userData.originalMaterial;
+      const custom = o.userData.customMaterial || {};
+      return custom[prop] ?? (orig?.[prop] ?? def);
+    };
+
+    const getCommonVal = (prop, def) => {
+      let commonVal = null;
+      let same = true;
+      selectedMeshes.forEach((o, i) => {
+        const v = getMeshVal(o, prop, def);
+        if (i === 0) commonVal = v;
+        else if (Math.abs(commonVal - v) > 1e-4) same = false;
+      });
+      return { same, val: same ? commonVal : 0.50 };
+    };
+
+    const commonRoughness = getCommonVal('roughness', 0.5);
+    const commonMetalness = getCommonVal('metalness', 0.0);
+    const commonOpacity   = getCommonVal('opacity', 1.0);
+
+    const roughnessReadout = commonRoughness.same ? commonRoughness.val.toFixed(2) : 'Various';
+    const metalnessReadout = commonMetalness.same ? commonMetalness.val.toFixed(2) : 'Various';
+    const opacityReadout   = commonOpacity.same   ? commonOpacity.val.toFixed(2)   : 'Various';
+
+    const getMeshTexName = (o) => {
+      const orig = o.userData.renderedMaterial || o.userData.originalMaterial;
+      const custom = o.userData.customMaterial || {};
+      const map = custom.hasOwnProperty('mapTexture') ? custom.mapTexture : (orig?.map ?? null);
+      return custom.mapName ?? (orig?.map?.name || (map ? 'Texture' : 'None'));
+    };
+
+    let commonTexName = null;
+    let texSame = true;
+    selectedMeshes.forEach((o, i) => {
+      const tn = getMeshTexName(o);
+      if (i === 0) commonTexName = tn;
+      else if (commonTexName !== tn) texSame = false;
+    });
+
+    const displayTexName = texSame ? commonTexName : 'Various';
+    const hasTex = texSame && commonTexName !== 'None' && commonTexName !== 'Various';
+    const hasCustom = selectedMeshes.some(o => !!o.userData.customMaterial);
 
     htmlContent += `
       <div class="mat-divider"></div>
       <div class="mat-section-title">Material${hasCustom ? ' <span style="font-size:0.68rem;color:var(--accent)">(overridden)</span>' : ''} <span style="font-size:0.68rem;opacity:0.6">(Rendered)</span></div>
       <div class="mat-editor">
-        <div class="mat-row">
+        <div class="mat-row" style="align-items: center;">
           <span class="mat-label">Color</span>
-          <input type="text" id="mat-color" class="layer-color-picker-input" data-coloris value="${matColor}" inputmode="none"
-                 style="width:14px; height:14px; border-radius:3px; border:1px solid rgba(255,255,255,0.18); cursor:pointer;
-                        background:${matColor}; color:transparent; outline:none; flex-shrink:0; box-sizing:border-box; font-size:0; caret-color:transparent;">
+          <div style="display:flex;align-items:center;gap:4px;">
+            <input type="text" id="mat-color" class="layer-color-picker-input" data-coloris value="${matColorHex}" inputmode="none"
+                   style="width:14px; height:14px; border-radius:3px; border:1px solid rgba(255,255,255,0.18); cursor:pointer;
+                          ${matColorSwatchStyle} color:transparent; outline:none; flex-shrink:0; box-sizing:border-box; font-size:0; caret-color:transparent;">
+            ${matSwatchLabel}
+          </div>
         </div>
         <div class="mat-row">
           <span class="mat-label">Roughness</span>
-          <input type="range" id="mat-roughness" min="0" max="1" step="0.01" value="${matRoughness.toFixed(2)}" style="flex:1">
-          <span class="mat-val" id="mat-roughness-val">${matRoughness.toFixed(2)}</span>
+          <input type="range" id="mat-roughness" min="0" max="1" step="0.01" value="${commonRoughness.val.toFixed(2)}" style="flex:1">
+          <span class="mat-val" id="mat-roughness-val">${roughnessReadout}</span>
         </div>
         <div class="mat-row">
           <span class="mat-label">Metalness</span>
-          <input type="range" id="mat-metalness" min="0" max="1" step="0.01" value="${matMetalness.toFixed(2)}" style="flex:1">
-          <span class="mat-val" id="mat-metalness-val">${matMetalness.toFixed(2)}</span>
+          <input type="range" id="mat-metalness" min="0" max="1" step="0.01" value="${commonMetalness.val.toFixed(2)}" style="flex:1">
+          <span class="mat-val" id="mat-metalness-val">${metalnessReadout}</span>
         </div>
         <div class="mat-row">
           <span class="mat-label">Opacity</span>
-          <input type="range" id="mat-opacity" min="0" max="1" step="0.01" value="${matOpacity.toFixed(2)}" style="flex:1">
-          <span class="mat-val" id="mat-opacity-val">${matOpacity.toFixed(2)}</span>
+          <input type="range" id="mat-opacity" min="0" max="1" step="0.01" value="${commonOpacity.val.toFixed(2)}" style="flex:1">
+          <span class="mat-val" id="mat-opacity-val">${opacityReadout}</span>
         </div>
         <div class="mat-row" style="align-items: center; gap: 8px;">
           <span class="mat-label">Texture</span>
@@ -316,8 +421,8 @@ export function updatePropertiesPanel() {
               Upload
             </button>
             <input type="file" id="mat-tex-file-input" accept="image/*" style="display: none;">
-            <span id="mat-tex-name" style="font-size: 0.65rem; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 110px;" title="${texName}">
-              ${texName}
+            <span id="mat-tex-name" style="font-size: 0.65rem; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 110px;" title="${displayTexName}">
+              ${displayTexName}
             </span>
             ${hasTex ? `
               <button id="btn-mat-tex-remove" style="background: none; border: none; color: var(--text-3); cursor: pointer; padding: 2px; display: inline-flex; align-items: center; margin-left: auto;">
@@ -334,83 +439,126 @@ export function updatePropertiesPanel() {
       </div>`;
   }
 
+  // ── Transform Section ────────────────────────────────────────────────
+  const modified = S.selectedObjects.some(isTransformModified);
+  htmlContent += `
+    <div class="mat-divider"></div>
+    <div class="mat-section-title">Transform ${modified ? ' <span style="font-size:0.68rem;color:var(--accent)">(modified)</span>' : ''}</div>
+    <div class="mat-editor">
+      <div class="mat-row">
+        <span class="mat-label">Status</span>
+        <span id="prop-transform-status" style="font-size:0.68rem;color:${modified ? 'var(--accent)' : 'var(--text-3)'};font-weight:600;">
+          ${modified ? 'Modified' : 'Original'}
+        </span>
+      </div>
+      <div class="mat-footer" style="margin-top:8px;">
+        <button id="btn-transform-reset" class="text-btn" style="font-size:0.74rem"${modified ? '' : ' disabled'}>Reset Transform</button>
+      </div>
+    </div>`;
+
+  if (isMulti) {
+    htmlContent += `
+      <div class="mat-divider"></div>
+      <div class="mat-editor" style="padding-top: 4px;">
+        <div class="mat-footer">
+          <button id="btn-clear-selection" class="text-btn" style="font-size:0.74rem;color:var(--text-3);">Clear Selection</button>
+        </div>
+      </div>`;
+  }
+
   document.getElementById('prop-content').innerHTML = htmlContent;
 
+  // ── Bind Multi / Single Selection Listeners ──────────────────────────
+  
+  // Clear selection
+  if (isMulti) {
+    document.getElementById('btn-clear-selection')?.addEventListener('click', () => {
+      clearSelection(); updatePropertiesPanel();
+    });
+  }
+
+  // ByLayer Toggle
   document.getElementById('prop-bylayer-toggle')?.addEventListener('change', e => {
-    obj.userData.isColorByLayer = e.target.checked;
+    const checked = e.target.checked;
     const label = e.target.nextElementSibling;
-    if (label) label.textContent = e.target.checked ? 'On' : 'Off';
-    
-    if (obj.userData.annIndex !== undefined) {
-      const ann = S.parsedAnnotations[obj.userData.annIndex];
-      ann.isColorByLayer = e.target.checked;
-      if (e.target.checked) {
-        ann.objectColorCustom = undefined;
-        obj.userData.objectColorCustom = undefined;
-      } else {
-        const current = objColorHex;
-        ann.objectColorCustom = current;
-        obj.userData.objectColorCustom = current;
-      }
-      import('./annotations.js').then(a => a.createAnnotationSprites());
-    } else {
-      if (e.target.checked) {
-        const layerForObj = S.parsedLayers.find(l => l.index === layerIndex);
-        if (layerForObj) {
-          const lc = new THREE.Color(layerForObj.color.r/255, layerForObj.color.g/255, layerForObj.color.b/255);
-          if (lc.r < 0.02 && lc.g < 0.02 && lc.b < 0.02) lc.setHex(0xffffff);
-          if (obj.userData.shadedMaterial) obj.userData.shadedMaterial.color.copy(lc);
-          obj.traverse(child => {
-            if (child.userData.selectionBackup) {
-              child.userData.selectionBackup.color.copy(lc);
-              if (child.userData.selectionBackup.material && child.userData.selectionBackup.material.color) {
-                child.userData.selectionBackup.material.color.copy(lc);
-              }
-            }
-          });
-          if (obj.material && !obj.userData.selectionBackup) obj.material.color.copy(lc);
+    if (label) label.textContent = checked ? 'On' : 'Off';
+
+    S.selectedObjects.forEach(obj => {
+      obj.userData.isColorByLayer = checked;
+      const li = (obj.userData.layerIndex !== undefined) ? obj.userData.layerIndex : (obj.userData.attributes?.layerIndex);
+      
+      if (obj.userData.annIndex !== undefined) {
+        const ann = S.parsedAnnotations[obj.userData.annIndex];
+        ann.isColorByLayer = checked;
+        if (checked) {
+          ann.objectColorCustom = undefined;
           obj.userData.objectColorCustom = undefined;
-          const picker = document.getElementById('prop-object-color');
-          if (picker) {
-            const hex = '#' + lc.getHexString();
-            picker.value = hex;
-            const wrapper = picker.parentNode;
-            if (wrapper && wrapper.classList.contains('clr-field')) {
-              wrapper.style.color = hex;
-            }
-          }
+        } else {
+          ann.objectColorCustom = objColorHex;
+          obj.userData.objectColorCustom = objColorHex;
         }
       } else {
-        const current = '#' + (obj.userData.shadedMaterial?.color?.getHexString() || obj.material?.color?.getHexString() || 'cccccc');
-        obj.userData.objectColorCustom = current;
+        if (checked) {
+          const l = S.parsedLayers.find(pl => pl.index === li);
+          if (l) {
+            const lc = new THREE.Color(l.color.r/255, l.color.g/255, l.color.b/255);
+            if (lc.r < 0.02 && lc.g < 0.02 && lc.b < 0.02) lc.setHex(0xffffff);
+            if (obj.userData.shadedMaterial) obj.userData.shadedMaterial.color.copy(lc);
+            obj.traverse(child => {
+              if (child.userData.selectionBackup) {
+                child.userData.selectionBackup.color.copy(lc);
+                if (child.userData.selectionBackup.material && child.userData.selectionBackup.material.color) {
+                  child.userData.selectionBackup.material.color.copy(lc);
+                }
+              }
+            });
+            if (obj.material && !obj.userData.selectionBackup) obj.material.color.copy(lc);
+            obj.userData.objectColorCustom = undefined;
+          }
+        } else {
+          const current = '#' + (obj.userData.shadedMaterial?.color?.getHexString() || obj.material?.color?.getHexString() || 'cccccc');
+          obj.userData.objectColorCustom = current;
+        }
       }
+    });
+
+    if (S.selectedObjects.some(o => o.userData.annIndex !== undefined)) {
+      import('./annotations.js').then(a => a.createAnnotationSprites());
+    } else {
       applyDisplayMode();
     }
+    updatePropertiesPanel();
   });
 
-  document.getElementById('prop-object-color').addEventListener('input', e => {
+  // Object Color picker
+  document.getElementById('prop-object-color')?.addEventListener('input', e => {
     const val = e.target.value;
-    obj.userData.objectColorCustom = val;
-    obj.userData.isColorByLayer = false;
-    const toggle = document.getElementById('prop-bylayer-toggle');
-    if (toggle) { toggle.checked = false; const lbl = toggle.nextElementSibling; if (lbl) lbl.textContent = 'Off'; }
     
-    if (obj.userData.annIndex !== undefined) {
-      const ann = S.parsedAnnotations[obj.userData.annIndex];
-      ann.objectColorCustom = val;
-      ann.isColorByLayer = false;
+    S.selectedObjects.forEach(obj => {
+      obj.userData.objectColorCustom = val;
+      obj.userData.isColorByLayer = false;
+      
+      if (obj.userData.annIndex !== undefined) {
+        const ann = S.parsedAnnotations[obj.userData.annIndex];
+        ann.objectColorCustom = val;
+        ann.isColorByLayer = false;
+      } else {
+        obj.traverse(child => {
+          if (child.userData.selectionBackup) {
+            child.userData.selectionBackup.color.set(val);
+            if (child.userData.selectionBackup.material && child.userData.selectionBackup.material.color) {
+              child.userData.selectionBackup.material.color.set(val);
+            }
+          }
+        });
+        if (obj.userData.shadedMaterial) obj.userData.shadedMaterial.color.set(val);
+        if (obj.material && !obj.userData.selectionBackup) obj.material.color.set(val);
+      }
+    });
+
+    if (S.selectedObjects.some(o => o.userData.annIndex !== undefined)) {
       import('./annotations.js').then(a => a.createAnnotationSprites());
     } else {
-      obj.traverse(child => {
-        if (child.userData.selectionBackup) {
-          child.userData.selectionBackup.color.set(val);
-          if (child.userData.selectionBackup.material && child.userData.selectionBackup.material.color) {
-            child.userData.selectionBackup.material.color.set(val);
-          }
-        }
-      });
-      if (obj.userData.shadedMaterial) obj.userData.shadedMaterial.color.set(val);
-      if (obj.material && !obj.userData.selectionBackup) obj.material.color.set(val);
       applyDisplayMode();
     }
     
@@ -418,54 +566,75 @@ export function updatePropertiesPanel() {
     if (wrapper && wrapper.classList.contains('clr-field')) {
       wrapper.style.color = val;
     }
+    
+    // In multi-selection, once they edit, ByLayer drops to Off
+    const toggle = document.getElementById('prop-bylayer-toggle');
+    if (toggle) { toggle.checked = false; const lbl = toggle.nextElementSibling; if (lbl) lbl.textContent = 'Off'; }
   });
 
+  // ── Material Editor Listeners ──────────────────────────────────────
   if (showMaterial) {
     const enableResetBtn = () => {
       const resetBtn = document.getElementById('btn-mat-reset');
       if (resetBtn) resetBtn.removeAttribute('disabled');
     };
 
-    document.getElementById('mat-color').addEventListener('input', e => {
-      ensureCustomMaterial(obj);
-      obj.userData.customMaterial.color = e.target.value;
-      
+    // Material Color
+    document.getElementById('mat-color')?.addEventListener('input', e => {
+      const val = e.target.value;
+      selectedMeshes.forEach(obj => {
+        ensureCustomMaterial(obj);
+        obj.userData.customMaterial.color = val;
+      });
       const wrapper = e.target.parentNode;
       if (wrapper && wrapper.classList.contains('clr-field')) {
-        wrapper.style.color = e.target.value;
+        wrapper.style.color = val;
       }
-      
       enableResetBtn();
       applyDisplayMode();
     });
-    document.getElementById('mat-roughness').addEventListener('input', e => {
+
+    // Roughness
+    document.getElementById('mat-roughness')?.addEventListener('input', e => {
       const v = parseFloat(e.target.value);
       document.getElementById('mat-roughness-val').textContent = v.toFixed(2);
-      ensureCustomMaterial(obj);
-      obj.userData.customMaterial.roughness = v;
+      selectedMeshes.forEach(obj => {
+        ensureCustomMaterial(obj);
+        obj.userData.customMaterial.roughness = v;
+      });
       enableResetBtn();
       applyDisplayMode();
     });
-    document.getElementById('mat-metalness').addEventListener('input', e => {
+
+    // Metalness
+    document.getElementById('mat-metalness')?.addEventListener('input', e => {
       const v = parseFloat(e.target.value);
       document.getElementById('mat-metalness-val').textContent = v.toFixed(2);
-      ensureCustomMaterial(obj);
-      obj.userData.customMaterial.metalness = v;
+      selectedMeshes.forEach(obj => {
+        ensureCustomMaterial(obj);
+        obj.userData.customMaterial.metalness = v;
+      });
       enableResetBtn();
       applyDisplayMode();
     });
-    document.getElementById('mat-opacity').addEventListener('input', e => {
+
+    // Opacity
+    document.getElementById('mat-opacity')?.addEventListener('input', e => {
       const v = parseFloat(e.target.value);
       document.getElementById('mat-opacity-val').textContent = v.toFixed(2);
-      ensureCustomMaterial(obj);
-      obj.userData.customMaterial.opacity = v;
+      selectedMeshes.forEach(obj => {
+        ensureCustomMaterial(obj);
+        obj.userData.customMaterial.opacity = v;
+      });
       enableResetBtn();
       applyDisplayMode();
     });
-    document.getElementById('btn-mat-tex-upload').addEventListener('click', () => {
+
+    // Texture Upload
+    document.getElementById('btn-mat-tex-upload')?.addEventListener('click', () => {
       document.getElementById('mat-tex-file-input').click();
     });
-    document.getElementById('mat-tex-file-input').addEventListener('change', e => {
+    document.getElementById('mat-tex-file-input')?.addEventListener('change', e => {
       const file = e.target.files?.[0];
       if (!file) return;
       const url = URL.createObjectURL(file);
@@ -475,29 +644,49 @@ export function updatePropertiesPanel() {
         texture.colorSpace = THREE.SRGBColorSpace;
         texture.needsUpdate = true;
         
-        ensureCustomMaterial(obj);
-        obj.userData.customMaterial.mapTexture = texture;
-        obj.userData.customMaterial.mapName = file.name;
+        selectedMeshes.forEach(obj => {
+          ensureCustomMaterial(obj);
+          obj.userData.customMaterial.mapTexture = texture;
+          obj.userData.customMaterial.mapName = file.name;
+        });
         
         enableResetBtn();
         applyDisplayMode();
         updatePropertiesPanel();
       });
     });
+
+    // Texture Remove
     document.getElementById('btn-mat-tex-remove')?.addEventListener('click', () => {
-      ensureCustomMaterial(obj);
-      obj.userData.customMaterial.mapTexture = null;
-      obj.userData.customMaterial.mapName = 'None';
+      selectedMeshes.forEach(obj => {
+        ensureCustomMaterial(obj);
+        obj.userData.customMaterial.mapTexture = null;
+        obj.userData.customMaterial.mapName = 'None';
+      });
       enableResetBtn();
       applyDisplayMode();
       updatePropertiesPanel();
     });
-    document.getElementById('btn-mat-reset').addEventListener('click', () => {
-      obj.userData.customMaterial = null;
+
+    // Material Reset
+    document.getElementById('btn-mat-reset')?.addEventListener('click', () => {
+      selectedMeshes.forEach(obj => {
+        obj.userData.customMaterial = null;
+      });
       applyDisplayMode();
       updatePropertiesPanel();
     });
   }
+
+  // ── Transform Reset Listener ─────────────────────────────────────────
+  document.getElementById('btn-transform-reset')?.addEventListener('click', () => {
+    S.selectedObjects.forEach(obj => {
+      resetTransform(obj);
+    });
+    setupGumballHelper();
+    applyDisplayMode();
+    updatePropertiesPanel();
+  });
 
   if (window.Coloris) {
     Coloris.wrap('.layer-color-picker-input');
@@ -682,4 +871,34 @@ export function buildGumballArcHandles(size) {
     S.arcOverlayScene.add(hitMesh);
     S.gumballArcHandles.push({ mesh: arcMesh, hitMesh, axis: cfg.axis });
   });
+}
+
+// ── Transform Snap & Reset Helpers ─────────────────────────────────────────────
+
+export function ensureOriginalTransform(obj) {
+  if (!obj.userData.originalTransform) {
+    obj.userData.originalTransform = {
+      position: obj.position.clone(),
+      quaternion: obj.quaternion.clone(),
+      scale: obj.scale.clone()
+    };
+  }
+}
+
+export function isTransformModified(obj) {
+  if (!obj.userData.originalTransform) return false;
+  const orig = obj.userData.originalTransform;
+  const posDiff = obj.position.distanceTo(orig.position) > 1e-4;
+  const quatDiff = obj.quaternion.angleTo(orig.quaternion) > 1e-4;
+  const scaleDiff = obj.scale.distanceTo(orig.scale) > 1e-4;
+  return posDiff || quatDiff || scaleDiff;
+}
+
+export function resetTransform(obj) {
+  if (obj.userData.originalTransform) {
+    obj.position.copy(obj.userData.originalTransform.position);
+    obj.quaternion.copy(obj.userData.originalTransform.quaternion);
+    obj.scale.copy(obj.userData.originalTransform.scale);
+    obj.updateMatrixWorld(true);
+  }
 }

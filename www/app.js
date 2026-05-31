@@ -34,7 +34,7 @@ import {
   onCanvasClick, updateClippingPlane, setupClippingHelper, updateClippingHelperPose,
   cancelCurrentInProgressMeasurement
 } from './tools.js';
-import { onPointerDown, clearSelection, updatePropertiesPanel, addSelectionOutline, setupGumballHelper, clearGumballHelper } from './selection.js';
+import { onPointerDown, clearSelection, updatePropertiesPanel, addSelectionOutline, setupGumballHelper, clearGumballHelper, ensureOriginalTransform } from './selection.js';
 
 // ── Color Grading Shader ───────────────────────────────────────────────────
 const ColorGradingShader = {
@@ -361,6 +361,7 @@ function init() {
       const delta = new THREE.Vector3().subVectors(S.gumballHelper.position, lastGumballPos);
       
       S.selectedObjects.forEach(obj => {
+        ensureOriginalTransform(obj);
         obj.position.add(delta);
         obj.updateMatrixWorld(true);
       });
@@ -1693,6 +1694,7 @@ function bindUI() {
       const startObjectPositions = [];
       const startObjectQuats = [];
       S.selectedObjects.forEach(obj => {
+        ensureOriginalTransform(obj);
         startObjectPositions.push(obj.position.clone());
         startObjectQuats.push(obj.quaternion.clone());
       });
