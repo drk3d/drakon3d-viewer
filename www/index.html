@@ -2,8 +2,16 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>byRhinoView</title>
+
+  <!-- iOS PWA: "Add to Home Screen" full-screen app behavior.
+       Desktop / Android / iOS Safari browser-mode all ignore apple-* tags. -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="byRhinoView">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="https://www.plusplastic.com/byRhinoView/images/apple-icon-180x180.png">
+
   <link rel="stylesheet" href="libs/coloris.min.css">
   <link rel="stylesheet" href="style.css?v=1.2.89">
   <!-- Noto Sans: covers all 12 UI languages (Latin, Korean, Japanese, Chinese, Arabic, Thai, etc.) -->
@@ -299,7 +307,7 @@
   <aside id="settings-right-panel" class="right-panel">
     <div class="right-panel-header">
       <h2 data-i18n="panel.settings">Settings</h2>
-      <span id="app-version-tag" class="app-version-tag">byRhinoView v0.8.7</span>
+      <span id="app-version-tag" class="app-version-tag">byRhinoView v0.8.8</span>
       <button id="btn-close-settings-panel" class="icon-btn sm" title="Close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
           <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -362,6 +370,11 @@
             <span class="slider-label" data-i18n="env.intensity">Env Intensity</span>
             <input type="range" id="sl-env-intensity" min="0" max="3" step="0.05" value="1.0">
             <span id="sl-env-intensity-val" class="slider-val">1.00</span>
+          </div>
+          <div class="slider-row" id="row-hdr-rotation">
+            <span class="slider-label" data-i18n="env.rotation">HDR Rotation</span>
+            <input type="range" id="sl-hdr-rotation" min="0" max="360" step="1" value="0">
+            <span id="sl-hdr-rotation-val" class="slider-val">0°</span>
           </div>
         </div>
         <input type="file" id="hdr-file-input" accept=".hdr,.exr">
@@ -581,11 +594,18 @@
       <button id="btn-measure-tab-dist" class="measure-tab-btn active" data-i18n="measure.distance">Distance</button>
       <button id="btn-measure-tab-angle" class="measure-tab-btn" data-i18n="measure.angle">Angle</button>
     </div>
-    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; padding:0 4px; font-size:0.68rem; color:var(--text-2); border-bottom:1px solid var(--border); padding-bottom:6px; flex-shrink:0;">
-      <label style="display:flex; align-items:center; gap:6px; cursor:pointer; user-select:none;">
-        <input type="checkbox" id="chk-measure-snap" checked style="cursor:pointer; width:12px; height:12px; margin:0; accent-color:var(--primary);">
-        <span data-i18n="measure.snap_vertex">Snap to Vertex</span>
-      </label>
+    <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:8px; padding:0 4px; font-size:0.68rem; color:var(--text-2); border-bottom:1px solid var(--border); padding-bottom:8px; flex-shrink:0;">
+      <div style="display:flex; align-items:center; justify-content:space-between;">
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; user-select:none;">
+          <input type="checkbox" id="chk-measure-snap" checked style="cursor:pointer; width:12px; height:12px; margin:0; accent-color:var(--primary);">
+          <span data-i18n="measure.snap_vertex">Snap to Vertex</span>
+        </label>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span data-i18n="measure.text_size" style="white-space:nowrap;">Text Size</span>
+        <input type="range" id="sl-measure-scale" min="0.2" max="3.0" step="0.1" value="1.0" style="flex-grow:1; accent-color:var(--primary); height:4px; cursor:pointer; outline:none;">
+        <span id="sl-measure-scale-val" style="min-width:26px; text-align:right;">1.0x</span>
+      </div>
     </div>
     <div id="measurement-list-items"></div>
     <div class="measure-list-hint" data-i18n="measure.hint">Click on surface to place points</div>
@@ -726,12 +746,22 @@
 
   <!-- ── Bottom Floating View Tools Bar ── -->
   <div id="bottom-view-tools-bar" class="bottom-tools-bar">
-    <button id="btn-zoom-extents" class="bottom-tool-btn" data-i18n-title="zoom.extents" title="Zoom Extents">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><polyline points="10 2 14 2 14 6"/><polyline points="6 14 2 14 2 10"/><line x1="14" y1="2" x2="9" y2="7"/><line x1="2" y1="14" x2="7" y2="9"/></svg>
-    </button>
-    <button id="btn-zoom-selected" class="bottom-tool-btn" data-i18n-title="zoom.selected" title="Zoom Selected">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="7" cy="7" r="4.5"/><line x1="11" y1="11" x2="14.5" y2="14.5"/><line x1="7" y1="5" x2="7" y2="9"/><line x1="5" y1="7" x2="9" y2="7"/></svg>
-    </button>
+    <!-- Zoom Group -->
+    <div class="bottom-tool-group" id="group-zoom">
+      <button class="bottom-tool-btn group-trigger" title="Zoom Options">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.5" cy="6.5" r="4.5"/><line x1="9.7" y1="9.7" x2="13.5" y2="13.5"/></svg>
+      </button>
+      <div class="group-popup hidden">
+        <button id="btn-zoom-extents" class="bottom-tool-btn" data-i18n-title="zoom.extents" title="Zoom Extents">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="7.5" r="3.5"/><line x1="10" y1="10" x2="13.5" y2="13.5"/><line x1="9.5" y1="5.5" x2="13.5" y2="1.5"/><polyline points="10.5 1.5 13.5 1.5 13.5 4.5"/><line x1="5.5" y1="9.5" x2="1.5" y2="13.5"/><polyline points="4.5 13.5 1.5 13.5 1.5 10.5"/></svg>
+        </button>
+        <button id="btn-zoom-selected" class="bottom-tool-btn" data-i18n-title="zoom.selected" title="Zoom Selected">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="5"/><line x1="9.5" y1="9.5" x2="12.5" y2="12.5"/><line x1="3.2" y1="3.2" x2="8.8" y2="8.8"/><line x1="8.8" y1="3.2" x2="3.2" y2="8.8"/><polyline points="5 3.2 3.2 3.2 3.2 5"/><polyline points="7 3.2 8.8 3.2 8.8 5"/><polyline points="3.2 7 3.2 8.8 5 8.8"/><polyline points="7 8.8 8.8 8.8 8.8 7"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Gumball widget -->
     <button id="btn-gumball" class="bottom-tool-btn" title="Gumball (Move/Rotate Selected)">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="8" cy="8" r="6" stroke-dasharray="2 2" opacity="0.6"/>
@@ -741,14 +771,34 @@
         <polyline points="12 6 14 8 12 10"/>
       </svg>
     </button>
-    <button id="btn-show-all" class="bottom-tool-btn" data-i18n-title="show.all" title="Show All">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M1 8s3-5.5 7-5.5S15 8 15 8s-3 5.5-7 5.5S1 8 1 8z"/><circle cx="8" cy="8" r="2"/></svg>
+
+    <!-- Visibility Group -->
+    <div class="bottom-tool-group" id="group-visibility">
+      <button class="bottom-tool-btn group-trigger" title="Visibility Options">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M1 8s3-5.5 7-5.5S15 8 15 8s-3 5.5-7 5.5S1 8 1 8z"/><circle cx="8" cy="8" r="2"/></svg>
+      </button>
+      <div class="group-popup hidden">
+        <button id="btn-show-all" class="bottom-tool-btn" data-i18n-title="show.all" title="Show All">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M1 8s3-5.5 7-5.5S15 8 15 8s-3 5.5-7 5.5S1 8 1 8z"/><circle cx="8" cy="8" r="2"/></svg>
+        </button>
+        <button id="btn-hide-selected" class="bottom-tool-btn" data-i18n-title="show.hide_selected" title="Hide Selected">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><line x1="2" y1="2" x2="14" y2="14"/><path d="M5.5 5.6A3.5 3.5 0 009 10.4M3.5 3.7C2.1 4.9 1 8 1 8s3 5.5 7 5.5c1.3 0 2.5-.4 3.5-1.1M8 2.5C11.5 2.5 15 8 15 8s-.6 1.1-1.5 2.3"/></svg>
+        </button>
+        <button id="btn-isolate-selected" class="bottom-tool-btn" data-i18n-title="show.isolate" title="Isolate">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="2"/><line x1="8" y1="1" x2="8" y2="3.5"/><line x1="8" y1="12.5" x2="8" y2="15"/><line x1="1" y1="8" x2="3.5" y2="8"/><line x1="12.5" y1="8" x2="15" y2="8"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Separator -->
+    <div class="bottom-tool-separator"></div>
+
+    <!-- Undo / Redo buttons -->
+    <button id="btn-undo" class="bottom-tool-btn" title="Undo (Ctrl+Z)" disabled style="opacity: 0.35;">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 5.5h7a3.5 3.5 0 0 1 0 7h-2.5"/><polyline points="5.5 2.5 2.5 5.5 5.5 8.5"/></svg>
     </button>
-    <button id="btn-hide-selected" class="bottom-tool-btn" data-i18n-title="show.hide_selected" title="Hide Selected">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><line x1="2" y1="2" x2="14" y2="14"/><path d="M5.5 5.6A3.5 3.5 0 009 10.4M3.5 3.7C2.1 4.9 1 8 1 8s3 5.5 7 5.5c1.3 0 2.5-.4 3.5-1.1M8 2.5C11.5 2.5 15 8 15 8s-.6 1.1-1.5 2.3"/></svg>
-    </button>
-    <button id="btn-isolate-selected" class="bottom-tool-btn" data-i18n-title="show.isolate" title="Isolate">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="2"/><line x1="8" y1="1" x2="8" y2="3.5"/><line x1="8" y1="12.5" x2="8" y2="15"/><line x1="1" y1="8" x2="3.5" y2="8"/><line x1="12.5" y1="8" x2="15" y2="8"/></svg>
+    <button id="btn-redo" class="bottom-tool-btn" title="Redo (Ctrl+Y)" disabled style="opacity: 0.35;">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 5.5h-7a3.5 3.5 0 0 0 0 7h2.5"/><polyline points="10.5 2.5 13.5 5.5 10.5 8.5"/></svg>
     </button>
   </div>
 

@@ -75,7 +75,10 @@ export async function createAnnotationSprites() {
   const box      = new THREE.Box3().setFromObject(S.currentModel);
   const size     = box.getSize(new THREE.Vector3());
   const maxDim   = Math.max(size.x, size.y, size.z) || 100;
-  const baseH    = Math.max(maxDim * 0.025, 0.5);
+  
+  // Apply annotationScale multiplier (defaults to 1.0)
+  const scaleMult = S.annotationScale !== undefined ? S.annotationScale : 1.0;
+  const baseH    = Math.max(maxDim * 0.025, 0.5) * scaleMult;
 
   const font = await loadFont();
 
@@ -86,7 +89,12 @@ export async function createAnnotationSprites() {
 
   S.parsedAnnotations.forEach((ann, index) => {
     try {
-      const layer     = S.parsedLayers.find(l => l.index === ann.layerIndex);
+      const scaledAnn = { ...ann };
+      if (typeof scaledAnn.textHeight === 'number') {
+        scaledAnn.textHeight *= scaleMult;
+      }
+
+      const layer     = S.parsedLayers.find(l => l.index === scaledAnn.layerIndex);
       const isVisible = layer ? layer.visible : true;
 
       // Resolve color: custom color > objectColor > layerColor > black
@@ -115,20 +123,20 @@ export async function createAnnotationSprites() {
       const isSelected = selectedIndices.includes(index);
       let obj3d = null;
 
-      if (ann.type === 'TextDot') {
+      if (scaledAnn.type === 'TextDot') {
         obj3d = makeTextDot(textVal, color, baseH, isSelected);
-        if (obj3d) obj3d.position.set(...(ann.position || [0, 0, 0]));
+        if (obj3d) obj3d.position.set(...(scaledAnn.position || [0, 0, 0]));
 
-      } else if (ann.isDimension && ann.dimPoints) {
+      } else if (scaledAnn.isDimension && scaledAnn.dimPoints) {
         // Accurate dimension rendering using rhino3dm 8.17+ points data:
         // { defpt1, defpt2, arrowpt1, arrowpt2, dimline, textpt }
-        obj3d = makeDimensionAccurate(textVal, color, ann, baseH, font);
+        obj3d = makeDimensionAccurate(textVal, color, scaledAnn, baseH, font);
 
       } else {
         // TextEntity / plain Text
         obj3d = font
-          ? makeTextMesh(textVal, color, ann, baseH, font)
-          : makeTextSprite(textVal, color, ann, baseH);
+          ? makeTextMesh(textVal, color, scaledAnn, baseH, font)
+          : makeTextSprite(textVal, color, scaledAnn, baseH);
       }
 
       if (obj3d) {

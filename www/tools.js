@@ -267,7 +267,9 @@ function makeMeasurementBillboard(text, position) {
   const modelSize = S.currentModel
     ? new THREE.Box3().setFromObject(S.currentModel).getSize(new THREE.Vector3()).length()
     : 100;
-  sprite.scale.set(modelSize * 0.08, modelSize * 0.026, 1);
+  const scaleMult = S.annotationScale !== undefined ? S.annotationScale : 1.0;
+  sprite.scale.set(modelSize * 0.08 * scaleMult, modelSize * 0.026 * scaleMult, 1);
+  sprite.userData = { type: 'billboard', baseScaleX: modelSize * 0.08, baseScaleY: modelSize * 0.026 };
   return sprite;
 }
 
@@ -290,9 +292,14 @@ export function spawnAngleWidget() {
   hCenter.position.copy(center);
   hA.position.set(center.x + size.x * 0.2, center.y, center.z);
   hB.position.set(center.x, center.y + size.y * 0.2, center.z);
-  hCenter.userData = { role: 'center' };
-  hA.userData      = { role: 'ptA' };
-  hB.userData      = { role: 'ptB' };
+  
+  const scaleMult = S.annotationScale !== undefined ? S.annotationScale : 1.0;
+  hCenter.userData = { role: 'center', type: 'sphere' };
+  hA.userData      = { role: 'ptA', type: 'sphere' };
+  hB.userData      = { role: 'ptB', type: 'sphere' };
+  hCenter.scale.setScalar(scaleMult);
+  hA.scale.setScalar(scaleMult);
+  hB.scale.setScalar(scaleMult);
   g.add(hCenter, hA, hB);
 
   const lineMat = new THREE.LineBasicMaterial({ color: 0xff6600, linewidth: 2, depthTest: false, depthWrite: false });
@@ -497,6 +504,9 @@ export function updateDistanceGhost(event) {
       S.distanceGhostSphere.castShadow = false;
       S.distanceGhostSphere.receiveShadow = false;
       S.distanceGhostSphere.name = 'distance-ghost';
+      S.distanceGhostSphere.userData = { type: 'sphere' };
+      const scaleMult = S.annotationScale !== undefined ? S.annotationScale : 1.0;
+      S.distanceGhostSphere.scale.setScalar(scaleMult);
       S.measurementGroup.add(S.distanceGhostSphere);
     }
     S.distanceGhostSphere.visible = true;
@@ -634,6 +644,9 @@ export function updateAngleGhost(event) {
       S.distanceGhostSphere.castShadow = false;
       S.distanceGhostSphere.receiveShadow = false;
       S.distanceGhostSphere.name = 'distance-ghost';
+      S.distanceGhostSphere.userData = { type: 'sphere' };
+      const scaleMult = S.annotationScale !== undefined ? S.annotationScale : 1.0;
+      S.distanceGhostSphere.scale.setScalar(scaleMult);
       S.measurementGroup.add(S.distanceGhostSphere);
     }
     // Update color depending on click step!
@@ -668,6 +681,9 @@ export function onCanvasClick(event) {
     const sphere = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: 0x10b981, depthTest: false, depthWrite: false }));
     sphere.castShadow = false; sphere.receiveShadow = false;
     sphere.position.copy(p);
+    sphere.userData = { type: 'sphere' };
+    const scaleMult = S.annotationScale !== undefined ? S.annotationScale : 1.0;
+    sphere.scale.setScalar(scaleMult);
     S.measurementGroup.add(sphere);
     S.distanceToolState.points.push(p);
     S.distanceToolState.spheres = S.distanceToolState.spheres || [];
@@ -714,6 +730,9 @@ export function onCanvasClick(event) {
     const sphere = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: stepColors[clickIdx], depthTest: false, depthWrite: false }));
     sphere.castShadow = false; sphere.receiveShadow = false;
     sphere.position.copy(p);
+    sphere.userData = { type: 'sphere' };
+    const scaleMult = S.annotationScale !== undefined ? S.annotationScale : 1.0;
+    sphere.scale.setScalar(scaleMult);
     S.measurementGroup.add(sphere);
 
     S.angleToolState.points.push(p);
@@ -999,19 +1018,27 @@ export function reconstructMeasurements(measurements) {
       const P2 = new THREE.Vector3(...m.p2);
 
       const stepColors = [0xef4444, 0x10b981, 0x3b82f6];
+      const scaleMult = S.annotationScale !== undefined ? S.annotationScale : 1.0;
+
       const sphereC = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: stepColors[0], depthTest: false, depthWrite: false }));
       sphereC.castShadow = false; sphereC.receiveShadow = false;
       sphereC.position.copy(C);
+      sphereC.userData = { type: 'sphere' };
+      sphereC.scale.setScalar(scaleMult);
       S.measurementGroup.add(sphereC);
 
       const sphereP1 = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: stepColors[1], depthTest: false, depthWrite: false }));
       sphereP1.castShadow = false; sphereP1.receiveShadow = false;
       sphereP1.position.copy(P1);
+      sphereP1.userData = { type: 'sphere' };
+      sphereP1.scale.setScalar(scaleMult);
       S.measurementGroup.add(sphereP1);
 
       const sphereP2 = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: stepColors[2], depthTest: false, depthWrite: false }));
       sphereP2.castShadow = false; sphereP2.receiveShadow = false;
       sphereP2.position.copy(P2);
+      sphereP2.userData = { type: 'sphere' };
+      sphereP2.scale.setScalar(scaleMult);
       S.measurementGroup.add(sphereP2);
 
       const lineGeo = new THREE.BufferGeometry().setFromPoints([P1, C, C, P2]);
@@ -1090,16 +1117,22 @@ export function reconstructMeasurements(measurements) {
       const p1 = new THREE.Vector3(...m.p1);
       const p2 = new THREE.Vector3(...m.p2);
 
+      const scaleMult = S.annotationScale !== undefined ? S.annotationScale : 1.0;
+
       const sphere1 = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: 0x10b981, depthTest: false, depthWrite: false }));
       sphere1.castShadow = false;
       sphere1.receiveShadow = false;
       sphere1.position.copy(p1);
+      sphere1.userData = { type: 'sphere' };
+      sphere1.scale.setScalar(scaleMult);
       S.measurementGroup.add(sphere1);
       
       const sphere2 = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: 0x10b981, depthTest: false, depthWrite: false }));
       sphere2.castShadow = false;
       sphere2.receiveShadow = false;
       sphere2.position.copy(p2);
+      sphere2.userData = { type: 'sphere' };
+      sphere2.scale.setScalar(scaleMult);
       S.measurementGroup.add(sphere2);
 
       const lineGeo = new THREE.BufferGeometry().setFromPoints([p1, p2]);
@@ -1125,4 +1158,34 @@ export function reconstructMeasurements(measurements) {
     }
   });
   renderMeasurementListUI();
+}
+
+export function updateMeasurementScales() {
+  const scaleMult = S.annotationScale !== undefined ? S.annotationScale : 1.0;
+
+  // 1. Scale objects in measurementGroup
+  if (S.measurementGroup) {
+    S.measurementGroup.traverse(obj => {
+      if (obj.userData) {
+        if (obj.userData.type === 'billboard') {
+          obj.scale.set(obj.userData.baseScaleX * scaleMult, obj.userData.baseScaleY * scaleMult, 1);
+        } else if (obj.userData.type === 'sphere') {
+          obj.scale.setScalar(scaleMult);
+        }
+      }
+    });
+  }
+
+  // 2. Scale objects in angleWidget if active
+  if (S.angleWidget && S.angleWidget.group) {
+    S.angleWidget.group.traverse(obj => {
+      if (obj.userData) {
+        if (obj.userData.type === 'billboard') {
+          obj.scale.set(obj.userData.baseScaleX * scaleMult, obj.userData.baseScaleY * scaleMult, 1);
+        } else if (obj.userData.type === 'sphere') {
+          obj.scale.setScalar(scaleMult);
+        }
+      }
+    });
+  }
 }

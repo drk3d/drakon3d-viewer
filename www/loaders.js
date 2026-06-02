@@ -1168,6 +1168,7 @@ export function clearCurrentModel() {
   if (!S.currentModel) return;
   // Clear selection outlines (dynamic import avoids circular at parse time)
   import('./selection.js').then(m => m.clearSelection()).catch(() => {});
+  import('./history.js').then(m => m.History.clear()).catch(() => {});
   clearTechnicalOutlines();
   S.currentModel.traverse(child => {
     if (child.name === 'rhino-outline') return;

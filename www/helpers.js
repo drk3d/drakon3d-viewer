@@ -128,3 +128,116 @@ export function isPageVisuallyDark() {
          (!document.body.classList.contains('light-theme') && document.documentElement.getAttribute('data-theme') !== 'light');
 }
 
+export function bindSliderDblClickInput(slider, valSpan, unitStr = '', onChangeCallback = null) {
+  const sl = typeof slider === 'string' ? document.getElementById(slider) : slider;
+  const sp = typeof valSpan === 'string' ? document.getElementById(valSpan) : valSpan;
+  if (!sl || !sp) return;
+
+  // Prevent multiple bindings
+  if (sl.dataset.dblclickBound) return;
+  sl.dataset.dblclickBound = 'true';
+
+  const triggerInput = () => {
+    if (sp.querySelector('.slider-inline-input')) return; // Already editing
+    
+    const min = parseFloat(sl.min) || 0;
+    const max = parseFloat(sl.max) || 100;
+    const step = parseFloat(sl.step) || 1;
+    const currentVal = parseFloat(sl.value);
+
+    // Create temporary input element
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.className = 'slider-inline-input';
+    input.min = min;
+    input.max = max;
+    input.step = step;
+    input.value = currentVal;
+    
+    // Style it inline to look premium and perfectly integrate into CAD UI
+    input.style.width = '45px';
+    input.style.background = 'var(--surface-hi)';
+    input.style.border = '1px solid var(--border)';
+    input.style.color = 'var(--text)';
+    input.style.borderRadius = 'var(--r-sm)';
+    input.style.fontSize = '0.75rem';
+    input.style.padding = '2px 4px';
+    input.style.outline = 'none';
+    input.style.textAlign = 'right';
+    input.style.marginLeft = '4px';
+    input.style.fontFamily = 'inherit';
+
+    const origDisplay = sp.style.display;
+    sp.style.display = 'none';
+    sp.parentNode.insertBefore(input, sp.nextSibling);
+
+    input.focus();
+    input.select();
+
+    let committed = false;
+    const commitValue = () => {
+      if (committed) return;
+      committed = true;
+      
+      let val = parseFloat(input.value);
+      if (isNaN(val)) val = currentVal;
+      
+      // Clamp values
+      val = Math.max(min, Math.min(max, val));
+      
+      sl.value = val;
+      
+      // Remove input & restore span
+      input.remove();
+      sp.style.display = origDisplay;
+      
+      // Format text
+      if (unitStr === '°') {
+        sp.textContent = Math.round(val) + unitStr;
+      } else if (unitStr === '%') {
+        sp.textContent = Math.round(val * 100) + unitStr;
+      } else {
+        sp.textContent = val.toFixed(2) + unitStr;
+      }
+      
+      // Dispatch events to trigger 3D updates & History Push
+      sl.dispatchEvent(new Event('input', { bubbles: true }));
+      sl.dispatchEvent(new Event('change', { bubbles: true }));
+
+      // Callback if needed
+      if (onChangeCallback) onChangeCallback(val);
+    };
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        commitValue();
+      } else if (e.key === 'Escape') {
+        committed = true;
+        input.remove();
+        sp.style.display = origDisplay;
+      }
+    });
+
+    input.addEventListener('blur', commitValue);
+  };
+
+  // Bind to dblclick for slider
+  sl.addEventListener('dblclick', triggerInput);
+  
+  // Touchstart double tap detector for mobile
+  let lastTap = 0;
+  sl.addEventListener('touchstart', (e) => {
+    const now = Date.now();
+    if (now - lastTap < 300) {
+      e.preventDefault();
+      triggerInput();
+    }
+    lastTap = now;
+  });
+
+  // Bind to click/dblclick on span itself for extra convenience
+  sp.style.cursor = 'pointer';
+  sp.addEventListener('click', triggerInput);
+}
+

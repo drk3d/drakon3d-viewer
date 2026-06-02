@@ -28,6 +28,7 @@ export const S = {
   envMaps:           {},
   currentEnvPreset:  'studio',
   envAsBackground:   false,
+  hdrRotation:       0,
 
   // ── Layers ───────────────────────────────────────────────────────────────
   parsedLayers:    [],
@@ -91,6 +92,7 @@ export const S = {
   completedMeasurements: [],
   angleWidget:    null,
   draggedHandle:  null,
+  annotationScale:       1.0,
 
   // ── Clipping ─────────────────────────────────────────────────────────────
   clippingPlane:             null,

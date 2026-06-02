@@ -85,6 +85,11 @@ input[type="file"] { display: none; }
   -webkit-backdrop-filter: blur(24px);
   border-bottom: 1px solid var(--border);
   overflow: visible;  /* must be visible so dropdown menus appear below */
+  /* iOS PWA full-screen: avoid notch / status-bar overlap. Evaluates to 0
+     on desktop and non-PWA contexts, so layout is unchanged elsewhere. */
+  padding-top: env(safe-area-inset-top);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 
 #top-bar-main {
@@ -272,6 +277,11 @@ input[type="file"] { display: none; }
   display: flex;
   align-items: stretch;
   padding: 0 4px;
+  /* iOS PWA full-screen: clear the home-indicator area. Adds extra space
+     below the bar on iPhone X+; 0 on desktop and non-PWA contexts. */
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: calc(4px + env(safe-area-inset-left));
+  padding-right: calc(4px + env(safe-area-inset-right));
 }
 
 .mode-btn {
@@ -1585,31 +1595,37 @@ input[type="range"]::-moz-range-thumb {
   gap: 5px;
 }
 .slider-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 85px 1fr 45px;
   align-items: center;
-  gap: 3px;
+  gap: 6px;
+  width: 100%;
 }
 .slider-label {
   font-size: 0.60rem;
   color: var(--text-2);
   font-weight: 500;
-  min-width: 56px;
-  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
 }
 .slider-val {
   font-size: 0.60rem;
   color: var(--primary);
   font-variant-numeric: tabular-nums;
   font-weight: 600;
-  min-width: 20px;
-  text-align: left;
-  margin-left: 2px;
-  flex-shrink: 0;
+  text-align: right;
+  width: 100%;
+}
+.slider-row .panel-select {
+  grid-column: span 2;
+  width: 100%;
 }
 .sliders-grid input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
-  flex: 1;
+  width: 100%;
   height: 3px;
   background: linear-gradient(to right,
     #3b82f6 0%,
@@ -1621,8 +1637,7 @@ input[type="range"]::-moz-range-thumb {
   outline: none;
   cursor: pointer;
   padding: 7px 0;
-  box-sizing: content-box;
-  background-clip: content-box;
+  box-sizing: border-box;
 }
 
 /* ── HTML Dynamic Layer List Items ── */
@@ -2395,7 +2410,7 @@ body.light-theme .metadata-table td.meta-label {
   border-radius: 10px;
   box-shadow: none;
   pointer-events: auto;
-  transition: opacity 0.2s, transform 0.2s;
+  transition: opacity 0.2s, transform 0.2s, background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 body.dark-theme .bottom-tools-bar {
@@ -2470,7 +2485,6 @@ body.dark-theme .bottom-tools-bar {
 }
 
 /* Force flat 2D color circles with absolutely no glossy/crescent shapes or bevels */
-.color-circle,
 .color-circle * {
   box-shadow: none !important;
   background: transparent !important;
@@ -2510,4 +2524,97 @@ body.light-theme .color-circle {
     text-align: center;
   }
 }
+
+/* ── Dynamic Bottom Bar Contrast Adjustments ── */
+.bottom-tools-bar.local-dark {
+  background: rgba(18, 18, 22, 0.45) !important;
+  border-color: rgba(255, 255, 255, 0.16) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25) !important;
+}
+.bottom-tools-bar.local-dark .bottom-tool-btn {
+  color: rgba(255, 255, 255, 0.72) !important;
+}
+.bottom-tools-bar.local-dark .bottom-tool-btn:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+}
+.bottom-tools-bar.local-dark .bottom-tool-btn.active {
+  background: var(--primary) !important;
+  color: #ffffff !important;
+}
+
+.bottom-tools-bar.local-light {
+  background: rgba(255, 255, 255, 0.55) !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08) !important;
+}
+.bottom-tools-bar.local-light .bottom-tool-btn {
+  color: rgba(24, 24, 27, 0.75) !important;
+}
+.bottom-tools-bar.local-light .bottom-tool-btn:hover {
+  background: rgba(24, 24, 27, 0.08) !important;
+  color: #000000 !important;
+}
+.bottom-tools-bar.local-light .bottom-tool-btn.active {
+  background: var(--primary) !important;
+  color: #ffffff !important;
+}
+
+/* ── Bottom Bar Grouping and Popover Styling ── */
+.bottom-tool-group {
+  position: relative;
+  display: inline-block;
+}
+
+.group-popup {
+  position: absolute;
+  bottom: calc(100% + 8px); /* Float 8px above the bottom bar */
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(18, 18, 22, 0.85); /* Premium glassmorphic dark */
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column; /* Vertical alignment */
+  gap: 4px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  z-index: 100;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(10px);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.group-popup.show {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(-50%) translateY(0);
+}
+
+body.light-theme .group-popup {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(0, 0, 0, 0.12);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+/* Color overrides inside popups */
+.group-popup .bottom-tool-btn {
+  color: rgba(255, 255, 255, 0.72) !important;
+}
+.group-popup .bottom-tool-btn:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+}
+body.light-theme .group-popup .bottom-tool-btn {
+  color: rgba(24, 24, 27, 0.75) !important;
+}
+body.light-theme .group-popup .bottom-tool-btn:hover {
+  background: rgba(24, 24, 27, 0.08) !important;
+  color: #000000 !important;
+}
+
+
 

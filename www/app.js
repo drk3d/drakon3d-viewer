@@ -17,7 +17,7 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { initI18n, setLang, applyI18n, t, currentLang } from './i18n.js';
 
 import { S } from './state.js';
-import { updateSliderFill, updateAllSliderFills, updateSelectIcon, hideLoading } from './helpers.js';
+import { updateSliderFill, updateAllSliderFills, updateSelectIcon, showLoading, hideLoading, bindSliderDblClickInput } from './helpers.js';
 import { setupLights, updateSunLight, updateShadowCasting, addGroundPlane, removeGroundPlane } from './lighting.js';
 import { switchToOrtho, switchToPersp, setViewPreset, triggerCameraTransition, fitCameraToBox, fitCameraToObject, fitCameraToSelected, saveCustomView, renderNamedViewsUI } from './camera.js';
 import { applySceneBackground, applyFileBackground, applyDisplayMode, applyLayerColorsToModel } from './display.js';
@@ -25,6 +25,7 @@ import { renderLayerUI, updateLayerVisibility } from './layers.js';
 import { createAnnotationSprites } from './annotations.js';
 import { saveSession, loadSession } from './session.js';
 import { handleFile, clearCurrentModel } from './loaders.js';
+import { History } from './history.js';
 import {
   deactivateAllTools, clearMeasurements, renderMeasurementListUI,
   spawnAngleWidget, handleWidgetPointerDown, handleWidgetPointerMove,
@@ -32,7 +33,7 @@ import {
   updateTempAngleWidget, updateAngleGhost,
   syncMeasurementTabsUI,
   onCanvasClick, updateClippingPlane, setupClippingHelper, updateClippingHelperPose,
-  cancelCurrentInProgressMeasurement
+  cancelCurrentInProgressMeasurement, updateMeasurementScales
 } from './tools.js';
 import { onPointerDown, clearSelection, updatePropertiesPanel, addSelectionOutline, setupGumballHelper, clearGumballHelper, ensureOriginalTransform } from './selection.js';
 
@@ -134,8 +135,14 @@ function init() {
   setToolbarModelState(false);
 
   S.scene = new THREE.Scene();
+  S.scene.backgroundRotation.order = 'YXZ';
+  S.scene.environmentRotation.order = 'YXZ';
   S.scene.backgroundRotation.x = Math.PI / 2;
   S.scene.environmentRotation.x = Math.PI / 2;
+  S.scene.backgroundRotation.y = 0;
+  S.scene.environmentRotation.y = 0;
+  S.scene.backgroundRotation.z = 0;
+  S.scene.environmentRotation.z = 0;
   S.scene.background = null;
   S.measurementGroup = new THREE.Group();
   S.raycaster = new THREE.Raycaster();
@@ -349,10 +356,45 @@ function init() {
   } catch(e) { console.warn('Gumball negative arrow hide failed:', e); }
 
   let lastGumballPos = new THREE.Vector3();
+  let transformBeforeState = null;
   S.gumballTransformControls.addEventListener('dragging-changed', (event) => {
     S.controls.enabled = !event.value;
+    console.log('[Gumball] dragging-changed event.value:', event.value, 'S.gumballHelper exists:', !!S.gumballHelper);
     if (event.value && S.gumballHelper) {
       lastGumballPos.copy(S.gumballHelper.position);
+      transformBeforeState = S.selectedObjects.map(obj => ({
+        position: obj.position.clone(),
+        quaternion: obj.quaternion.clone(),
+        scale: obj.scale.clone()
+      }));
+      console.log('[Gumball] Captured transformBeforeState:', transformBeforeState);
+    } else if (!event.value && transformBeforeState) {
+      const transformAfterState = S.selectedObjects.map(obj => ({
+        position: obj.position.clone(),
+        quaternion: obj.quaternion.clone(),
+        scale: obj.scale.clone()
+      }));
+      
+      let changed = false;
+      for (let i = 0; i < S.selectedObjects.length; i++) {
+        if (!S.selectedObjects[i].position.equals(transformBeforeState[i].position) ||
+            !S.selectedObjects[i].quaternion.equals(transformBeforeState[i].quaternion) ||
+            !S.selectedObjects[i].scale.equals(transformBeforeState[i].scale)) {
+          changed = true;
+          break;
+        }
+      }
+      
+      console.log('[Gumball] Drag finished. changed:', changed, 'transformBeforeState:', transformBeforeState, 'transformAfterState:', transformAfterState);
+      if (changed) {
+        History.push({
+          type: 'transform',
+          targets: [...S.selectedObjects],
+          before: transformBeforeState,
+          after: transformAfterState
+        });
+      }
+      transformBeforeState = null;
     }
   });
 
@@ -477,7 +519,12 @@ function init() {
 
   // Apply env intensity initial value
   const slEnvInit = document.getElementById('sl-env-intensity');
-  if (slEnvInit) S.scene.environmentIntensity = parseFloat(slEnvInit.value) || 1.0;
+  if (slEnvInit) {
+    const val = parseFloat(slEnvInit.value) || 1.0;
+    S.scene.environmentIntensity = val;
+    const bgType = document.getElementById('bg-type-select')?.value || 'solid';
+    S.scene.backgroundIntensity = (bgType === 'hdr') ? val : 1.0;
+  }
 
   hideLoading();
 }
@@ -664,12 +711,13 @@ function bindUI() {
     const isSolid  = val === 'solid';
     const isRadial = val === 'radial';
     const isGrad4  = val === 'gradient4';
-    document.getElementById('picker-c1')?.classList.remove('hidden');
-    document.getElementById('picker-c2')?.classList.toggle('hidden', isSolid);
-    document.getElementById('picker-c3')?.classList.toggle('hidden', !isGrad4);
-    document.getElementById('picker-c4')?.classList.toggle('hidden', !isGrad4);
+    const isHdr    = val === 'hdr';
+    document.getElementById('picker-c1')?.classList.toggle('hidden', isHdr);
+    document.getElementById('picker-c2')?.classList.toggle('hidden', isSolid || isHdr);
+    document.getElementById('picker-c3')?.classList.toggle('hidden', !isGrad4 || isHdr);
+    document.getElementById('picker-c4')?.classList.toggle('hidden', !isGrad4 || isHdr);
     const radialSection = document.getElementById('bg-radial-section');
-    if (radialSection) radialSection.classList.toggle('hidden', !isRadial);
+    if (radialSection) radialSection.classList.toggle('hidden', !isRadial || isHdr);
     applySceneBackground();
   });
 
@@ -681,6 +729,7 @@ function bindUI() {
       updateSliderFill(radialSpread);
       applySceneBackground();
     });
+    bindSliderDblClickInput(radialSpread, 'bg-radial-spread-val', '%');
   }
 
   // ── Environment preset select ──
@@ -709,9 +758,35 @@ function bindUI() {
       const v = parseFloat(e.target.value);
       if (slEnvIntVal) slEnvIntVal.textContent = v.toFixed(2);
       updateSliderFill(e.target);
-      S.scene.environmentIntensity = v;
+      if (S.scene) {
+        S.scene.environmentIntensity = v;
+        const bgType = document.getElementById('bg-type-select')?.value || 'solid';
+        S.scene.backgroundIntensity = (bgType === 'hdr') ? v : 1.0;
+      }
     });
     updateSliderFill(slEnvInt);
+    bindSliderDblClickInput(slEnvInt, slEnvIntVal);
+  }
+
+  // ── HDR Background / Environment Rotation ──
+  const slHdrRot    = document.getElementById('sl-hdr-rotation');
+  const slHdrRotVal = document.getElementById('sl-hdr-rotation-val');
+  if (slHdrRot) {
+    slHdrRot.addEventListener('input', e => {
+      const v = parseInt(e.target.value);
+      if (slHdrRotVal) slHdrRotVal.textContent = v + '°';
+      updateSliderFill(e.target);
+      S.hdrRotation = v;
+      const rad = (v * Math.PI) / 180;
+      if (S.scene) {
+        S.scene.backgroundRotation.y = rad;
+        S.scene.environmentRotation.y = rad;
+        S.scene.backgroundRotation.z = 0;
+        S.scene.environmentRotation.z = 0;
+      }
+    });
+    updateSliderFill(slHdrRot);
+    bindSliderDblClickInput(slHdrRot, slHdrRotVal, '°');
   }
 
   // Legacy button-based env presets (no-op if no such elements in HTML)
@@ -736,6 +811,19 @@ function bindUI() {
     hdrInput.addEventListener('change', e => {
       const file = e.target.files?.[0];
       if (!file) return;
+
+      // Read custom HDR file as Base64 for embedding in saved session packages
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        const dataUrl = evt.target.result;
+        const base64Index = dataUrl.indexOf(';base64,');
+        if (base64Index !== -1) {
+          S.customHdrData = dataUrl.substring(base64Index + 8);
+          S.customHdrName = file.name;
+        }
+      };
+      reader.readAsDataURL(file);
+
       const url = URL.createObjectURL(file);
       const rgbeLoader = new RGBELoader();
       const pmrem = new THREE.PMREMGenerator(S.renderer);
@@ -817,14 +905,19 @@ function bindUI() {
   safeBindCheck('chk-annotations', 'chk-annotations-panel');
 
   // ── 5. Lighting & damping sliders ──
-  document.getElementById('sl-ambient-panel').addEventListener('input', e => {
-    const val = parseFloat(e.target.value);
-    document.getElementById('sl-ambient-val').textContent = val.toFixed(2);
-    updateSliderFill(e.target);
-    S.scene.traverse(child => {
-      if (child.isAmbientLight) child.intensity = val;
+  const slAmbient = document.getElementById('sl-ambient-panel');
+  const slAmbientVal = document.getElementById('sl-ambient-val');
+  if (slAmbient) {
+    slAmbient.addEventListener('input', e => {
+      const val = parseFloat(e.target.value);
+      if (slAmbientVal) slAmbientVal.textContent = val.toFixed(2);
+      updateSliderFill(e.target);
+      S.scene.traverse(child => {
+        if (child.isAmbientLight) child.intensity = val;
+      });
     });
-  });
+    bindSliderDblClickInput(slAmbient, slAmbientVal);
+  }
 
   const chkSun       = document.getElementById('chk-sun-panel');
   const sunControls  = document.getElementById('sun-controls');
@@ -851,17 +944,31 @@ function bindUI() {
     updateSliderFill(e.target);
     updateSunLight();
   });
-  if (slAzimuth)   updateSliderFill(slAzimuth);
-  if (slElevation) updateSliderFill(slElevation);
-  if (slSunInt)    updateSliderFill(slSunInt);
+  if (slAzimuth) {
+    updateSliderFill(slAzimuth);
+    bindSliderDblClickInput(slAzimuth, 'sl-sun-azimuth-val', '°');
+  }
+  if (slElevation) {
+    updateSliderFill(slElevation);
+    bindSliderDblClickInput(slElevation, 'sl-sun-elevation-val', '°');
+  }
+  if (slSunInt) {
+    updateSliderFill(slSunInt);
+    bindSliderDblClickInput(slSunInt, 'sl-sun-intensity-val');
+  }
 
-  document.getElementById('sl-damping-panel').addEventListener('input', e => {
-    const friction = parseFloat(e.target.value);
-    document.getElementById('sl-damping-val').textContent = friction.toFixed(2);
-    updateSliderFill(e.target);
-    S.controls.dampingFactor = 1.0 - friction;
-    if (S.controls.dampingFactor < 0.005) S.controls.dampingFactor = 0.005;
-  });
+  const slDamping = document.getElementById('sl-damping-panel');
+  const slDampingVal = document.getElementById('sl-damping-val');
+  if (slDamping) {
+    slDamping.addEventListener('input', e => {
+      const friction = parseFloat(e.target.value);
+      if (slDampingVal) slDampingVal.textContent = friction.toFixed(2);
+      updateSliderFill(e.target);
+      S.controls.dampingFactor = 1.0 - friction;
+      if (S.controls.dampingFactor < 0.005) S.controls.dampingFactor = 0.005;
+    });
+    bindSliderDblClickInput(slDamping, slDampingVal);
+  }
 
   // ── 6. Dropdowns ──
   const dropdowns = [
@@ -1237,6 +1344,22 @@ function bindUI() {
   // Color panel removed — color adj is now inline in Settings
   document.getElementById('btn-measure-clear-all')?.addEventListener('click', () => clearMeasurements());
 
+  // ── Measurement text & line scale slider ──
+  const slMeasureScale = document.getElementById('sl-measure-scale');
+  const slMeasureScaleVal = document.getElementById('sl-measure-scale-val');
+  if (slMeasureScale) {
+    slMeasureScale.addEventListener('input', e => {
+      const v = parseFloat(e.target.value);
+      if (slMeasureScaleVal) slMeasureScaleVal.textContent = v.toFixed(1) + 'x';
+      updateSliderFill(e.target);
+      S.annotationScale = v;
+      createAnnotationSprites();
+      updateMeasurementScales();
+    });
+    updateSliderFill(slMeasureScale);
+    bindSliderDblClickInput(slMeasureScale, slMeasureScaleVal);
+  }
+
   // ── Measurement panel tab selectors ──
   document.getElementById('btn-measure-tab-dist')?.addEventListener('click', () => {
     if (S.distanceToolState) return;
@@ -1573,6 +1696,7 @@ function bindUI() {
         S.cgPass.uniforms[uniform].value = v;
         updateSliderFill(e.target);
       });
+      bindSliderDblClickInput(slider, id + '-val');
     }
   });
 
@@ -1826,6 +1950,26 @@ function bindUI() {
 
   S.renderer.domElement.addEventListener('pointerup', (e) => {
     if (S.gumballArcDrag) {
+      console.log('[Gumball] Arc drag pointerup. Creating before/after states.');
+      const beforeState = S.selectedObjects.map((obj, i) => ({
+        position: S.gumballArcDrag.startObjectPositions[i].clone(),
+        quaternion: S.gumballArcDrag.startObjectQuats[i].clone(),
+        scale: obj.scale.clone()
+      }));
+      const afterState = S.selectedObjects.map(obj => ({
+        position: obj.position.clone(),
+        quaternion: obj.quaternion.clone(),
+        scale: obj.scale.clone()
+      }));
+
+      console.log('[Gumball] Arc drag pushing transform. beforeState:', beforeState, 'afterState:', afterState);
+      History.push({
+        type: 'transform',
+        targets: [...S.selectedObjects],
+        before: beforeState,
+        after: afterState
+      });
+
       S.gumballArcDrag = null;
       S.controls.enabled = true;
       S.renderer.domElement.style.cursor = '';
@@ -1895,6 +2039,7 @@ function bindUI() {
       S.perspCamera.updateProjectionMatrix();
       updateSliderFill(fovSlider);
     });
+    bindSliderDblClickInput(fovSlider, fovValEl, '°');
   }
 
   // ── Language ──
@@ -1914,13 +2059,89 @@ function bindUI() {
   // ── Drag & drop ──
   window.addEventListener('dragenter', e => e.preventDefault());
   window.addEventListener('dragover',  e => { e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'; });
-  window.addEventListener('drop', e => {
+  window.addEventListener('drop', async e => {
     e.preventDefault();
     const files = e.dataTransfer.files;
     if (files?.length > 0) {
       const f = files[0];
-      if (f.name.toLowerCase().endsWith('.rhinoview')) loadSession(f);
-      else handleFile(f, rhinoLoader, gltfLoader);
+      const name = f.name.toLowerCase();
+      if (name.endsWith('.rhinoview')) {
+        loadSession(f);
+      } else if (name.endsWith('.hdr')) {
+        const { showLoading, hideLoading } = await import('./helpers.js');
+        showLoading('Loading custom HDR background…');
+        try {
+          const { RGBELoader } = await import('three/addons/loaders/RGBELoader.js');
+          
+          // Read custom HDR file as Base64 for embedding in saved session packages
+          const reader = new FileReader();
+          reader.onload = function(evt) {
+            const dataUrl = evt.target.result;
+            const base64Index = dataUrl.indexOf(';base64,');
+            if (base64Index !== -1) {
+              S.customHdrData = dataUrl.substring(base64Index + 8);
+              S.customHdrName = f.name;
+            }
+          };
+          reader.readAsDataURL(f);
+
+          const url = URL.createObjectURL(f);
+          const rgbeLoader = new RGBELoader();
+          const pmrem = new THREE.PMREMGenerator(S.renderer);
+          pmrem.compileEquirectangularShader();
+          
+          rgbeLoader.load(url, texture => {
+            URL.revokeObjectURL(url);
+            const envTexture = pmrem.fromEquirectangular(texture).texture;
+            texture.dispose();
+            pmrem.dispose();
+            
+            if (S.envMaps['hdr-custom']) S.envMaps['hdr-custom'].dispose();
+            S.envMaps['hdr-custom'] = envTexture;
+            S.environmentMap = envTexture;
+            S.currentEnvPreset = 'hdr-custom';
+            
+            // Switch to Rendered mode to show HDR lighting & background if in shaded/wireframe
+            if (!['rendered', 'arctic'].includes(S.currentMode)) {
+              S.currentMode = 'rendered';
+            }
+            
+            // Enable the custom-HDR option in UI
+            const hdrOpt = document.getElementById('opt-hdr-custom');
+            if (hdrOpt) { 
+              hdrOpt.disabled = false; 
+              hdrOpt.textContent = f.name; 
+            }
+            const envSel = document.getElementById('env-preset-select');
+            if (envSel) envSel.value = 'hdr-custom';
+            
+            // Set background type to 'hdr' to display it as background
+            const bgSel = document.getElementById('bg-type-select');
+            if (bgSel) {
+              bgSel.value = 'hdr';
+              bgSel.dispatchEvent(new Event('change'));
+            }
+            
+            applySceneBackground();
+            applyDisplayMode();
+            
+            // Sync bottom toolbar or env preset active buttons if any
+            document.querySelectorAll('.env-preset-btn').forEach(b => b.classList.remove('active'));
+            document.querySelector('.env-preset-btn[data-preset="hdr-custom"]')?.classList.add('active');
+            
+            hideLoading();
+          }, undefined, err => {
+            console.error('[HDR Drag-and-Drop] load error', err);
+            alert('HDR 파일 로드에 실패했습니다.');
+            hideLoading();
+          });
+        } catch (hdrErr) {
+          console.error('[HDR Drag-and-Drop] error', hdrErr);
+          hideLoading();
+        }
+      } else {
+        handleFile(f, rhinoLoader, gltfLoader);
+      }
     }
   });
 
@@ -1939,9 +2160,58 @@ function bindUI() {
       cancelCurrentInProgressMeasurement();
     }
   });
+
+  // ── Bottom Bar Group Popups ──
+  document.querySelectorAll('.bottom-tool-group').forEach(grp => {
+    const trigger = grp.querySelector('.group-trigger');
+    const popup = grp.querySelector('.group-popup');
+    trigger?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      // Close all other popups
+      document.querySelectorAll('.group-popup').forEach(p => {
+        if (p !== popup) p.classList.add('hidden');
+      });
+      popup?.classList.toggle('hidden');
+      if (popup && !popup.classList.contains('hidden')) {
+        popup.classList.add('show');
+      }
+    });
+  });
+  
+  // Close popups on item click
+  document.querySelectorAll('.group-popup button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      btn.parentElement?.classList.add('hidden');
+    });
+  });
+
+  // Click away to close popups
+  document.addEventListener('click', () => {
+    document.querySelectorAll('.group-popup').forEach(p => p.classList.add('hidden'));
+  });
+  
+  // Bind Undo/Redo Buttons
+  document.getElementById('btn-undo')?.addEventListener('click', () => {
+    History.undo();
+  });
+  document.getElementById('btn-redo')?.addEventListener('click', () => {
+    History.redo();
+  });
+  
+  // ── Keyboard Shortcuts (Ctrl+Z / Ctrl+Y) ──
+  window.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+      e.preventDefault();
+      History.undo();
+    } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+      e.preventDefault();
+      History.redo();
+    }
+  });
 }
 
 // ── Core render loop ───────────────────────────────────────────────────────
+let barContrastFrameCount = 0;
 function animate() {
   requestAnimationFrame(animate);
 
@@ -2053,6 +2323,56 @@ function animate() {
     S.renderer.render(S.arcOverlayScene, S.camera);
     S.renderer.autoClear = true;              // restore
     S.renderer.clippingPlanes = savedPlanes;  // restore clipping for next frame
+  }
+
+  // Dynamic color contrast adaptation for bottom tools bar in HDR mode
+  if (S.renderer) {
+    const bgType = document.getElementById('bg-type-select')?.value;
+    if (bgType === 'hdr') {
+      barContrastFrameCount++;
+      if (barContrastFrameCount % 6 === 0) {
+        try {
+          const bottomBar = document.getElementById('bottom-view-tools-bar');
+          if (bottomBar) {
+            const gl = S.renderer.getContext();
+            if (gl) {
+              const width = S.renderer.domElement.width;
+              const height = S.renderer.domElement.height;
+              // Sample a pixel at the horizontal center, ~44px from the bottom in screen coordinates.
+              const x = Math.round(width / 2);
+              // WebGL coordinate Y=0 starts at the bottom
+              const y = Math.round(44 * window.devicePixelRatio);
+              
+              if (x >= 0 && x < width && y >= 0 && y < height) {
+                const pixel = new Uint8Array(4);
+                gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+                const r = pixel[0], g = pixel[1], b = pixel[2];
+                
+                // Calculate relative luminance using ITU-R BT.709 formula
+                const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+                
+                // If the background behind the bar is dark, use light buttons/icons (.local-dark)
+                // Otherwise, use dark buttons/icons (.local-light)
+                if (luminance < 0.45) {
+                  bottomBar.classList.add('local-dark');
+                  bottomBar.classList.remove('local-light');
+                } else {
+                  bottomBar.classList.add('local-light');
+                  bottomBar.classList.remove('local-dark');
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('Luminance sampling error:', e);
+        }
+      }
+    } else {
+      const bottomBar = document.getElementById('bottom-view-tools-bar');
+      if (bottomBar && (bottomBar.classList.contains('local-dark') || bottomBar.classList.contains('local-light'))) {
+        bottomBar.classList.remove('local-dark', 'local-light');
+      }
+    }
   }
 }
 
@@ -2244,3 +2564,78 @@ function searchObjects(query) {
     container.appendChild(btn);
   });
 }
+
+// ── Handle incoming file intents from native Android/iOS ──
+async function handleIncomingSharedFile(url) {
+  if (!url) return;
+  try {
+    showLoading(t('loading.parse') || 'Parsing file...');
+    const convertedUrl = window.Capacitor.convertFileSrc(url);
+    const res = await fetch(convertedUrl);
+    if (!res.ok) throw new Error('Failed to fetch shared file data');
+    const blob = await res.blob();
+    
+    // Extract clean filename from URL (remove query parameters if any)
+    let filename = url.substring(url.lastIndexOf('/') + 1);
+    if (filename.includes('?')) filename = filename.split('?')[0];
+    
+    const file = new File([blob], filename, { type: blob.type });
+    
+    if (filename.toLowerCase().endsWith('.rhinoview')) {
+      await loadSession(file);
+    } else {
+      await handleFile(file, rhinoLoader, gltfLoader);
+    }
+  } catch (e) {
+    console.error('Error loading shared file:', e);
+    alert('Failed to open shared file: ' + e.message);
+  } finally {
+    hideLoading();
+  }
+}
+
+// ── Capacitor file-intent bridge ──────────────────────────────────────────
+// Uses our custom FileOpenerPlugin for reliable file:// delivery.
+// Falls back to the standard App.getLaunchUrl() if the plugin is absent.
+(function initCapacitorFileOpener() {
+  const cap = window.Capacitor;
+  if (!cap) return; // not running in Capacitor (web-only mode)
+
+  const FileOpener = cap?.Plugins?.FileOpener;
+  const AppPlugin  = cap?.Plugins?.App;
+
+  if (FileOpener) {
+    // ── Cold start: app launched by tapping a file icon ──────────────────
+    FileOpener.getPendingFile().then(data => {
+      if (data && data.url) {
+        console.log('[FileOpener] cold-start file:', data.url);
+        handleIncomingSharedFile(data.url);
+      }
+    }).catch(e => console.error('[FileOpener] getPendingFile error:', e));
+
+    // ── Hot start: file opened while app is already running ───────────────
+    FileOpener.addListener('pendingFileOpen', data => {
+      if (data && data.url) {
+        console.log('[FileOpener] hot-start file:', data.url);
+        handleIncomingSharedFile(data.url);
+      }
+    });
+
+  } else if (AppPlugin) {
+    // Fallback: standard Capacitor deep-link / launch URL
+    AppPlugin.getLaunchUrl().then(data => {
+      if (data && data.url) {
+        console.log('[App] launch URL fallback:', data.url);
+        handleIncomingSharedFile(data.url);
+      }
+    }).catch(e => console.error('[App] getLaunchUrl error:', e));
+
+    AppPlugin.addListener('appUrlOpen', data => {
+      if (data && data.url) {
+        console.log('[App] appUrlOpen fallback:', data.url);
+        handleIncomingSharedFile(data.url);
+      }
+    });
+  }
+})();
+

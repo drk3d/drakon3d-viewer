@@ -14,3 +14,9 @@ scratch/
 # OS
 .DS_Store
 Thumbs.db
+
+# Mobile App Exclusions (Local Development Only)
+android/
+ios/
+capacitor.config.json
+

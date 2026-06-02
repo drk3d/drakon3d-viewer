@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { S } from './state.js';
 import { applyDisplayMode } from './display.js';
+import { History } from './history.js';
+import { bindSliderDblClickInput } from './helpers.js';
 
 // ── Pointer hit-test / selection ─────────────────────────────────────────────
 
@@ -8,19 +10,29 @@ export function onPointerDown(event) {
   if (!S.currentModel || S.selectMode === 'none') return;
 
   if (S.clippingTransformControls && S.clippingTransformControls.getHelper().visible && S.clippingTransformControls.object) {
+    if (S.clippingTransformControls.axis !== null) return;
     const tmpMouse = new THREE.Vector2(
       (event.clientX / window.innerWidth) * 2 - 1,
       -(event.clientY / window.innerHeight) * 2 + 1
     );
     S.raycaster.setFromCamera(tmpMouse, S.camera);
     const gHits = S.raycaster.intersectObjects(S.clippingTransformControls.getHelper().children, true);
-    if (gHits.length > 0) return;
+    const hasValidGizmoHit = gHits.some(hit => {
+      let curr = hit.object;
+      while (curr) {
+        if (curr.name === 'X' || curr.name === 'Y' || curr.name === 'Z') return true;
+        curr = curr.parent;
+      }
+      return false;
+    });
+    if (hasValidGizmoHit) return;
   }
 
   // Block selection when dragging arc rotation handles
   if (S.clippingArcDrag) return;
 
   if (S.gumballTransformControls && S.gumballTransformControls.getHelper().visible && S.gumballTransformControls.object) {
+    if (S.gumballTransformControls.axis !== null) return;
     const tmpMouse = new THREE.Vector2(
       (event.clientX / window.innerWidth) * 2 - 1,
       -(event.clientY / window.innerHeight) * 2 + 1
@@ -28,16 +40,13 @@ export function onPointerDown(event) {
     S.raycaster.setFromCamera(tmpMouse, S.camera);
     const gHits = S.raycaster.intersectObjects(S.gumballTransformControls.getHelper().children, true);
     
-    // Filter to only count hits on the actual visible handle axes ('X', 'Y', or 'Z')
-    // and NOT the large invisible helper planes that span the entire screen.
     const hasValidGizmoHit = gHits.some(hit => {
-      let name = hit.object.name;
       let curr = hit.object;
-      while (curr && !name) {
+      while (curr) {
+        if (curr.name === 'X' || curr.name === 'Y' || curr.name === 'Z') return true;
         curr = curr.parent;
-        if (curr) name = curr.name;
       }
-      return name === 'X' || name === 'Y' || name === 'Z';
+      return false;
     });
     if (hasValidGizmoHit) return;
   }
@@ -480,6 +489,13 @@ export function updatePropertiesPanel() {
   // ByLayer Toggle
   document.getElementById('prop-bylayer-toggle')?.addEventListener('change', e => {
     const checked = e.target.checked;
+    
+    // Capture before state
+    const beforeState = S.selectedObjects.map(obj => ({
+      objectColorCustom: obj.userData.objectColorCustom,
+      isColorByLayer: obj.userData.isColorByLayer
+    }));
+
     const label = e.target.nextElementSibling;
     if (label) label.textContent = checked ? 'On' : 'Off';
 
@@ -522,6 +538,18 @@ export function updatePropertiesPanel() {
       }
     });
 
+    const afterState = S.selectedObjects.map(obj => ({
+      objectColorCustom: obj.userData.objectColorCustom,
+      isColorByLayer: obj.userData.isColorByLayer
+    }));
+
+    History.push({
+      type: 'color',
+      targets: [...S.selectedObjects],
+      before: beforeState,
+      after: afterState
+    });
+
     if (S.selectedObjects.some(o => o.userData.annIndex !== undefined)) {
       import('./annotations.js').then(a => a.createAnnotationSprites());
     } else {
@@ -530,9 +558,17 @@ export function updatePropertiesPanel() {
     updatePropertiesPanel();
   });
 
-  // Object Color picker
+  // Object Color picker drag & finalize captures
+  let objectColorBeforeState = null;
   document.getElementById('prop-object-color')?.addEventListener('input', e => {
     const val = e.target.value;
+    
+    if (!objectColorBeforeState) {
+      objectColorBeforeState = S.selectedObjects.map(obj => ({
+        objectColorCustom: obj.userData.objectColorCustom,
+        isColorByLayer: obj.userData.isColorByLayer
+      }));
+    }
     
     S.selectedObjects.forEach(obj => {
       obj.userData.objectColorCustom = val;
@@ -567,9 +603,31 @@ export function updatePropertiesPanel() {
       wrapper.style.color = val;
     }
     
-    // In multi-selection, once they edit, ByLayer drops to Off
     const toggle = document.getElementById('prop-bylayer-toggle');
     if (toggle) { toggle.checked = false; const lbl = toggle.nextElementSibling; if (lbl) lbl.textContent = 'Off'; }
+  });
+
+  document.getElementById('prop-object-color')?.addEventListener('change', e => {
+    const val = e.target.value;
+    console.log('[Color Picker] change event triggered. Current objectColorBeforeState:', objectColorBeforeState);
+    const beforeState = objectColorBeforeState || S.selectedObjects.map(obj => ({
+      objectColorCustom: obj.userData.objectColorCustom,
+      isColorByLayer: obj.userData.isColorByLayer
+    }));
+    
+    const afterState = S.selectedObjects.map(obj => ({
+      objectColorCustom: val,
+      isColorByLayer: false
+    }));
+    
+    console.log('[Color Picker] Pushing color change to History. beforeState:', beforeState, 'afterState:', afterState);
+    History.push({
+      type: 'color',
+      targets: [...S.selectedObjects],
+      before: beforeState,
+      after: afterState
+    });
+    objectColorBeforeState = null;
   });
 
   // ── Material Editor Listeners ──────────────────────────────────────
@@ -579,9 +637,17 @@ export function updatePropertiesPanel() {
       if (resetBtn) resetBtn.removeAttribute('disabled');
     };
 
-    // Material Color
+    // Material Color drag & finalize captures
+    let matColorBeforeState = null;
     document.getElementById('mat-color')?.addEventListener('input', e => {
       const val = e.target.value;
+      
+      if (!matColorBeforeState) {
+        matColorBeforeState = selectedMeshes.map(obj => ({
+          customMaterial: obj.userData.customMaterial ? { ...obj.userData.customMaterial } : null
+        }));
+      }
+
       selectedMeshes.forEach(obj => {
         ensureCustomMaterial(obj);
         obj.userData.customMaterial.color = val;
@@ -592,6 +658,25 @@ export function updatePropertiesPanel() {
       }
       enableResetBtn();
       applyDisplayMode();
+    });
+
+    document.getElementById('mat-color')?.addEventListener('change', () => {
+      console.log('[Material Color] change event triggered. Current matColorBeforeState:', matColorBeforeState);
+      const beforeState = matColorBeforeState || selectedMeshes.map(obj => ({
+        customMaterial: obj.userData.customMaterial ? { ...obj.userData.customMaterial } : null
+      }));
+      const afterState = selectedMeshes.map(obj => ({
+        customMaterial: obj.userData.customMaterial ? { ...obj.userData.customMaterial } : null
+      }));
+      
+      console.log('[Material Color] Pushing material change to History. beforeState:', beforeState, 'afterState:', afterState);
+      History.push({
+        type: 'material',
+        targets: [...selectedMeshes],
+        before: beforeState,
+        after: afterState
+      });
+      matColorBeforeState = null;
     });
 
     // Roughness
@@ -630,6 +715,46 @@ export function updatePropertiesPanel() {
       applyDisplayMode();
     });
 
+    // Bind grabs and changes to sliders
+    const bindSliderCapture = (id) => {
+      let beforeState = null;
+      const sl = document.getElementById(id);
+      if (!sl) return;
+      const grab = () => {
+        if (!beforeState) {
+          beforeState = selectedMeshes.map(obj => ({
+            customMaterial: obj.userData.customMaterial ? { ...obj.userData.customMaterial } : null
+          }));
+        }
+      };
+      sl.addEventListener('mousedown', grab);
+      sl.addEventListener('touchstart', grab);
+      sl.addEventListener('change', () => {
+        const fallbackBefore = beforeState || selectedMeshes.map(obj => ({
+          customMaterial: obj.userData.customMaterial ? { ...obj.userData.customMaterial } : null
+        }));
+        const afterState = selectedMeshes.map(obj => ({
+          customMaterial: obj.userData.customMaterial ? { ...obj.userData.customMaterial } : null
+        }));
+        console.log('[Slider] Pushing slider change to History. beforeState:', fallbackBefore, 'afterState:', afterState);
+        History.push({
+          type: 'material',
+          targets: [...selectedMeshes],
+          before: fallbackBefore,
+          after: afterState
+        });
+        beforeState = null;
+      });
+    };
+    bindSliderCapture('mat-roughness');
+    bindSliderCapture('mat-metalness');
+    bindSliderCapture('mat-opacity');
+
+    // Precise inline number input overlays
+    bindSliderDblClickInput('mat-roughness', 'mat-roughness-val');
+    bindSliderDblClickInput('mat-metalness', 'mat-metalness-val');
+    bindSliderDblClickInput('mat-opacity', 'mat-opacity-val');
+
     // Texture Upload
     document.getElementById('btn-mat-tex-upload')?.addEventListener('click', () => {
       document.getElementById('mat-tex-file-input').click();
@@ -637,6 +762,11 @@ export function updatePropertiesPanel() {
     document.getElementById('mat-tex-file-input')?.addEventListener('change', e => {
       const file = e.target.files?.[0];
       if (!file) return;
+
+      const beforeState = selectedMeshes.map(obj => ({
+        customMaterial: obj.userData.customMaterial ? { ...obj.userData.customMaterial } : null
+      }));
+
       const url = URL.createObjectURL(file);
       new THREE.TextureLoader().load(url, texture => {
         texture.wrapS = THREE.RepeatWrapping;
@@ -649,6 +779,17 @@ export function updatePropertiesPanel() {
           obj.userData.customMaterial.mapTexture = texture;
           obj.userData.customMaterial.mapName = file.name;
         });
+
+        const afterState = selectedMeshes.map(obj => ({
+          customMaterial: obj.userData.customMaterial ? { ...obj.userData.customMaterial } : null
+        }));
+
+        History.push({
+          type: 'material',
+          targets: [...selectedMeshes],
+          before: beforeState,
+          after: afterState
+        });
         
         enableResetBtn();
         applyDisplayMode();
@@ -658,11 +799,27 @@ export function updatePropertiesPanel() {
 
     // Texture Remove
     document.getElementById('btn-mat-tex-remove')?.addEventListener('click', () => {
+      const beforeState = selectedMeshes.map(obj => ({
+        customMaterial: obj.userData.customMaterial ? { ...obj.userData.customMaterial } : null
+      }));
+
       selectedMeshes.forEach(obj => {
         ensureCustomMaterial(obj);
         obj.userData.customMaterial.mapTexture = null;
         obj.userData.customMaterial.mapName = 'None';
       });
+
+      const afterState = selectedMeshes.map(obj => ({
+        customMaterial: obj.userData.customMaterial ? { ...obj.userData.customMaterial } : null
+      }));
+
+      History.push({
+        type: 'material',
+        targets: [...selectedMeshes],
+        before: beforeState,
+        after: afterState
+      });
+
       enableResetBtn();
       applyDisplayMode();
       updatePropertiesPanel();
@@ -670,9 +827,24 @@ export function updatePropertiesPanel() {
 
     // Material Reset
     document.getElementById('btn-mat-reset')?.addEventListener('click', () => {
+      const beforeState = selectedMeshes.map(obj => ({
+        customMaterial: obj.userData.customMaterial ? { ...obj.userData.customMaterial } : null
+      }));
+      const afterState = selectedMeshes.map(obj => ({
+        customMaterial: null
+      }));
+
       selectedMeshes.forEach(obj => {
         obj.userData.customMaterial = null;
       });
+
+      History.push({
+        type: 'material',
+        targets: [...selectedMeshes],
+        before: beforeState,
+        after: afterState
+      });
+
       applyDisplayMode();
       updatePropertiesPanel();
     });
@@ -680,9 +852,29 @@ export function updatePropertiesPanel() {
 
   // ── Transform Reset Listener ─────────────────────────────────────────
   document.getElementById('btn-transform-reset')?.addEventListener('click', () => {
+    const beforeState = S.selectedObjects.map(obj => ({
+      position: obj.position.clone(),
+      quaternion: obj.quaternion.clone(),
+      scale: obj.scale.clone()
+    }));
+
     S.selectedObjects.forEach(obj => {
       resetTransform(obj);
     });
+
+    const afterState = S.selectedObjects.map(obj => ({
+      position: obj.position.clone(),
+      quaternion: obj.quaternion.clone(),
+      scale: obj.scale.clone()
+    }));
+
+    History.push({
+      type: 'transform',
+      targets: [...S.selectedObjects],
+      before: beforeState,
+      after: afterState
+    });
+
     setupGumballHelper();
     applyDisplayMode();
     updatePropertiesPanel();

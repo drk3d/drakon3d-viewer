@@ -68,6 +68,8 @@ export async function saveSession(customFileName = null) {
       cameraFov:          parseFloat(document.getElementById('sl-camera-fov')?.value ?? 45),
       dampingFactor:      parseFloat(document.getElementById('sl-damping-panel')?.value ?? 0.5),
       envIntensity:       parseFloat(document.getElementById('sl-env-intensity')?.value ?? 1.0),
+      annotationScale:    parseFloat(document.getElementById('sl-measure-scale')?.value ?? 1.0),
+      hdrRotation:        parseInt(document.getElementById('sl-hdr-rotation')?.value ?? 0),
       envPreset:          document.getElementById('env-preset-select')?.value || 'studio',
       bgType:             document.getElementById('bg-type-select')?.value || 'solid',
       bgC1:               document.getElementById('bg-panel-c1')?.value || '#2a2b2f',
@@ -126,7 +128,9 @@ export async function saveSession(customFileName = null) {
       namedViews:          getCustomViews(),
       rhinoNamedViews:     S.parsedNamedViews || [],
       parsedLayers:        S.parsedLayers || [],
-      completedMeasurements: measurements
+      completedMeasurements: measurements,
+      customHdrData:       S.customHdrData || null,
+      customHdrName:       S.customHdrName || null
     };
 
     // Temporarily hide UI outlines during GLB export
@@ -269,6 +273,45 @@ export async function loadSession(file) {
       data = JSON.parse(text);
     }
 
+    // 1.5. Restore custom HDR if embedded
+    if (data.customHdrData) {
+      S.customHdrData = data.customHdrData;
+      S.customHdrName = data.customHdrName || 'Custom HDR';
+      
+      try {
+        const { RGBELoader } = await import('three/addons/loaders/RGBELoader.js');
+        const res = await fetch("data:application/octet-stream;base64," + data.customHdrData);
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        
+        await new Promise((resolve, reject) => {
+          const rgbeLoader = new RGBELoader();
+          const pmrem = new THREE.PMREMGenerator(S.renderer);
+          pmrem.compileEquirectangularShader();
+          
+          rgbeLoader.load(url, texture => {
+            URL.revokeObjectURL(url);
+            const envTexture = pmrem.fromEquirectangular(texture).texture;
+            texture.dispose();
+            pmrem.dispose();
+            
+            if (S.envMaps['hdr-custom']) S.envMaps['hdr-custom'].dispose();
+            S.envMaps['hdr-custom'] = envTexture;
+            
+            // Enable the custom-HDR option and select it
+            const hdrOpt = document.getElementById('opt-hdr-custom');
+            if (hdrOpt) { 
+              hdrOpt.disabled = false; 
+              hdrOpt.textContent = S.customHdrName; 
+            }
+            resolve();
+          }, undefined, reject);
+        });
+      } catch (hdrErr) {
+        console.error('[Session Import] Failed to restore custom HDR:', hdrErr);
+      }
+    }
+
     // 2. Restore settings
     if (data.settings) {
       const s = data.settings;
@@ -298,6 +341,7 @@ export async function loadSession(file) {
           if (valEl) {
             if (formatType === 'percent') valEl.textContent = Math.round(val * 100) + '%';
             else if (formatType === 'degree') valEl.textContent = Math.round(val) + '°';
+            else if (formatType === 'xScale') valEl.textContent = parseFloat(val).toFixed(1) + 'x';
             else valEl.textContent = parseFloat(val).toFixed(2);
           }
           el.dispatchEvent(new Event('input'));
@@ -307,9 +351,20 @@ export async function loadSession(file) {
       // Restore env preset
       if (s.envPreset) {
         const envSel = document.getElementById('env-preset-select');
-        if (envSel) { envSel.value = s.envPreset; envSel.dispatchEvent(new Event('change')); }
+        if (envSel) {
+          const hasPreset = S.envMaps && S.envMaps[s.envPreset];
+          if (hasPreset) {
+            envSel.value = s.envPreset;
+          } else {
+            console.warn(`[Session Import] Environment preset '${s.envPreset}' is not loaded. Falling back to default 'studio'.`);
+            envSel.value = 'studio';
+          }
+          envSel.dispatchEvent(new Event('change'));
+        }
       }
       setSlider('sl-env-intensity', 'sl-env-intensity-val', s.envIntensity ?? 1.0, 'float');
+      setSlider('sl-measure-scale', 'sl-measure-scale-val', s.annotationScale ?? 1.0, 'xScale');
+      setSlider('sl-hdr-rotation', 'sl-hdr-rotation-val', s.hdrRotation ?? 0, 'degree');
       setSlider('sl-ambient-panel', 'sl-ambient-val',     s.ambientIntensity, 'float');
       setSlider('sl-sun-intensity', 'sl-sun-intensity-val', s.sunIntensity ?? 1.8, 'float');
       setSlider('sl-sun-azimuth',   'sl-sun-azimuth-val', s.sunAzimuth,       'degree');
@@ -444,6 +499,14 @@ export async function loadSession(file) {
         }
         if (data.customMaterials?.[key]) {
           child.userData.customMaterial = { ...data.customMaterials[key] };
+          if (child.userData.customMaterial.mapTexture !== null && child.userData.customMaterial.mapTexture !== undefined) {
+            const orig = child.userData.renderedMaterial || child.userData.originalMaterial;
+            if (orig && orig.map) {
+              child.userData.customMaterial.mapTexture = orig.map;
+            } else {
+              child.userData.customMaterial.mapTexture = null;
+            }
+          }
         } else {
           delete child.userData.customMaterial;
         }
@@ -508,6 +571,15 @@ export function resetSettingsToDefault() {
   S.selectedObjects = [];
   S.hiddenObjects.clear();
 
+  // Clear custom HDR state
+  S.customHdrData = null;
+  S.customHdrName = null;
+  const hdrOpt = document.getElementById('opt-hdr-custom');
+  if (hdrOpt) {
+    hdrOpt.disabled = true;
+    hdrOpt.textContent = 'No Custom HDR';
+  }
+
   // Clear measurements (deferred import to avoid loading tools.js at module parse time)
   import('./tools.js').then(m => m.clearMeasurements()).catch(() => {});
 
@@ -539,6 +611,7 @@ export function resetSettingsToDefault() {
       if (valEl) {
         if (formatType === 'percent') valEl.textContent = Math.round(val * 100) + '%';
         else if (formatType === 'degree') valEl.textContent = Math.round(val) + '°';
+        else if (formatType === 'xScale') valEl.textContent = parseFloat(val).toFixed(1) + 'x';
         else valEl.textContent = parseFloat(val).toFixed(2);
       }
       el.dispatchEvent(new Event('input'));
@@ -546,6 +619,8 @@ export function resetSettingsToDefault() {
   };
 
   resetSlider('sl-env-intensity', 'sl-env-intensity-val', 1.0,  'float');
+  resetSlider('sl-measure-scale', 'sl-measure-scale-val', 1.0,  'xScale');
+  resetSlider('sl-hdr-rotation', 'sl-hdr-rotation-val', 0,    'degree');
   resetSlider('sl-ambient-panel', 'sl-ambient-val',       0.5,  'float');
   resetSlider('sl-sun-intensity', 'sl-sun-intensity-val', 1.8,  'float');
   resetSlider('sl-sun-azimuth',   'sl-sun-azimuth-val',   135,  'degree');

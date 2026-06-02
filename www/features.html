@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>byRhinoView - Feature Guide / 제품 기능 소개</title>
+  
+  <!-- Noto Sans: Covers Latin, Korean, Japanese, Chinese, etc. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      /* Dynamic Color Tokens - Default Light Theme */
+      --bg-gradient: linear-gradient(135deg, hsl(210, 30%, 96%) 0%, hsl(210, 20%, 90%) 100%);
+      --card-bg: hsla(0, 0%, 100%, 0.8);
+      --card-border: hsla(210, 20%, 85%, 0.5);
+      --text-main: hsl(220, 15%, 15%);
+      --text-sub: hsl(220, 10%, 40%);
+      --primary: hsl(215, 95%, 50%);
+      --primary-subtle: hsl(215, 90%, 94%);
+      --accent: hsl(260, 85%, 60%);
+      --accent-subtle: hsl(260, 90%, 95%);
+      --tag-bg-kr: hsla(140, 70%, 50%, 0.1);
+      --tag-text-kr: hsl(140, 70%, 35%);
+      --tag-bg-en: hsla(210, 90%, 50%, 0.1);
+      --tag-text-en: hsl(210, 90%, 40%);
+      
+      font-family: 'Noto Sans KR', 'Noto Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.6;
+      color: var(--text-main);
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        /* Premium Dark Theme */
+        --bg-gradient: linear-gradient(135deg, hsl(220, 25%, 8%) 0%, hsl(220, 25%, 14%) 100%);
+        --card-bg: hsla(220, 25%, 12%, 0.7);
+        --card-border: hsla(220, 20%, 22%, 0.6);
+        --text-main: hsl(210, 15%, 88%);
+        --text-sub: hsl(210, 10%, 62%);
+        --primary: hsl(210, 100%, 65%);
+        --primary-subtle: hsl(210, 30%, 15%);
+        --accent: hsl(260, 90%, 70%);
+        --accent-subtle: hsl(260, 35%, 16%);
+        --tag-bg-kr: hsla(140, 70%, 50%, 0.15);
+        --tag-text-kr: hsl(140, 75%, 65%);
+        --tag-bg-en: hsla(210, 90%, 50%, 0.15);
+        --tag-text-en: hsl(210, 95%, 70%);
+      }
+    }
+
+    * {
+      box-sizing: inherit;
+    }
+
+    body {
+      background: var(--bg-gradient);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 3rem 1.5rem;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    /* --- Hero Header --- */
+    header.hero {
+      text-align: center;
+      margin-bottom: 3.5rem;
+      position: relative;
+    }
+
+    .logo-container {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 64px;
+      height: 64px;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      border-radius: 16px;
+      margin-bottom: 1.25rem;
+      box-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.2);
+    }
+
+    .logo-container svg {
+      width: 32px;
+      height: 32px;
+      color: white;
+    }
+
+    header.hero h1 {
+      font-size: 2.75rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin: 0 0 0.5rem 0;
+      background: linear-gradient(135deg, var(--text-main), var(--primary));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    header.hero p.tagline {
+      font-size: 1.15rem;
+      color: var(--text-sub);
+      font-weight: 400;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    /* --- Language Switches --- */
+    .lang-toggle-bar {
+      display: flex;
+      justify-content: center;
+      gap: 0.5rem;
+      margin-top: 1.5rem;
+    }
+
+    .lang-btn {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      color: var(--text-main);
+      padding: 0.4rem 1rem;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+
+    .lang-btn:hover {
+      border-color: var(--primary);
+    }
+
+    .lang-btn.active {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: white;
+      font-weight: 600;
+    }
+
+    /* --- Platform & PWA Highlights Card --- */
+    .highlight-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 2rem;
+      margin-bottom: 3rem;
+      box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.08);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+    }
+
+    @media (max-width: 768px) {
+      .highlight-card {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+        padding: 1.5rem;
+      }
+    }
+
+    .highlight-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .highlight-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      color: var(--primary);
+    }
+
+    .highlight-title svg {
+      width: 20px;
+      height: 20px;
+      flex-shrink: 0;
+    }
+
+    .highlight-desc {
+      font-size: 0.95rem;
+      color: var(--text-sub);
+    }
+
+    /* --- Main Feature Grid --- */
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 4rem;
+    }
+
+    /* --- Feature Card Styling --- */
+    .feature-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 1.75rem;
+      box-shadow: 0 4px 20px -5px rgba(0, 0, 0, 0.04);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .feature-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 24px -8px rgba(0, 0, 0, 0.1);
+      border-color: var(--primary);
+    }
+
+    .feature-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .feature-icon-wrapper {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 42px;
+      height: 42px;
+      background: var(--primary-subtle);
+      color: var(--primary);
+      border-radius: 10px;
+    }
+
+    .feature-icon-wrapper svg {
+      width: 22px;
+      height: 22px;
+    }
+
+    .feature-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin: 0;
+      letter-spacing: -0.01em;
+    }
+
+    .feature-body {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      flex-grow: 1;
+    }
+
+    .feature-bullet {
+      font-size: 0.92rem;
+      margin: 0;
+      color: var(--text-sub);
+      position: relative;
+      padding-left: 1.25rem;
+    }
+
+    .feature-bullet::before {
+      content: "•";
+      position: absolute;
+      left: 0.25rem;
+      color: var(--accent);
+      font-weight: bold;
+    }
+
+    /* --- Side-by-side or Toggled Languages --- */
+    .bilingual-block .en,
+    .bilingual-block .ko {
+      display: block;
+    }
+
+    body.show-ko .en {
+      display: none !important;
+    }
+
+    body.show-en .ko {
+      display: none !important;
+    }
+
+    .badge-lang {
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      padding: 0.15rem 0.35rem;
+      border-radius: 4px;
+      margin-right: 0.4rem;
+      display: inline-block;
+      vertical-align: middle;
+    }
+
+    .badge-lang.kr {
+      background-color: var(--tag-bg-kr);
+      color: var(--tag-text-kr);
+    }
+
+    .badge-lang.en {
+      background-color: var(--tag-bg-en);
+      color: var(--tag-text-en);
+    }
+
+    /* --- Offline Sandbox Alert --- */
+    .sandbox-banner {
+      background: linear-gradient(135deg, hsla(260, 85%, 60%, 0.1) 0%, hsla(215, 95%, 50%, 0.1) 100%);
+      border: 1px dashed var(--accent);
+      border-radius: 16px;
+      padding: 1.75rem;
+      margin-bottom: 4rem;
+      text-align: center;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }
+
+    .sandbox-banner svg {
+      width: 32px;
+      height: 32px;
+      color: var(--accent);
+      margin-bottom: 0.75rem;
+    }
+
+    .sandbox-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+    }
+
+    .sandbox-desc {
+      font-size: 0.95rem;
+      color: var(--text-sub);
+      max-width: 700px;
+      margin: 0 auto;
+    }
+
+    /* --- Guide Steps --- */
+    .section-title {
+      font-size: 1.75rem;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 2rem;
+      letter-spacing: -0.02em;
+    }
+
+    .steps-container {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1.25rem;
+      margin-bottom: 4rem;
+    }
+
+    @media (max-width: 768px) {
+      .steps-container {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+      }
+    }
+
+    .step-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 1.25rem;
+      text-align: center;
+      position: relative;
+    }
+
+    .step-num {
+      width: 28px;
+      height: 28px;
+      background: var(--accent);
+      color: white;
+      font-weight: 700;
+      font-size: 0.85rem;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 0.75rem;
+    }
+
+    .step-title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      margin-bottom: 0.4rem;
+    }
+
+    .step-desc {
+      font-size: 0.85rem;
+      color: var(--text-sub);
+    }
+
+    /* --- Footer --- */
+    footer {
+      text-align: center;
+      margin-top: auto;
+      padding-top: 2rem;
+      border-top: 1px solid var(--card-border);
+      font-size: 0.85rem;
+      color: var(--text-sub);
+    }
+
+    footer p {
+      margin: 0.25rem 0;
+    }
+
+    footer a {
+      color: var(--primary);
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    footer a:hover {
+      text-decoration: underline;
+    }
+
+    /* --- Modern Modal --- */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+
+    .modal-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .modal-window {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 2.25rem;
+      max-width: 650px;
+      width: 90%;
+      max-height: 85vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 40px -10px rgba(0,0,0,0.3);
+      transform: scale(0.9);
+      transition: transform 0.3s ease;
+      position: relative;
+    }
+
+    .modal-overlay.active .modal-window {
+      transform: scale(1);
+    }
+
+    .modal-close-btn {
+      position: absolute;
+      top: 1.25rem;
+      right: 1.25rem;
+      background: none;
+      border: none;
+      color: var(--text-sub);
+      font-size: 1.5rem;
+      cursor: pointer;
+      line-height: 1;
+      padding: 0.25rem;
+      transition: color 0.2s;
+    }
+
+    .modal-close-btn:hover {
+      color: var(--text-main);
+    }
+
+    .modal-title {
+      font-size: 1.35rem;
+      font-weight: 700;
+      margin-top: 0;
+      margin-bottom: 1.5rem;
+      border-bottom: 1px solid var(--card-border);
+      padding-bottom: 0.75rem;
+    }
+
+    .modal-content-text {
+      font-size: 0.92rem;
+      color: var(--text-sub);
+      line-height: 1.6;
+      text-align: left;
+    }
+
+    .modal-content-text ol {
+      padding-left: 1.25rem;
+      margin: 0;
+    }
+
+    .modal-content-text li {
+      margin-bottom: 1rem;
+    }
+
+    .modal-content-text li strong {
+      color: var(--text-main);
+      display: block;
+      margin-bottom: 0.25rem;
+    }
+  </style>
+</head>
+<body class="show-ko"> <!-- Defaults to Korean show-ko, switches with js -->
+
+  <div class="container">
+    
+    <!-- Hero Header -->
+    <header class="hero">
+      <div class="logo-container">
+        <!-- SVG Cube Icon -->
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+          <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+          <line x1="12" y1="22.08" x2="12" y2="12"></line>
+        </svg>
+      </div>
+      
+      <h1 class="ko">byRhinoView 기능 소개</h1>
+      <h1 class="en" style="display:none">byRhinoView Features</h1>
+      
+      <p class="tagline ko">웹 브라우저 및 모바일 기기에서 별도의 설치 없이 100% 로컬 환경으로 작동하는 프리미엄 3D Rhino & CAD 모델 뷰어</p>
+      <p class="tagline en" style="display:none">A premium, lightweight, zero-install 3D Rhino & CAD viewer running 100% locally in your web browser and mobile device.</p>
+      
+      <!-- Bilingual toggles -->
+      <div class="lang-toggle-bar">
+        <button id="btn-lang-ko" class="lang-btn active" onclick="setLang('ko')">한국어</button>
+        <button id="btn-lang-en" class="lang-btn" onclick="setLang('en')">English</button>
+      </div>
+    </header>
+
+
+
+    <!-- Main Features Grid -->
+    <section class="feature-grid">
+
+      <!-- 1. Supported Formats -->
+      <div class="feature-card">
+        <div class="feature-header">
+          <div class="feature-icon-wrapper">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+              <polyline points="10 9 9 9 8 9"></polyline>
+            </svg>
+          </div>
+          <h2 class="feature-title ko">지원 파일 포맷</h2>
+          <h2 class="feature-title en" style="display:none">Supported CAD Formats</h2>
+        </div>
+        <div class="feature-body">
+          <p class="feature-bullet ko"><strong>.3dm (Rhino 3D):</strong> 라이노 버전 5, 6, 7, 8 파일의 레이어, 선, 재질, 개체 색상을 완벽 복원하여 읽습니다.</p>
+          <p class="feature-bullet en" style="display:none"><strong>.3dm (Rhino 3D):</strong> Loads Rhino 5, 6, 7, and 8 models with high fidelity curve rendering, textures, and layers.</p>
+
+          <p class="feature-bullet ko"><strong>.glb / .gltf:</strong> 표준 3D 전송 형식을 빠르게 불러오고 매끄러운 텍스처를 구현합니다.</p>
+          <p class="feature-bullet en" style="display:none"><strong>.glb / .gltf:</strong> Efficiently imports standard 3D web assets and environment mappings.</p>
+
+          <p class="feature-bullet ko"><strong>.stl & .3mf:</strong> 3D 프린팅을 위한 메시 파일을 정밀 지원합니다.</p>
+          <p class="feature-bullet en" style="display:none"><strong>.stl & .3mf:</strong> Complete support for rapid prototyping stereolithography mesh data.</p>
+
+          <p class="feature-bullet ko"><strong>.stp / .step / .igs:</strong> 드롭 및 모바일 내파일 앱 연결을 통한 STEP/IGES 포맷 불러오기.</p>
+          <p class="feature-bullet en" style="display:none"><strong>.stp / .step / .igs:</strong> Convenient sessions and native model import via drag-and-drop or platform file sharing.</p>
+        </div>
+      </div>
+
+      <!-- 2. Display & Shading Modes -->
+      <div class="feature-card">
+        <div class="feature-header">
+          <div class="feature-icon-wrapper">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+              <polyline points="2 17 12 22 22 17"></polyline>
+              <polyline points="2 12 12 17 22 12"></polyline>
+            </svg>
+          </div>
+          <h2 class="feature-title ko">쉐이딩 및 뷰 모드</h2>
+          <h2 class="feature-title en" style="display:none">Premium Shading Modes</h2>
+        </div>
+        <div class="feature-body">
+          <p class="feature-bullet ko"><strong>음영 (Shaded):</strong> 와이어프레임 경계와 서피스 음영이 결합된 고전적 CAD 뷰.</p>
+          <p class="feature-bullet en" style="display:none"><strong>Shaded:</strong> Clean solid representation paired with precise wireframe borders.</p>
+
+          <p class="feature-bullet ko"><strong>와이어프레임 (Wireframe):</strong> 모델의 뼈대 곡선 및 메시 아웃라인만 표기하여 내부 점검 용이.</p>
+          <p class="feature-bullet en" style="display:none"><strong>Wireframe:</strong> Renders structural lines and boundary edges, perfect for reviewing complex shapes.</p>
+
+          <p class="feature-bullet ko"><strong>아키텍처 (Arctic):</strong> 부드러운 앰비언트 오클루전(AO) 그림자를 생성하여 형태의 입체감과 깊이를 고급스럽게 연출.</p>
+          <p class="feature-bullet en" style="display:none"><strong>Arctic (Ambient Occlusion):</strong> Premium architectural rendering utilizing soft ambient occlusion shadows, highlighting geometry shapes beautifully.</p>
+
+          <p class="feature-bullet ko"><strong>렌더링 (Rendered):</strong> 재질, 반사광, 실시간 태양 광선과 반사 환경을 완전 표현.</p>
+          <p class="feature-bullet en" style="display:none"><strong>Rendered:</strong> Realistic material representation with ground shadows and HDR environment reflections.</p>
+
+          <p class="feature-bullet ko"><strong>스케치 (Technical Sketch):</strong> 주요 테두리와 실루엣 아웃라인을 부각하는 예술적 도면 느낌 표출.</p>
+          <p class="feature-bullet en" style="display:none"><strong>Technical Sketch:</strong> Hand-drawn layout look highlighting main contours and silhouette drafts.</p>
+        </div>
+      </div>
+
+      <!-- 3. Measurement & Analysis -->
+      <div class="feature-card">
+        <div class="feature-header">
+          <div class="feature-icon-wrapper">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="2" y1="12" x2="22" y2="12"></line>
+              <line x1="2" y1="7" x2="2" y2="17"></line>
+              <line x1="22" y1="7" x2="22" y2="17"></line>
+              <line x1="12" y1="10" x2="12" y2="14"></line>
+            </svg>
+          </div>
+          <h2 class="feature-title ko">정밀 분석 및 계측 도구</h2>
+          <h2 class="feature-title en" style="display:none">Measurement & Analysis</h2>
+        </div>
+        <div class="feature-body">
+          <p class="feature-bullet ko"><strong>점 스냅 거리 측정:</strong> 서피스의 정점(Vertex)을 자동 스냅(Snap to Vertex)하여 두 점 간의 정확한 실제 직선 거리를 측정합니다.</p>
+          <p class="feature-bullet en" style="display:none"><strong>Snap to Vertex Distance:</strong> Automatically snap to vertices on loaded geometry meshes, ensuring extremely accurate real-world distance metrics.</p>
+
+          <p class="feature-bullet ko"><strong>각도 측정:</strong> 뷰포트 위의 세 정점을 탭하여 두 베터 사이의 사잇각을 실시간 측정하고 시각화합니다.</p>
+          <p class="feature-bullet en" style="display:none"><strong>Angle Tool:</strong> Easily measure the angle between three custom-picked vertex points in real-time.</p>
+
+          <p class="feature-bullet ko"><strong>측정 내역 저장:</strong> 진행한 거리/각도 데이터가 히스토리 표에 차례대로 기록되어 일괄 지우거나 한눈에 점검 가능합니다.</p>
+          <p class="feature-bullet en" style="display:none"><strong>History Table:</strong> Review, clear, or track all of your measurements inside a neat floating overlay window.</p>
+
+          <p class="feature-bullet ko"><strong>클리핑 단면 분석:</strong> X, Y, Z축 축별 클리핑 단면 평면을 미세조정 슬라이더로 통제하고 단면 방향 반전(Flip) 및 리셋을 지원합니다.</p>
+          <p class="feature-bullet en" style="display:none"><strong>Clipping Plane:</strong> Custom 3-axis sectioning planes with interactive sliders, clipping direction flips, and quick resets.</p>
+        </div>
+      </div>
+
+      <!-- 4. Environments & Lights -->
+      <div class="feature-card">
+        <div class="feature-header">
+          <div class="feature-icon-wrapper">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="5"></circle>
+              <line x1="12" y1="1" x2="12" y2="3"></line>
+              <line x1="12" y1="21" x2="12" y2="23"></line>
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+              <line x1="1" y1="12" x2="3" y2="12"></line>
+              <line x1="21" y1="12" x2="23" y2="12"></line>
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+            </svg>
+          </div>
+          <h2 class="feature-title ko">조명 및 배경 환경 설정</h2>
+          <h2 class="feature-title en" style="display:none">Environment & Lighting</h2>
+        </div>
+        <div class="feature-body">
+          <p class="feature-bullet ko"><strong>다양한 커스텀 배경:</strong> 단색, 2색 그라디언트, 방사형 그라디언트(확산 범위 제어), 4색 그라디언트 및 HDR 배경을 지원하며 프리미엄 색상 피커를 탑재했습니다.</p>
+          <p class="feature-bullet en" style="display:none"><strong>Custom Backgrounds:</strong> Support for Solid, 2-Color, Radial (with spread factor), 4-Color gradient, or HDR background modes powered by custom color pickers.</p>
+
+          <p class="feature-bullet ko"><strong>조명 프리셋 & HDR 로드:</strong> 스튜디오, 뉴트럴, 노을, 야간 등 라이팅 프리셋 및 외장 <code>.hdr</code>/<code>.exr</code> 조명 환경을 직접 로드해 적용합니다.</p>
+          <p class="feature-bullet en" style="display:none"><strong>HDR & Presets:</strong> Predefined settings (Studio, Sunset, etc.) and direct custom loading of high-fidelity <code>.hdr</code> or <code>.exr</code> files.</p>
+
+          <p class="feature-bullet ko"><strong>실시간 태양광 통제:</strong> 태양 조명 스위치 및 태양광 세기, 자전 방위각(Azimuth), 고도(Elevation)를 슬라이더로 조작합니다.</p>
+          <p class="feature-bullet en" style="display:none"><strong>Directional Sun:</strong> Fine-tune directional light intensity, rotation azimuth angle, and altitude elevation angle.</p>
+
+          <p class="feature-bullet ko"><strong>정밀 컬러 그레이딩:</strong> 노출(Exposure), 대비(Contrast), 채도(Saturation), 색온도(Temperature)를 보정해 인쇄나 프레젠테이션용 톤을 보정합니다.</p>
+          <p class="feature-bullet en" style="display:none"><strong>Color Grading:</strong> Adjust rendering tone with Exposure, Contrast, Saturation, and Temperature color-correction sliders.</p>
+        </div>
+      </div>
+
+      <!-- 5. Camera & Navigation -->
+      <div class="feature-card">
+        <div class="feature-header">
+          <div class="feature-icon-wrapper">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+              <circle cx="12" cy="13" r="4"></circle>
+            </svg>
+          </div>
+          <h2 class="feature-title ko">카메라 및 네비게이션</h2>
+          <h2 class="feature-title en" style="display:none">Camera & Navigation</h2>
+        </div>
+        <div class="feature-body">
+          <p class="feature-bullet ko"><strong>원근 / 평행 투영:</strong> 카메라 렌즈 투영 방식을 원근(Perspective) 및 엔지니어링 평행(Parallel/Orthographic)으로 전환합니다.</p>
+          <p class="feature-bullet en" style="display:none"><strong>Projection:</strong> Instantly switch between dynamic Perspective depth and parallel Orthographic display mode.</p>
+
+          <p class="feature-bullet ko"><strong>마찰력 & FOV 제어:</strong> 회전 관성 마찰 강도(Damping) 및 Perspective 화각(10° - 100°)을 미세 조절합니다.</p>
+          <p class="feature-bullet en" style="display:none"><strong>Damping & Perspective Angle:</strong> Adjust friction momentum inertia and perspective field of view easily.</p>
+
+          <p class="feature-bullet ko"><strong> Named View (뷰 저장):</strong> 3DM에 심겨 있는 기존 카메라 앵글을 가져오거나 현재 카메라 앵글을 신규 저장하고 전환 애니메이션을 지원합니다.</p>
+          <p class="feature-bullet en" style="display:none"><strong>Rhino Named Views:</strong> Imports named camera positions from Rhino files and saves custom camera orientations on the fly with animations.</p>
+
+          <p class="feature-bullet ko"><strong>턴테이블 회전:</strong> 지속적으로 회전하며 제품 형상을 다각도로 관찰하는 턴테이블 자전 모드(속도 및 방향 제어 가능).</p>
+          <p class="feature-bullet en" style="display:none"><strong>Turntable Auto-Rotate:</strong> Let the model rotate smoothly at variable speeds to observe details from all angles.</p>
+        </div>
+      </div>
+
+      <!-- 6. Selection & Layers -->
+      <div class="feature-card">
+        <div class="feature-header">
+          <div class="feature-icon-wrapper">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="8" y1="6" x2="21" y2="6"></line>
+              <line x1="8" y1="12" x2="21" y2="12"></line>
+              <line x1="8" y1="18" x2="21" y2="18"></line>
+              <line x1="3" y1="6" x2="3.01" y2="6"></line>
+              <line x1="3" y1="12" x2="3.01" y2="12"></line>
+              <line x1="3" y1="18" x2="3.01" y2="18"></line>
+            </svg>
+          </div>
+          <h2 class="feature-title ko">개체 선택 및 레이어 관리</h2>
+          <h2 class="feature-title en" style="display:none">Selection & Layers</h2>
+        </div>
+        <div class="feature-body">
+          <p class="feature-bullet ko"><strong>다양한 선택 모드:</strong> 선택 안함(None), 단일 선택(Single), 다중 선택(Multi-Select)을 지정해 개체 속성과 트리 정보를 확인합니다.</p>
+          <p class="feature-bullet en" style="display:none"><strong>Selection Modes:</strong> Toggle None, Single, and Multi-Select interaction styles to inspect object node details.</p>
+
+          <p class="feature-bullet ko"><strong>이름으로 개체 찾기:</strong> 개체 검색 기능을 이용해 3D 객체 파트를 이름으로 필터링하고 더블클릭하여 강조 표시하거나 탐색합니다.</p>
+          <p class="feature-bullet en" style="display:none"><strong>Find Object:</strong> Search mesh nodes by name to instantly isolate, highlight, or focus the camera on them.</p>
+
+          <p class="feature-bullet ko"><strong>레이어 하이러키 & 레이어 색상:</strong> CAD에 포함된 레이어 트리를 그대로 로드하고 레이어별 고유 색상 마커 서클을 매칭해 가시성을 제어합니다.</p>
+          <p class="feature-bullet en" style="display:none"><strong>Layer Hierarchy:</strong> Import full layers from native files, with matching Rhino colors and toggle switches.</p>
+        </div>
+      </div>
+
+      <!-- 7. Session & Exports -->
+      <div class="feature-card">
+        <div class="feature-header">
+          <div class="feature-icon-wrapper">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+              <polyline points="17 21 17 13 7 13 7 21"></polyline>
+              <polyline points="7 3 7 8 15 8"></polyline>
+            </svg>
+          </div>
+          <h2 class="feature-title ko">세션 패키지 및 스마트 저장</h2>
+          <h2 class="feature-title en" style="display:none">Session & Exports</h2>
+        </div>
+        <div class="feature-body">
+          <p class="feature-bullet ko"><strong>.rhinoview 세션 저장:</strong> 단순히 모델만 저장하는 것이 아니라 카메라 앵글, 조명값, 그라디언트 배경 설정, 레이어 투명성, 표기된 거리 측정 주석들을 단일 패키지 파일로 한 번에 저장하고 리로드합니다.</p>
+          <p class="feature-bullet en" style="display:none"><strong>.rhinoview Session:</strong> Packages model geometry alongside active camera angles, gradients, annotations, lighting, and layers into a single portable session file.</p>
+
+          <p class="feature-bullet ko"><strong>고화질 스크린샷 캡처:</strong> 우측 하단 캔버스 이미지 스크린샷 캡처 기능을 통해 원클릭으로 PNG 형식의 배경 투명 스냅샷을 내보냅니다.</p>
+          <p class="feature-bullet en" style="display:none"><strong>Capture Screen:</strong> Generates and downloads crystal-clear PNG snapshots from the interactive WebGL canvas in one click.</p>
+
+          <p class="feature-bullet ko"><strong>GLB 내보내기:</strong> 파싱된 CAD 모델 기하 구조를 범용 3D 메시 압축 형식인 GLB 모델로 손쉽게 가공해 내보냅니다.</p>
+          <p class="feature-bullet en" style="display:none"><strong>Export GLB:</strong> Process and export loaded CAD structures to standard compressed binary GLB formats.</p>
+
+          <p class="feature-bullet ko"><strong>12개국 언어 지원:</strong> 다국어 인터네셔널라이제이션(i18n) 시스템으로 라이노 3D 언어 스택과 완전히 매칭되어 표시됩니다.</p>
+          <p class="feature-bullet en" style="display:none"><strong>12 Languages:</strong> Full i18n support matching Rhino's official localization portfolio.</p>
+        </div>
+      </div>
+
+
+      <!-- 8. iOS / Android PWA Support -->
+      <div class="feature-card">
+        <div class="feature-header">
+          <div class="feature-icon-wrapper">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+              <line x1="12" y1="18" x2="12.01" y2="18"></line>
+            </svg>
+          </div>
+          <h2 class="feature-title ko">iOS / Android PWA 및 웹 지원</h2>
+          <h2 class="feature-title en" style="display:none">iOS / Android PWA Support</h2>
+        </div>
+        <div class="feature-body">
+          <p class="feature-bullet ko"><strong>독립형 PWA 구동:</strong> 홈 화면에 앱을 추가해 오프라인 오버헤드 없이 네이티브 전용 앱처럼 신속하게 구동됩니다.</p>
+          <p class="feature-bullet en" style="display:none"><strong>Standalone PWA:</strong> Add the app to your Home Screen to boot quickly like a native app without offline delays.</p>
+
+          <p class="feature-bullet ko"><strong>iOS 기기 특화:</strong> iOS 전용 스플래시 인트로 애니메이션과 반투명 몰입형 상태 표시줄 테마를 완벽 제공합니다.</p>
+          <p class="feature-bullet en" style="display:none"><strong>iOS Specialization:</strong> Full integration of bespoke launch animations and custom translucent status bars on iOS devices.</p>
+
+          <p class="feature-bullet ko"><strong>100% 웹 표준 뷰잉:</strong> 추가 플러그인 설치 없이 순수 WebGL/WebAssembly 기반으로 브라우저에서 즉시 작동합니다.</p>
+          <p class="feature-bullet en" style="display:none"><strong>100% Web Standards:</strong> Powered by modern WebGL/WASM, operates instantly inside any mobile browser.</p>
+        </div>
+      </div>
+
+
+    </section>
+
+    <!-- Sandbox banner / Security & Privacy first -->
+    <section class="sandbox-banner">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+      </svg>
+      
+      <div class="sandbox-title ko">🔒 강력한 오프라인 로컬 보안 샌드박스</div>
+      <div class="sandbox-title en" style="display:none">🔒 Offline & Sandbox Privacy First</div>
+      
+      <p class="sandbox-desc ko">byRhinoView는 사용자의 파일을 외부 클라우드나 특정 관리 서버로 절대 보내지 않습니다. 모든 데이터 파싱과 WebGL 렌더링 연산은 본인 디바이스 브라우저 내부에서 <strong>100% 로컬 오프라인</strong>으로 작동하여 기업의 중요한 CAD 설계 보안을 완벽히 보장합니다.</p>
+      <p class="sandbox-desc en" style="display:none">byRhinoView operates entirely offline in your client browser. Your 3D models and session details are processed inside a private sandbox and are <strong>never sent to external servers or cloud repositories</strong>, providing maximum intellectual property protection.</p>
+    </section>
+
+    <!-- Quick Guide Steps -->
+    <section>
+      <h2 class="section-title ko">빠른 시작 가이드</h2>
+      <h2 class="section-title en" style="display:none">Quick Start Guide</h2>
+      
+      <div class="steps-container">
+        <!-- Step 1 -->
+        <div class="step-card">
+          <div class="step-num">1</div>
+          <div class="step-title ko">모델 로드</div>
+          <div class="step-title en" style="display:none">Load Model</div>
+          <div class="step-desc ko">.3dm, .glb, .stl, .3mf, .stp CAD 파일을 화면에 드롭하거나 열기를 클릭합니다.</div>
+          <div class="step-desc en" style="display:none">Drag & drop files (.3dm, .glb, .stl, .3mf, .stp) or select open to load.</div>
+        </div>
+
+        <!-- Step 2 -->
+        <div class="step-card">
+          <div class="step-num">2</div>
+          <div class="step-title ko">3D 탐색</div>
+          <div class="step-title en" style="display:none">3D Navigation</div>
+          <div class="step-desc ko">마우스 왼쪽 드래그(회전), 오른쪽 드래그(이동), 휠(확대/축소) 또는 모바일 터치 제스처를 사용합니다.</div>
+          <div class="step-desc en" style="display:none">Rotate (left drag), Pan (right drag), Zoom (scroll), or touch gestures.</div>
+        </div>
+
+        <!-- Step 3 -->
+        <div class="step-card">
+          <div class="step-num">3</div>
+          <div class="step-title ko">분석 및 세팅</div>
+          <div class="step-title en" style="display:none">Analyze & Setup</div>
+          <div class="step-desc ko">정점 스냅 치수 측정, 클리핑 평면 단면 검증, 태양광 방향 미세 제어 및 배경을 자유롭게 맞춥니다.</div>
+          <div class="step-desc en" style="display:none">Measure sizes with snapping, slice section planes, and tweak lighting or colors.</div>
+        </div>
+
+        <!-- Step 4 -->
+        <div class="step-card">
+          <div class="step-num">4</div>
+          <div class="step-title ko">세션 내보내기</div>
+          <div class="step-title en" style="display:none">Save & Share</div>
+          <div class="step-desc ko">작업한 앵글과 측정 마커 기록을 담아 .rhinoview 세션 파일로 보존하고 캡처를 공유합니다.</div>
+          <div class="step-desc en" style="display:none">Export your entire session state to a standalone .rhinoview pack or save PNG screenshots.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+      <p>Copyright © 2026 Plus Plastic. All rights reserved.</p>
+      <p class="ko">byRhinoView는 MIT 라이선스 하에 배포되는 <strong>오픈소스 소프트웨어</strong>입니다.</p>
+      <p class="en" style="display:none">byRhinoView is <strong>open-source software</strong> distributed under the MIT License.</p>
+      <p>byRhinoView is powered by pure modern WebAssembly & WebGL technologies.</p>
+      <p style="margin-top:0.75rem;">
+        <a href="privacy.html">개인정보처리방침 (Privacy Policy)</a>
+        <span style="margin: 0 8px; opacity: 0.3;">|</span>
+        <a href="javascript:void(0);" onclick="openLicenseModal()" class="ko">라이선스 안내</a>
+        <a href="javascript:void(0);" onclick="openLicenseModal()" class="en" style="display:none">License Info</a>
+      </p>
+    </footer>
+
+    <!-- License Modal Overlay -->
+    <div id="license-modal" class="modal-overlay" onclick="closeLicenseModalOuter(event)">
+      <div class="modal-window">
+        <button class="modal-close-btn" onclick="closeLicenseModal()">&times;</button>
+        
+        <h3 class="modal-title ko">byRhinoView 오픈소스 라이선스 안내 (MIT License)</h3>
+        <h3 class="modal-title en" style="display:none">byRhinoView Open Source License (MIT License)</h3>
+        
+        <div class="modal-content-text">
+          <ol>
+            <li>
+              <strong>
+                <span class="ko">1. MIT 라이선스 적용</span>
+                <span class="en" style="display:none">1. MIT License Application</span>
+              </strong>
+              <span class="ko">본 뷰어는 세계적으로 널리 쓰이는 대표적인 오픈소스 라이선스인 <b>MIT 라이선스</b> 하에 배포됩니다.</span>
+              <span class="en" style="display:none">This software is distributed under the terms of the widely-adopted open-source <b>MIT License</b>.</span>
+            </li>
+            <li>
+              <strong>
+                <span class="ko">2. 자유로운 사용 및 재배포</span>
+                <span class="en" style="display:none">2. Permission to Use & Redistribute</span>
+              </strong>
+              <span class="ko">개인, 교육, 연구는 물론 <b>상업적 목적의 기업 사용자</b>까지 회원 가입이나 비용 결제 없이 완전 무상으로 자유롭게 사용할 수 있습니다. 또한 제한 없이 사용, 복제, 수정, 병합, 게시, 배포, 서브라이선스 부여 및/또는 복사본을 판매할 권리가 허용됩니다.</span>
+              <span class="en" style="display:none">Individuals, educators, researchers, and <b>commercial corporate entities</b> can freely use the viewer at zero cost and without account sign-ups. Permission is hereby granted to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the software without restriction.</span>
+            </li>
+            <li>
+              <strong>
+                <span class="ko">3. 저작권 고지 의무 및 면책 고지</span>
+                <span class="en" style="display:none">3. Copyright Notice & Disclaimer of Liability</span>
+              </strong>
+              <span class="ko">소프트웨어의 복제본이나 실질적인 일부를 배포할 때에는 반드시 저작권 고지 및 라이선스 허용 고지를 포함해야 합니다. 본 소프트웨어는 "있는 그대로" 제공되며, 어떠한 명시적/묵시적 보증도 하지 않습니다. 개발자는 소프트웨어 사용이나 기타 거래 과정에서 발생하는 어떠한 클레임, 손해 또는 책임에 대해서도 면책됩니다.</span>
+              <span class="en" style="display:none">Any substantial portions or copies of the software must include the original copyright and permission notices. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE.</span>
+            </li>
+          </ol>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    function setLang(lang) {
+      const body = document.body;
+      const btnKo = document.getElementById('btn-lang-ko');
+      const btnEn = document.getElementById('btn-lang-en');
+      
+      const koElements = document.querySelectorAll('.ko');
+      const enElements = document.querySelectorAll('.en');
+
+      if (lang === 'ko') {
+        body.className = 'show-ko';
+        btnKo.classList.add('active');
+        btnEn.classList.remove('active');
+        
+        koElements.forEach(el => el.style.display = '');
+        enElements.forEach(el => el.style.display = 'none');
+      } else {
+        body.className = 'show-en';
+        btnEn.classList.add('active');
+        btnKo.classList.remove('active');
+        
+        enElements.forEach(el => el.style.display = '');
+        koElements.forEach(el => el.style.display = 'none');
+      }
+    }
+
+    function openLicenseModal() {
+      document.getElementById('license-modal').classList.add('active');
+    }
+    function closeLicenseModal() {
+      document.getElementById('license-modal').classList.remove('active');
+    }
+    function closeLicenseModalOuter(event) {
+      if (event.target === document.getElementById('license-modal')) {
+        closeLicenseModal();
+      }
+    }
+  </script>
+</body>
+</html>

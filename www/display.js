@@ -23,6 +23,15 @@ export function updateBgSkybox() {
 }
 
 export function applySceneBackground() {
+  if (S.scene) {
+    const bgType = document.getElementById('bg-type-select')?.value || 'solid';
+    if (bgType === 'hdr') {
+      S.scene.backgroundIntensity = S.scene.environmentIntensity !== null ? S.scene.environmentIntensity : 1.0;
+    } else {
+      S.scene.backgroundIntensity = 1.0;
+    }
+  }
+
   if (S.currentMode === 'technical') { 
     S.scene.background = new THREE.Color(0xffffff); 
     return; 
@@ -222,8 +231,13 @@ export function applyDisplayMode() {
     S.renderer.toneMappingExposure = 1.0;
   }
   if (S.scene) {
-    // Maintain standard background intensity now that toneMapping compression is bypassed.
-    S.scene.backgroundIntensity = 1.0;
+    // Dynamically match the background intensity to the environment light intensity (HDR brightness) only if background mode is HDR
+    const bgType = document.getElementById('bg-type-select')?.value || 'solid';
+    if (bgType === 'hdr') {
+      S.scene.backgroundIntensity = S.scene.environmentIntensity !== null ? S.scene.environmentIntensity : 1.0;
+    } else {
+      S.scene.backgroundIntensity = 1.0;
+    }
   }
 
   // Manage a skybox sphere that bypasses tone mapping so user-set background
@@ -414,7 +428,6 @@ export function applyDisplayMode() {
         m.polygonOffset = true; m.polygonOffsetFactor = 1; m.polygonOffsetUnits = 1;
         m.roughness = 0.85; m.metalness = 0.05;
         const custom = child.userData.customMaterial;
-        if (custom?.color !== undefined) m.color?.set(custom.color);
         if (child.userData.objectColorCustom !== undefined) m.color?.set(child.userData.objectColorCustom);
         m.needsUpdate = true;
         child.material = m;
@@ -603,7 +616,11 @@ export function applyCustomToMaterial(mat, custom) {
     mat.depthWrite  = custom.opacity >= 0.999;
   }
   if (custom.mapTexture !== undefined) {
-    mat.map = custom.mapTexture;
+    if (custom.mapTexture === null) {
+      mat.map = null;
+    } else if (custom.mapTexture.isTexture) {
+      mat.map = custom.mapTexture;
+    }
   }
   mat.needsUpdate = true;
 }
