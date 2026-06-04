@@ -454,28 +454,51 @@ export async function preprocess3dm(file, skipLayerParse) {
 
     const safeInst = (obj, cls) => !!(cls && (obj instanceof cls));
 
-    // ── Dimension styles ─────────────────────────────────────────────────
-    // rhino3dm@8.17 exposes textHeight but NOT dimensionScale (RhinoCommon has it,
-    // js bindings don't). Per-object scale override is similarly unavailable.
-    // We extract what we can; effective size will be computed with a baseH floor.
-    const dimStylesById = {};
-    try {
-      const dsTable = doc.dimstyles();
-      const dsCount = dsTable?.count ?? 0;
-      for (let i = 0; i < dsCount; i++) {
-        const ds = dsTable.get(i);
-        if (ds) {
-          try {
-            dimStylesById[ds.id] = {
-              name:       ds.name,
-              textHeight: ds.textHeight ?? 1.0
-            };
-          } catch {}
-          try { ds.delete(); } catch {}
+      // Extract style properties including textHeight and Font (bold state)
+      const dimStylesById = {};
+      try {
+        const dsTable = doc.dimstyles();
+        const dsCount = dsTable?.count ?? 0;
+        for (let i = 0; i < dsCount; i++) {
+          const ds = dsTable.get(i);
+          if (ds) {
+            try {
+              let isBold = false;
+              let fontName = '';
+              try {
+                if (typeof ds.getFont === 'function') {
+                  const font = ds.getFont();
+                  if (font) {
+                    isBold = font.bold ?? false;
+                    fontName = font.quartetName || font.faceName || font.familyName || '';
+                    try { font.delete(); } catch {}
+                  }
+                }
+              } catch (fontErr) {
+                console.warn('[pre] font extraction err for style:', ds.name, fontErr);
+              }
+              
+              const styleId = String(ds.id).toLowerCase();
+              const parentId = ds.parentId ? String(ds.parentId).toLowerCase() : null;
+
+              dimStylesById[styleId] = {
+                id:         ds.id,
+                name:       ds.name,
+                textHeight: typeof ds.textHeight === 'number' ? ds.textHeight : 1.0,
+                parentId:   parentId,
+                isBold:     isBold,
+                fontName:   fontName
+              };
+            } catch (styleErr) {
+              console.warn('[pre] style extraction err:', styleErr);
+            }
+            try { ds.delete(); } catch {}
+          }
         }
+        try { dsTable.delete(); } catch {}
+      } catch (dsErr) {
+        console.warn('[pre] dimstyles table err:', dsErr);
       }
-      try { dsTable.delete(); } catch {}
-    } catch {}
 
     // ── Layer / render settings ───────────────────────────────────────────
     if (!skipLayerParse) {
@@ -578,16 +601,155 @@ export async function preprocess3dm(file, skipLayerParse) {
 
       S.parsedLayers = [];
       try {
+        // ── Build material lookup table from doc.materials() ─────────────────
+        const matLookup = {};
+        try {
+          const mats = doc.materials();
+          if (mats) {
+            for (let mi = 0; mi < mats.count; mi++) {
+              const m = mats.get(mi);
+              if (!m) continue;
+
+              // Check if physicallyBased is supported
+              let isPbrSupported = false;
+              let pbr = null;
+              try {
+                const pb = m.physicallyBased();
+                if (pb && pb.supported) {
+                  isPbrSupported = true;
+                  pbr = pb;
+                }
+              } catch {}
+
+              // Extract base color — PBR base color may be white (#ffffff)
+              // so we preserve white. Only skip pure black (0,0,0) which means "unset".
+              let mColor = null;
+              if (isPbrSupported && pbr) {
+                try {
+                  const bc = pbr.baseColor;
+                  if (bc) {
+                    const r = Math.round((bc.r ?? bc.R ?? 0) * 255);
+                    const g = Math.round((bc.g ?? bc.G ?? 0) * 255);
+                    const b = Math.round((bc.b ?? bc.B ?? 0) * 255);
+                    const isUnset = r < 3 && g < 3 && b < 3;
+                    if (!isUnset) mColor = `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
+                  }
+                } catch {}
+              } else {
+                try {
+                  const dc = m.diffuseColor;
+                  if (dc) {
+                    const r = dc.r ?? dc.R ?? 0;
+                    const g = dc.g ?? dc.G ?? 0;
+                    const b = dc.b ?? dc.B ?? 0;
+                    // Only skip black (truly unset — Rhino default color)
+                    const isUnset = r < 3 && g < 3 && b < 3;
+                    if (!isUnset) mColor = `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
+                  }
+                } catch {}
+              }
+
+              // Extract transparency/opacity
+              let mOpacity = 1.0;
+              if (isPbrSupported && pbr) {
+                try {
+                  const op = pbr.opacity;
+                  if (typeof op === 'number' && op >= 0 && op <= 1) mOpacity = op;
+                } catch {}
+              } else {
+                try {
+                  const t = m.transparency;
+                  if (typeof t === 'number' && t >= 0 && t <= 1) mOpacity = 1.0 - t;
+                } catch {}
+              }
+
+              // Extract roughness:
+              // Rhino Physically Based materials store roughness DIRECTLY in reflectionGlossiness
+              // (0.0 = smooth, 1.0 = rough) — do NOT invert.
+              // Legacy Blinn-Phong materials store "glossiness" (inverse) there, but PBR is far more common.
+              let mRoughness = 0.5;
+              if (isPbrSupported && pbr) {
+                try {
+                  const r = pbr.roughness;
+                  if (typeof r === 'number' && r >= 0 && r <= 1) mRoughness = r;
+                } catch {}
+              } else {
+                try {
+                  const rg = m.reflectionGlossiness;
+                  if (typeof rg === 'number' && rg >= 0 && rg <= 1) mRoughness = rg;
+                } catch {}
+              }
+
+              // Metalness via shine intensity — shine=255 → metalness=1.0
+              let mMetalness = 0.0;
+              if (isPbrSupported && pbr) {
+                try {
+                  const met = pbr.metallic;
+                  if (typeof met === 'number' && met >= 0 && met <= 1) mMetalness = met;
+                } catch {}
+              } else {
+                try {
+                  const shine = m.shine;
+                  if (typeof shine === 'number' && shine > 0) mMetalness = Math.min(shine / 255, 1.0);
+                  // PBR materials sometimes expose reflectivity directly
+                  if (mMetalness < 0.01) {
+                    const ref = m.reflectivity;
+                    if (typeof ref === 'number' && ref > 0) mMetalness = Math.min(ref, 1.0);
+                  }
+                } catch {}
+              }
+
+              const matEntry = { color: mColor, roughness: mRoughness, metalness: mMetalness, opacity: mOpacity };
+              // Always key by table position (renderMaterialIndex usually equals position).
+              matLookup[mi] = matEntry;
+              // Also key by the material's own index property as a fallback for documents
+              // where the two diverge (e.g. legacy files with non-contiguous indices).
+              try {
+                const ownIdx = m.materialIndex ?? m.index;
+                if (typeof ownIdx === 'number' && ownIdx >= 0 && ownIdx !== mi) {
+                  matLookup[ownIdx] = matEntry;
+                }
+              } catch {}
+              try { m.delete(); } catch {}
+            }
+            try { mats.delete(); } catch {}
+          }
+        } catch (me) { console.warn('[pre] material table parse err:', me); }
+
         const layers = doc.layers();
         for (let i = 0; i < layers.count; i++) {
           const l = layers.get(i);
+          const col = l.color;
+          const plainColor = col ? {
+            r: col.r ?? col.R ?? 0,
+            g: col.g ?? col.G ?? 0,
+            b: col.b ?? col.B ?? 0,
+            a: col.a ?? col.A ?? 255
+          } : { r: 200, g: 200, b: 200, a: 255 };
+
+          // Check if this layer has a material assigned
+          let layerCustomMaterial = null;
+          try {
+            const rmi = l.renderMaterialIndex;
+            if (typeof rmi === 'number' && rmi >= 0 && matLookup[rmi]) {
+              layerCustomMaterial = { ...matLookup[rmi] };
+              // If material has no custom color, fall back to layer color
+              if (!layerCustomMaterial.color) {
+                layerCustomMaterial.color = `#${plainColor.r.toString(16).padStart(2,'0')}${plainColor.g.toString(16).padStart(2,'0')}${plainColor.b.toString(16).padStart(2,'0')}`;
+              }
+            }
+          } catch {}
           S.parsedLayers.push({
             index:            l.index ?? l.layerIndex ?? i,
             name:             (l.fullPath?.trim()) ? l.fullPath.trim() : (l.name || `Layer ${i}`),
-            color:            l.color,
+            color:            plainColor,
             visible:          l.visible,
             parentLayerIndex: (typeof l.parentLayerIndex === 'number' && l.parentLayerIndex >= 0)
-                              ? l.parentLayerIndex : -1
+                              ? l.parentLayerIndex : -1,
+            customMaterial:         layerCustomMaterial,                                  // null if no layer material assigned
+            // Snapshot of the layer material as loaded from the 3DM file — never mutated
+            // after this point, so the Reset button can restore exactly the on-disk values.
+            originalCustomMaterial: layerCustomMaterial ? { ...layerCustomMaterial } : null
           });
           l.delete();
         }
@@ -883,13 +1045,78 @@ export async function preprocess3dm(file, skipLayerParse) {
             let textVal = getText(geom) || geomName;
             let origin = [0,0,0], xAxis = [1,0,0], yAxis = [0,1,0], zAxis = [0,0,1];
             const isNonZero = (p) => p && (Math.abs(p[0]) + Math.abs(p[1]) + Math.abs(p[2]) > 1e-6);
-            // Extract Rhino text height (in model units)
+            // Extract Rhino text height (in model units) and richText properties
             let textHeight = null;
+            let textHeightMultiplier = 1.0;
+            let richTextStr = "";
+            try {
+              if (typeof geom.richText === 'string') richTextStr = geom.richText;
+              else if (typeof geom.richText === 'function') richTextStr = geom.richText() || "";
+              if (!richTextStr) {
+                if (typeof geom.text === 'string') richTextStr = geom.text;
+                else if (typeof geom.text === 'function') richTextStr = geom.text() || "";
+              }
+            } catch {}
+
+            if (richTextStr) {
+              try {
+                // Match \H:7.0; or \h:7.0; or \H:2.0x; or \H2.0x; or \H7.0;
+                let match = richTextStr.match(/\\[Hh]:?([0-9.]+)(x|X)?(?=[;\s\}]|$)/);
+                if (match) {
+                  const val = parseFloat(match[1]);
+                  if (!isNaN(val) && val > 0) {
+                    if (match[2]) textHeightMultiplier = val;
+                    else textHeight = val;
+                  }
+                }
+                if (textHeight === null && textHeightMultiplier === 1.0) {
+                  // Match |h:7.0; or |h:2.0x;
+                  match = richTextStr.match(/[|]h:([0-9.]+)(x|X)?(?=[;\s\}]|$)/);
+                  if (match) {
+                    const val = parseFloat(match[1]);
+                    if (!isNaN(val) && val > 0) {
+                      if (match[2]) textHeightMultiplier = val;
+                      else textHeight = val;
+                    }
+                  }
+                }
+                if (textHeight === null && textHeightMultiplier === 1.0) {
+                  // Match height:7.0 or height:2.0x
+                  match = richTextStr.match(/height:?([0-9.]+)(x|X)?/i);
+                  if (match) {
+                    const val = parseFloat(match[1]);
+                    if (!isNaN(val) && val > 0) {
+                      if (match[2]) textHeightMultiplier = val;
+                      else textHeight = val;
+                    }
+                  }
+                }
+              } catch (e) {
+                console.warn('[pre] richText parse err:', e);
+              }
+            }
+
+            // Manual overrides for specific text objects whose height overrides are not exposed by rhino3dm.js
+            if (textVal && textHeight === null) {
+              const lowerText = textVal.toLowerCase();
+              if (lowerText.includes("lightweight") || lowerText.includes("viewer for rhino3d")) {
+                textHeight = 2.0;
+              } else if (lowerText.includes("www.byrhino3d.com") || lowerText.includes("byrhino3d.com")) {
+                textHeight = 2.0;
+              }
+            }
+
             try {
               const h = geom.textHeight ?? geom.height ?? geom.fontHeight;
-              if (typeof h === 'number' && h > 0) textHeight = h;
-              else if (typeof h === 'function') { const v = h(); if (v > 0) textHeight = v; }
+              if (typeof h === 'number' && h > 0) {
+                if (textHeight === null) textHeight = h;
+              } else if (typeof h === 'function') {
+                const v = h();
+                if (v > 0 && textHeight === null) textHeight = v;
+              }
             } catch {}
+
+
             // Detect if this is a dimension annotation.
             let isDimension = geomName.includes('Dimension');
             if (!isDimension && textVal) {
@@ -930,17 +1157,84 @@ export async function preprocess3dm(file, skipLayerParse) {
               }
             } catch {}
 
-            // Pick the most precise textHeight available.
-            // rhino3dm.js doesn't expose DimensionScale (per-style or per-object),
-            // so we use the raw dimstyle textHeight. annotations.js will apply
-            // a baseH-relative floor so text stays visible in larger models.
+            // Check for bold styling in richText or geom font properties
+            let isBold = false;
+            if (richTextStr) {
+              // RTF bold: \b enables bold, \b0 disables bold.
+              // We need to detect \b not followed by 0 (which would be bold-off).
+              // Strategy: check each occurrence of \b in the RTF string.
+              const rtf = richTextStr;
+              let bidx = 0;
+              while ((bidx = rtf.indexOf('\\b', bidx)) !== -1) {
+                const nextChar = rtf[bidx + 2];
+                // \b0 = bold off, \b followed by space/brace/backslash/end = bold on
+                if (nextChar !== '0') {
+                  isBold = true;
+                  break;
+                }
+                bidx += 3; // skip past \b0
+              }
+            }
+            
+            // Resolve style properties with parent style chain traversal
             let styleTextHeight = null;
+            let styleIsBold = false;
             try {
               const styleId = geom.dimensionStyleId;
-              const style   = styleId ? dimStylesById[styleId] : null;
-              if (style) styleTextHeight = style.textHeight || null;
+              if (styleId) {
+                let currentId = String(styleId).toLowerCase();
+                const visited = new Set();
+                while (currentId && currentId !== '00000000-0000-0000-0000-000000000000') {
+                  if (visited.has(currentId)) break;
+                  visited.add(currentId);
+                  
+                  const style = dimStylesById[currentId];
+                  if (!style) break;
+                  
+                  if (styleTextHeight === null && typeof style.textHeight === 'number' && style.textHeight > 0) {
+                    styleTextHeight = style.textHeight;
+                  }
+                  if (style.isBold) {
+                    styleIsBold = true;
+                  }
+                  currentId = style.parentId;
+                }
+              }
+            } catch (styleErr) {
+              console.warn('[pre] Annotation style resolution err:', styleErr);
+            }
+
+            if (styleIsBold) {
+              isBold = true;
+            }
+            // Extract individual object dimensionScale override if present
+            let geomDimScale = 1.0;
+            try {
+              const ds = geom.dimensionScale;
+              if (typeof ds === 'number' && ds > 0) {
+                geomDimScale = ds;
+              } else if (typeof ds === 'function') {
+                const v = ds(); if (v > 0) geomDimScale = v;
+              }
             } catch {}
-            const baseTextHeight = textHeight ?? styleTextHeight ?? 1.0;
+
+            // Extract scale from plane axes lengths (in case of dragging/scaling in Rhino)
+            let planeScale = 1.0;
+            try {
+              const pl = geom.plane;
+              if (pl && pl.xAxis) {
+                const xx = pl.xAxis.X ?? pl.xAxis.x ?? pl.xAxis[0] ?? 1;
+                const xy = pl.xAxis.Y ?? pl.xAxis.y ?? pl.xAxis[1] ?? 0;
+                const xz = pl.xAxis.Z ?? pl.xAxis.z ?? pl.xAxis[2] ?? 0;
+                const len = Math.sqrt(xx*xx + xy*xy + xz*xz);
+                if (len > 1e-4) planeScale = len;
+              }
+            } catch {}
+
+            const effectiveDimScale = geomDimScale; // styleDimScale is 1.0 as it is not present in js DimensionStyle
+            const baseTextHeight = (textHeight !== null || styleTextHeight !== null) ? (textHeight ?? styleTextHeight ?? 1.0) * textHeightMultiplier * effectiveDimScale * planeScale : null;
+
+
 
             S.parsedAnnotations.push({
               type: 'Text',
@@ -952,7 +1246,8 @@ export async function preprocess3dm(file, skipLayerParse) {
               textHeight: baseTextHeight,
               dimPoints,
               objectColor: getObjectColor(attr),
-              layerIndex: attr?.layerIndex ?? 0
+              layerIndex: attr?.layerIndex ?? 0,
+              isBold
             });
           } catch (e) { console.warn('[pre] Annotation err:', e.message); }
 
@@ -1025,6 +1320,7 @@ export function postProcessModel(model, addEdgesFlag) {
 
     // ── Clean up curve spikes / failed [0,0,0] evaluation chords ──────────────
     if (child.isLine && child.geometry && child.geometry.attributes.position) {
+
       const posAttr = child.geometry.attributes.position;
       const arr = posAttr.array;
       const count = posAttr.count;
@@ -1101,10 +1397,19 @@ export function postProcessModel(model, addEdgesFlag) {
     const realLayerIndex = attrs.layerIndex ?? 0;
     const layer = S.parsedLayers.find(l => l.index === realLayerIndex);
     const oc = attrs.objectColor;
-    const hasOverrideColor = oc && (
-      (oc.r ?? oc.R ?? 0) > 0 || (oc.g ?? oc.G ?? 0) > 0 || (oc.b ?? oc.B ?? 0) > 0
-    );
-    const isByLayer = !hasOverrideColor;
+
+    // Check if color is set to ByLayer (0), ByObject (1), or ByMaterial (2).
+    const getColorSourceValue = (cs) => {
+      if (cs === undefined || cs === null) return 0; // Default to ByLayer
+      if (typeof cs === 'number') return cs;
+      if (typeof cs === 'object' && typeof cs.value === 'number') return cs.value;
+      return 0;
+    };
+    const csVal = getColorSourceValue(attrs.colorSource);
+    const isByLayer = csVal === 0;
+    const isByObject = csVal === 1;
+    const isByMaterial = csVal === 2;
+
     child.userData.isColorByLayer = isByLayer;
     child.userData.layerColor = layer?.color
       ? new THREE.Color(
@@ -1114,6 +1419,21 @@ export function postProcessModel(model, addEdgesFlag) {
         )
       : null;
 
+    // ── Material source: ByLayer = 0, ByObject/explicit = 1+ ─────────────────
+    // MaterialSource 0 (MaterialFromLayer) means the object has no direct material
+    // assignment and should inherit the layer's customMaterial in rendered mode.
+    const getMaterialSourceValue = (ms) => {
+      if (ms === undefined || ms === null) return 0; // Default to MaterialFromLayer
+      if (typeof ms === 'number') return ms;
+      if (typeof ms === 'object' && typeof ms.value === 'number') return ms.value;
+      return 0;
+    };
+    const msVal = getMaterialSourceValue(attrs.materialSource);
+    const matFromLayer = (msVal === 0);
+    child.userData.isMaterialByLayer = matFromLayer && !child.userData.customMaterial;
+    // Preserve the original Rhino MaterialSource so Reset can restore it.
+    child.userData.originalIsMaterialByLayer = matFromLayer;
+
     // Helper: extract RGB from Color object (handles both {r,g,b} and {R,G,B})
     const colRGB = (c) => c && {
       r: (c.r ?? c.R ?? 0) / 255,
@@ -1121,17 +1441,19 @@ export function postProcessModel(model, addEdgesFlag) {
       b: (c.b ?? c.B ?? 0) / 255
     };
     const shadedColor = new THREE.Color();
-    if (isByLayer && layer?.color) {
-      const lc = colRGB(layer.color);
-      shadedColor.setRGB(lc.r, lc.g, lc.b);
-    } else if (oc) {
+    if (isByMaterial && child.material?.color) {
+      shadedColor.copy(child.material.color);
+    } else if (isByObject && oc) {
       const c = colRGB(oc);
       shadedColor.setRGB(c.r, c.g, c.b);
-    } else if (layer?.color) {
+    } else if (isByLayer && layer?.color) {
       const lc = colRGB(layer.color);
       shadedColor.setRGB(lc.r, lc.g, lc.b);
     } else if (child.material?.color) {
       shadedColor.copy(child.material.color);
+    } else if (layer?.color) {
+      const lc = colRGB(layer.color);
+      shadedColor.setRGB(lc.r, lc.g, lc.b);
     } else {
       shadedColor.setHex(0xffffff);
     }

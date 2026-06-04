@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Rhino3dmLoader } from 'three/addons/loaders/3DMLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { SSAOPass } from 'three/addons/postprocessing/SSAOPass.js';
@@ -20,7 +19,7 @@ import { S } from './state.js';
 import { updateSliderFill, updateAllSliderFills, updateSelectIcon, showLoading, hideLoading, bindSliderDblClickInput } from './helpers.js';
 import { setupLights, updateSunLight, updateShadowCasting, addGroundPlane, removeGroundPlane } from './lighting.js';
 import { switchToOrtho, switchToPersp, setViewPreset, triggerCameraTransition, fitCameraToBox, fitCameraToObject, fitCameraToSelected, saveCustomView, renderNamedViewsUI } from './camera.js';
-import { applySceneBackground, applyFileBackground, applyDisplayMode, applyLayerColorsToModel } from './display.js';
+import { applySceneBackground, applyFileBackground, applyDisplayMode, applyLayerColorsToModel, recreateAllEdges } from './display.js';
 import { renderLayerUI, updateLayerVisibility } from './layers.js';
 import { createAnnotationSprites } from './annotations.js';
 import { saveSession, loadSession } from './session.js';
@@ -185,6 +184,8 @@ function init() {
     samples: 4
   });
   S.composer = new EffectComposer(S.renderer, S.msaaTarget);
+  S.composer.setPixelRatio(window.devicePixelRatio);
+  S.composer.setSize(window.innerWidth, window.innerHeight);
   S.composer.addPass(new RenderPass(S.scene, S.camera));
 
   // GTAO — Ground Truth Ambient Occlusion, configured per three.js example
@@ -488,14 +489,12 @@ function init() {
   const pmrem = new THREE.PMREMGenerator(S.renderer);
   pmrem.compileEquirectangularShader();
 
-  const roomEnv = new RoomEnvironment();
-  S.envMaps.studio = pmrem.fromScene(roomEnv).texture;
-  roomEnv.dispose();
+  S.envMaps.studio = makeStudioEnv(pmrem);
 
-  S.envMaps.neutral = makeGradientEnv(pmrem, '#d8dde4', '#eef0f2', '#b0b8c4');
-  S.envMaps.sky     = makeGradientEnv(pmrem, '#1e4a8a', '#6ab0e8', '#c4a870', '#3a2a10');
-  S.envMaps.sunset  = makeGradientEnv(pmrem, '#0e0820', '#b83a10', '#f06020', '#e09030', '#0e0820');
-  S.envMaps.night   = makeGradientEnv(pmrem, '#030610', '#071228', '#0a1a3a', '#030610');
+  S.envMaps.neutral = makeGradientEnv(pmrem, '#a0a0a0', '#d8d8d8', '#505050', '#101010');
+  S.envMaps.sky     = makeGradientEnv(pmrem, '#061124', '#335485', '#d6c2ad', '#0e0b0a');
+  S.envMaps.sunset  = makeSunsetEnv(pmrem);
+  S.envMaps.night   = makeGradientEnv(pmrem, '#020202', '#080808', '#141414', '#020202');
 
   S.environmentMap = S.envMaps.studio;
   S.scene.environment = S.environmentMap;
@@ -514,8 +513,10 @@ function init() {
   applyI18n();
 
   bindUI();
+  applyModeSettings(S.currentMode);
   updateAllSliderFills();
   window.addEventListener('resize', onWindowResize);
+  onWindowResize(); // Force initial sizing of renderer, composer, and passes to physical pixel resolution
 
   // Apply env intensity initial value
   const slEnvInit = document.getElementById('sl-env-intensity');
@@ -526,6 +527,20 @@ function init() {
     S.scene.backgroundIntensity = (bgType === 'hdr') ? val : 1.0;
   }
 
+  // Apply HDR rotation initial value
+  const slHdrInit = document.getElementById('sl-hdr-rotation');
+  if (slHdrInit) {
+    const v = parseInt(slHdrInit.value) || 0;
+    S.hdrRotation = v;
+    const rad = (v * Math.PI) / 180;
+    if (S.scene) {
+      S.scene.backgroundRotation.y = rad;
+      S.scene.environmentRotation.y = rad;
+      S.scene.backgroundRotation.z = 0;
+      S.scene.environmentRotation.z = 0;
+    }
+  }
+
   // Check for auto-loading a model via query parameter (e.g., ?model=path/to/file.3dm)
   const urlParams = new URLSearchParams(window.location.search);
   const modelUrl = urlParams.get('model') || urlParams.get('url');
@@ -534,6 +549,202 @@ function init() {
   } else {
     hideLoading();
   }
+}
+
+// ── Custom photography studio softbox environment generator ────────────────
+function makeStudioEnv(pmrem) {
+  const w = 1024, h = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+
+  // 1. Fill base dark room background (ceiling and background walls)
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, w, h);
+
+  // Ceiling glow / light gray ceiling (Y = 0 to 24% / 120px)
+  const ceilGrad = ctx.createLinearGradient(0, 0, 0, 120);
+  ceilGrad.addColorStop(0, '#e5e5e5');
+  ceilGrad.addColorStop(0.7, '#a8a8a8');
+  ceilGrad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = ceilGrad;
+  ctx.fillRect(0, 0, w, 120);
+
+  // 2. Draw the cyc wall floor (light gray paper sweep)
+  // It is a light gray floor at the bottom (Y = 320 to 512)
+  const floorGrad = ctx.createLinearGradient(0, 300, 0, h);
+  floorGrad.addColorStop(0, '#000000'); // background wall shadow
+  floorGrad.addColorStop(0.12, '#606060'); // top of paper sweep curve
+  floorGrad.addColorStop(0.45, '#989898'); // main floor
+  floorGrad.addColorStop(1, '#b5b5b5'); // foreground floor
+  ctx.fillStyle = floorGrad;
+  ctx.fillRect(0, 300, w, h - 300);
+
+  // 3. Draw Left and Right hanging backdrop sheets (light gray)
+  // Left sheet (X = 0 to 140)
+  const leftSheetGrad = ctx.createLinearGradient(0, 0, 140, 0);
+  leftSheetGrad.addColorStop(0, '#b0b0b0');
+  leftSheetGrad.addColorStop(0.75, '#909090');
+  leftSheetGrad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = leftSheetGrad;
+  ctx.fillRect(0, 120, 140, h - 120);
+
+  // Right sheet (X = 884 to 1024)
+  const rightSheetGrad = ctx.createLinearGradient(1024, 0, 884, 0);
+  rightSheetGrad.addColorStop(0, '#b0b0b0');
+  rightSheetGrad.addColorStop(0.75, '#909090');
+  rightSheetGrad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = rightSheetGrad;
+  ctx.fillRect(884, 120, 140, h - 120);
+
+  // 4. Helper to draw softbox panels with shadowBlur (gives beautiful dual-axis blur)
+  function drawSoftboxPanel(cx, cy, sw, sh, opacity, round = 10) {
+    ctx.save();
+    // Soft outer glow
+    ctx.shadowBlur = 45;
+    ctx.shadowColor = `rgba(255,255,255,${opacity * 0.95})`;
+    ctx.fillStyle = `rgba(255,255,255,${opacity * 0.9})`;
+    ctx.beginPath();
+    if (ctx.roundRect) {
+      ctx.roundRect(cx - sw/2, cy - sh/2, sw, sh, round);
+    } else {
+      ctx.rect(cx - sw/2, cy - sh/2, sw, sh);
+    }
+    ctx.fill();
+
+    // Bright inner core
+    ctx.shadowBlur = 15;
+    ctx.fillStyle = `rgba(255,255,255,${opacity})`;
+    ctx.beginPath();
+    if (ctx.roundRect) {
+      ctx.roundRect(cx - sw/4, cy - sh/4, sw/2, sh/2, round/2);
+    } else {
+      ctx.rect(cx - sw/4, cy - sh/4, sw/2, sh/2);
+    }
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // 5. Draw the key softboxes from the photo (shifted upwards as requested):
+  // Center-left bright softbox
+  drawSoftboxPanel(w * 0.35, h * 0.35, 110, 110, 1.0, 8);
+
+  // Center-right weaker softbox
+  drawSoftboxPanel(w * 0.65, h * 0.37, 90, 90, 0.6, 6);
+
+  // Top weak softbox (or bright overhead ceiling light)
+  drawSoftboxPanel(w * 0.5, h * 0.22, 220, 50, 0.55, 10);
+
+  // Spotlight bulb on the right
+  ctx.save();
+  ctx.shadowBlur = 35;
+  ctx.shadowColor = 'rgba(255,255,255,1)';
+  ctx.fillStyle = 'white';
+  ctx.beginPath();
+  ctx.arc(w * 0.85, h * 0.30, 8, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  const envMap = pmrem.fromEquirectangular(tex).texture;
+  tex.dispose();
+  return envMap;
+}
+
+// ── Custom Sunset Environment Generator ─────────────────────────────────────
+function makeSunsetEnv(pmrem) {
+  const w = 1024, h = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+
+  // 1. Sky & Water Base Gradient
+  const bgGrad = ctx.createLinearGradient(0, 0, 0, h);
+  bgGrad.addColorStop(0,    '#183e66'); // rich sky blue
+  bgGrad.addColorStop(0.35, '#3c668c'); // mid sky blue
+  bgGrad.addColorStop(0.47, '#d6b294'); // warm orange sky glow near horizon
+  bgGrad.addColorStop(0.50, '#c97130'); // sun horizon line
+  bgGrad.addColorStop(0.53, '#d6b294'); // horizon reflection
+  bgGrad.addColorStop(0.65, '#2f5473'); // reflection midtone
+  bgGrad.addColorStop(1.0,  '#102b47'); // deep reflection
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, w, h);
+
+  // 2. Draw Sun Glow
+  const sunGlow = ctx.createRadialGradient(w * 0.6, h * 0.5, 4, w * 0.6, h * 0.5, 140);
+  sunGlow.addColorStop(0,   'rgba(255, 255, 255, 0.85)');
+  sunGlow.addColorStop(0.1, 'rgba(255, 235, 180, 0.70)');
+  sunGlow.addColorStop(0.3, 'rgba(255, 150, 70, 0.30)');
+  sunGlow.addColorStop(0.6, 'rgba(255, 110, 50, 0.10)');
+  sunGlow.addColorStop(1,   'rgba(255, 110, 50, 0.0)');
+  ctx.fillStyle = sunGlow;
+  ctx.beginPath();
+  ctx.arc(w * 0.6, h * 0.5, 140, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 3. Draw Sun Disk
+  ctx.save();
+  ctx.fillStyle = '#ffffff';
+  ctx.shadowBlur = 8;
+  ctx.shadowColor = '#ffecd4';
+  ctx.beginPath();
+  ctx.arc(w * 0.6, h * 0.5, 10, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // 4. Clouds Drawing Helpers
+  function drawCloudPuff(x, y, radius, opacity) {
+    const grad = ctx.createRadialGradient(x, y, 0, x, y, radius);
+    grad.addColorStop(0, `rgba(240, 245, 255, ${opacity * 0.7})`);
+    grad.addColorStop(0.5, `rgba(195, 208, 224, ${opacity * 0.28})`);
+    grad.addColorStop(1, 'rgba(195, 208, 224, 0.0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function drawSunsetCloud(x, y, radius, opacity) {
+    const grad = ctx.createRadialGradient(x, y, 0, x, y, radius);
+    grad.addColorStop(0, `rgba(255, 215, 180, ${opacity})`);
+    grad.addColorStop(0.6, `rgba(224, 160, 128, ${opacity * 0.4})`);
+    grad.addColorStop(1, 'rgba(224, 160, 128, 0.0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Draw Sky Clouds (Left side cloud bank from photo)
+  drawCloudPuff(w * 0.15, h * 0.35, 60, 0.35);
+  drawCloudPuff(w * 0.20, h * 0.33, 80, 0.40);
+  drawCloudPuff(w * 0.25, h * 0.36, 70, 0.35);
+  drawCloudPuff(w * 0.28, h * 0.38, 50, 0.25);
+  drawCloudPuff(w * 0.10, h * 0.38, 40, 0.20);
+  drawCloudPuff(w * 0.33, h * 0.35, 45, 0.25);
+
+  // Sunset tinted clouds closer to the sun
+  drawSunsetCloud(w * 0.42, h * 0.41, 55, 0.30);
+  drawSunsetCloud(w * 0.48, h * 0.42, 45, 0.25);
+  drawSunsetCloud(w * 0.72, h * 0.42, 65, 0.25);
+  drawSunsetCloud(w * 0.78, h * 0.44, 55, 0.20);
+
+  // 5. Water Reflections of Clouds (Squashed & stretched reflection)
+  ctx.save();
+  ctx.scale(1.2, 0.7);
+  drawCloudPuff(w * 0.15 / 1.2, (h - h * 0.35) / 0.7, 60, 0.18);
+  drawCloudPuff(w * 0.20 / 1.2, (h - h * 0.33) / 0.7, 80, 0.22);
+  drawCloudPuff(w * 0.25 / 1.2, (h - h * 0.36) / 0.7, 70, 0.18);
+  drawSunsetCloud(w * 0.42 / 1.2, (h - h * 0.41) / 0.7, 55, 0.15);
+  drawSunsetCloud(w * 0.72 / 1.2, (h - h * 0.42) / 0.7, 65, 0.12);
+  ctx.restore();
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  const envMap = pmrem.fromEquirectangular(tex).texture;
+  tex.dispose();
+  return envMap;
 }
 
 // ── Environment gradient helper ────────────────────────────────────────────
@@ -685,6 +896,7 @@ function bindUI() {
     const dataURL = S.renderer.domElement.toDataURL('image/png');
     S.renderer.setSize(window.innerWidth, window.innerHeight);
     S.renderer.setPixelRatio(origPixelRatio);
+    S.composer.setSize(window.innerWidth, window.innerHeight);
     S.scene.background = origBackground;
     if (transparent) S.renderer.setClearColor(0x000000, 0);
 
@@ -871,13 +1083,25 @@ function bindUI() {
   bindBgInput(bgPanelC4, bgSwatchC4);
 
   // ── 4. Visibility checkboxes ──
-  document.getElementById('chk-edges-panel').addEventListener('change', () => applyDisplayMode());
+  const updateModeSetting = (key, val) => {
+    if (S.modeSettings && S.modeSettings[S.currentMode]) {
+      S.modeSettings[S.currentMode][key] = val;
+    }
+  };
+
+  document.getElementById('chk-edges-panel').addEventListener('change', e => {
+    updateModeSetting('edges', e.target.checked);
+    updateModeSetting('curves', e.target.checked); // curves follow edges check state
+    applyDisplayMode();
+  });
   document.getElementById('chk-shadows-panel').addEventListener('change', e => {
     S.shadowsEnabled = e.target.checked;
+    updateModeSetting('shadows', e.target.checked);
     updateShadowCasting();
   });
   document.getElementById('chk-ground-panel').addEventListener('change', e => {
     S.groundEnabled = e.target.checked;
+    updateModeSetting('ground', e.target.checked);
     if (S.groundEnabled && S.currentModel) {
       const box = new THREE.Box3().setFromObject(S.currentModel);
       addGroundPlane(box);
@@ -886,6 +1110,7 @@ function bindUI() {
     }
   });
   document.getElementById('chk-annotations-panel').addEventListener('change', e => {
+    updateModeSetting('annotations', e.target.checked);
     if (S.annotationGroup) {
       S.annotationGroup.traverse(child => {
         if (child !== S.annotationGroup) child.visible = e.target.checked;
@@ -910,6 +1135,39 @@ function bindUI() {
   safeBindCheck('chk-shadows',     'chk-shadows-panel');
   safeBindCheck('chk-ground',      'chk-ground-panel');
   safeBindCheck('chk-annotations', 'chk-annotations-panel');
+
+  // ── Edge Angle Slider ──
+  const slEdgeAngle = document.getElementById('sl-edge-angle');
+  const slEdgeAngleVal = document.getElementById('sl-edge-angle-val');
+  if (slEdgeAngle) {
+    updateSliderFill(slEdgeAngle);
+    slEdgeAngle.addEventListener('input', e => {
+      const val = parseInt(e.target.value);
+      if (slEdgeAngleVal) slEdgeAngleVal.textContent = val + '°';
+      updateSliderFill(e.target);
+    });
+    slEdgeAngle.addEventListener('change', e => {
+      const val = parseInt(e.target.value);
+      recreateAllEdges(val);
+    });
+    bindSliderDblClickInput(slEdgeAngle, slEdgeAngleVal, '°');
+  }
+
+  // ── Annotation (imported Rhino dims/text/dots) size slider ──
+  const slAnnotationScale = document.getElementById('sl-annotation-scale');
+  const slAnnotationScaleVal = document.getElementById('sl-annotation-scale-val');
+  if (slAnnotationScale) {
+    updateSliderFill(slAnnotationScale);
+    slAnnotationScale.addEventListener('input', e => {
+      const v = parseFloat(e.target.value);
+      if (slAnnotationScaleVal) slAnnotationScaleVal.textContent = v.toFixed(1) + 'x';
+      updateSliderFill(e.target);
+      // Affects ONLY imported Rhino annotations — the measurement tool uses S.measurementScale.
+      S.annotationScale = v;
+      createAnnotationSprites();
+    });
+    bindSliderDblClickInput(slAnnotationScale, slAnnotationScaleVal);
+  }
 
   // ── 5. Lighting & damping sliders ──
   const slAmbient = document.getElementById('sl-ambient-panel');
@@ -1029,21 +1287,7 @@ function bindUI() {
   document.getElementById('mode-dropdown').querySelectorAll('.dropdown-item').forEach(btn => {
     btn.addEventListener('click', () => {
       const mode = btn.dataset.mode;
-      document.getElementById('mode-dropdown').querySelectorAll('.dropdown-item').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      S.currentMode = mode;
-      applyDisplayMode();
-      const label = btn.querySelector('span').textContent.split(' ')[0];
-      const triggerBtn = document.getElementById('btn-mode-dropdown');
-      triggerBtn.querySelector('span').textContent = label;
-      triggerBtn.title = `Display Mode (${label})`;
-      
-      // Dynamically replace trigger button icon with selected mode's icon
-      const svg = btn.querySelector('svg').cloneNode(true);
-      const oldSvg = triggerBtn.querySelector('svg');
-      if (oldSvg) {
-        triggerBtn.replaceChild(svg, oldSvg);
-      }
+      changeDisplayMode(mode);
     });
   });
 
@@ -1359,8 +1603,9 @@ function bindUI() {
       const v = parseFloat(e.target.value);
       if (slMeasureScaleVal) slMeasureScaleVal.textContent = v.toFixed(1) + 'x';
       updateSliderFill(e.target);
-      S.annotationScale = v;
-      createAnnotationSprites();
+      // Text Size affects ONLY the Distance/Angle measurement tool — not the
+      // imported Rhino annotations (dimensions/text/dots), which keep their own scale.
+      S.measurementScale = v;
       updateMeasurementScales();
     });
     updateSliderFill(slMeasureScale);
@@ -1677,7 +1922,6 @@ function bindUI() {
   }
   if (findBtn) findBtn.addEventListener('click', () => findInput?.dispatchEvent(new Event('input')));
 
-  // ── 10. Color grading ──
   document.getElementById('btn-cg-reset').addEventListener('click', () => {
     ['exposure','contrast','saturation','temperature'].forEach(k => {
       const slider = document.getElementById('cg-' + k);
@@ -1685,6 +1929,7 @@ function bindUI() {
         slider.value = 0;
         document.getElementById('cg-' + k + '-val').textContent = '0.0';
         S.cgPass.uniforms['u' + k.charAt(0).toUpperCase() + k.slice(1)].value = 0;
+        updateSliderFill(slider);
       }
     });
   });
@@ -2110,7 +2355,7 @@ function bindUI() {
             
             // Switch to Rendered mode to show HDR lighting & background if in shaded/wireframe
             if (!['rendered', 'arctic'].includes(S.currentMode)) {
-              S.currentMode = 'rendered';
+              changeDisplayMode('rendered');
             }
             
             // Enable the custom-HDR option in UI
@@ -2396,11 +2641,6 @@ function onWindowResize() {
   }
   S.renderer.setSize(window.innerWidth, window.innerHeight);
   S.composer.setSize(window.innerWidth, window.innerHeight);
-  if (S.outlinePass?.setSize) S.outlinePass.setSize(window.innerWidth, window.innerHeight);
-  if (S.selectionOutlinePass?.setSize) S.selectionOutlinePass.setSize(window.innerWidth, window.innerHeight);
-  if (S.smaaPass?.setSize)    S.smaaPass.setSize(window.innerWidth, window.innerHeight);
-  if (S.gtaoPass?.setSize)    S.gtaoPass.setSize(window.innerWidth, window.innerHeight);
-  if (S.ssaoPass?.setSize)    S.ssaoPass.setSize(window.innerWidth, window.innerHeight);
 }
 
 // ── Theme ──────────────────────────────────────────────────────────────────
@@ -2628,6 +2868,82 @@ async function loadModelFromUrl(url) {
   } finally {
     hideLoading();
   }
+}
+
+// ── Apply visibility settings for a specific display mode ──
+export function applyModeSettings(mode) {
+  const settings = S.modeSettings[mode];
+  if (!settings) return;
+
+  S.shadowsEnabled = settings.shadows;
+  S.groundEnabled = settings.ground;
+
+  const setCheckboxState = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.checked = val;
+  };
+
+  setCheckboxState('chk-edges-panel', settings.edges);
+  setCheckboxState('chk-shadows-panel', settings.shadows);
+  setCheckboxState('chk-ground-panel', settings.ground);
+  setCheckboxState('chk-annotations-panel', settings.annotations);
+
+  // Sync secondary checkboxes
+  const chkEdge = document.getElementById('chk-edge');
+  if (chkEdge) chkEdge.checked = settings.edges;
+  const chkShadows = document.getElementById('chk-shadows');
+  if (chkShadows) chkShadows.checked = settings.shadows;
+  const chkGround = document.getElementById('chk-ground');
+  if (chkGround) chkGround.checked = settings.ground;
+  const chkAnnotations = document.getElementById('chk-annotations');
+  if (chkAnnotations) chkAnnotations.checked = settings.annotations;
+
+  // Trigger side effects
+  updateShadowCasting();
+  
+  if (S.groundEnabled && S.currentModel) {
+    const box = new THREE.Box3().setFromObject(S.currentModel);
+    addGroundPlane(box);
+  } else {
+    removeGroundPlane();
+  }
+
+  if (S.annotationGroup) {
+    S.annotationGroup.traverse(child => {
+      if (child !== S.annotationGroup) child.visible = settings.annotations;
+    });
+  }
+}
+
+// ── Switch display mode and apply its visibility settings ──
+export function changeDisplayMode(mode) {
+  if (S.currentMode === mode) return;
+  S.currentMode = mode;
+  
+  // 1. Update dropdown active classes in UI
+  const dropdown = document.getElementById('mode-dropdown');
+  if (dropdown) {
+    const activeItem = dropdown.querySelector(`.dropdown-item[data-mode="${mode}"]`);
+    if (activeItem) {
+      dropdown.querySelectorAll('.dropdown-item').forEach(b => b.classList.toggle('active', b === activeItem));
+      const triggerBtn = document.getElementById('btn-mode-dropdown');
+      if (triggerBtn) {
+        const label = activeItem.querySelector('span').textContent.split(' ')[0];
+        const triggerLabel = triggerBtn.querySelector('span');
+        if (triggerLabel) triggerLabel.textContent = label;
+        triggerBtn.title = `Display Mode (${label})`;
+        const svg = activeItem.querySelector('svg').cloneNode(true);
+        const oldSvg = triggerBtn.querySelector('svg');
+        if (oldSvg) triggerBtn.replaceChild(svg, oldSvg);
+      }
+    }
+  }
+
+  // 2. Apply the mode's visibility settings
+  applyModeSettings(mode);
+
+  // 3. Apply the rendering logic
+  applyDisplayMode();
 }
 
 // ── Capacitor file-intent bridge ──────────────────────────────────────────

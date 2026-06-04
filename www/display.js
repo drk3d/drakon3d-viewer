@@ -370,14 +370,31 @@ export function applyDisplayMode() {
       if (child.userData.objectColorCustom) {
         return new THREE.Color(child.userData.objectColorCustom);
       }
+      
+      const getColorSourceValue = (cs) => {
+        if (cs === undefined || cs === null) return 0; // Default to ByLayer
+        if (typeof cs === 'number') return cs;
+        if (typeof cs === 'object' && typeof cs.value === 'number') return cs.value;
+        return 0;
+      };
+      const csVal = getColorSourceValue(childAttrs.colorSource);
+      const isByObject = csVal === 1;
+      const isByMaterial = csVal === 2;
+
       const oc = childAttrs.objectColor;
-      const hasOverride = oc && ((oc.r ?? 0) > 0 || (oc.g ?? 0) > 0 || (oc.b ?? 0) > 0);
       const out = new THREE.Color(0, 0, 0);
-      if (hasOverride) {
+      if (isByMaterial && child.material?.color) {
+        out.copy(child.material.color);
+      } else if (isByObject && oc) {
         out.setRGB(oc.r / 255, oc.g / 255, oc.b / 255);
       } else if (childLayer?.color) {
+        // ByLayer: use layer color
         const lc = childLayer.color;
         out.setRGB((lc.r ?? lc.R ?? 0) / 255, (lc.g ?? lc.G ?? 0) / 255, (lc.b ?? lc.B ?? 0) / 255);
+      } else if (oc && ((oc.r ?? 0) > 0 || (oc.g ?? 0) > 0 || (oc.b ?? 0) > 0)) {
+        // Fallback: objectColor stores the layer color redundantly in Rhino for ByLayer objects.
+        // Use it when the layer lookup fails (e.g., index mismatch between cleanDoc and original doc).
+        out.setRGB(oc.r / 255, oc.g / 255, oc.b / 255);
       }
 
       if (isPageVisuallyDark()) {
@@ -393,6 +410,28 @@ export function applyDisplayMode() {
     };
 
     if (child.isLine) {
+      const modeSettings = S.modeSettings[S.currentMode] || {};
+      const modeAllowsCurves = modeSettings.curves !== false;
+      // Also respect layer visibility — don't show curves on hidden layers
+      const curveLayerVis = childLayer ? childLayer.visible : true;
+      const curveObjVis = !S.hiddenObjects?.has(child);
+      child.visible = modeAllowsCurves && curveLayerVis && curveObjVis;
+
+      // Ensure the line has its own unique cloned material from originalMaterial,
+      // so modifying its color does not affect other lines sharing the material.
+      if (child.userData.originalMaterial) {
+        if (child.material !== child.userData.originalMaterial) {
+          child.material = child.userData.originalMaterial;
+        }
+      }
+
+      // THREE.js 3DM loader may create LineBasicMaterial with vertexColors:true,
+      // which overrides material.color entirely. Disable vertex colors so our
+      // rawColor() value is actually applied.
+      if (child.material && child.material.vertexColors) {
+        child.material.vertexColors = false;
+        child.material.needsUpdate = true;
+      }
       child.material.color.copy(rawColor());
       return;
     }
@@ -427,7 +466,6 @@ export function applyDisplayMode() {
         const m = base.clone();
         m.polygonOffset = true; m.polygonOffsetFactor = 1; m.polygonOffsetUnits = 1;
         m.roughness = 0.85; m.metalness = 0.05;
-        const custom = child.userData.customMaterial;
         if (child.userData.objectColorCustom !== undefined) m.color?.set(child.userData.objectColorCustom);
         m.needsUpdate = true;
         child.material = m;
@@ -470,7 +508,15 @@ export function applyDisplayMode() {
         // HDR changes from taking effect. envMapIntensity controls strength.
         m.envMap = null;
         m.envMapIntensity = 1.0;
-        applyCustomToMaterial(m, child.userData.customMaterial);
+        // Resolve effective custom material:
+        // Priority: object-level customMaterial > layer customMaterial (when ByLayer) > none
+        let effectiveCustom = child.userData.customMaterial;
+        if (!effectiveCustom && child.userData.isMaterialByLayer) {
+          const childLayerIdx = (child.userData.attributes || {}).layerIndex ?? 0;
+          const childLayer = S.parsedLayers.find(l => l.index === childLayerIdx);
+          if (childLayer?.customMaterial) effectiveCustom = childLayer.customMaterial;
+        }
+        applyCustomToMaterial(m, effectiveCustom);
         m.needsUpdate = true;
         child.material = m;
         if (edges) {
@@ -549,12 +595,60 @@ export function fixMaterialTransparency(mat) {
   }
 }
 
-export function addEdges(mesh) {
+export function addEdges(mesh, thresholdAngle) {
   if (!mesh || !mesh.isMesh || mesh.isLine || !mesh.geometry) return;
-  const eg   = new THREE.EdgesGeometry(mesh.geometry, 20);
+
+  // Skip if mesh is part of annotations
+  let isAnn = false;
+  let p = mesh.parent;
+  while (p) {
+    if (p.name === 'annotations-group') { isAnn = true; break; }
+    p = p.parent;
+  }
+  if (isAnn) return;
+
+  const angle = typeof thresholdAngle === 'number' ? thresholdAngle : (S.edgeThresholdAngle ?? 30);
+  const eg   = new THREE.EdgesGeometry(mesh.geometry, angle);
   const line = new THREE.LineSegments(eg, new THREE.LineBasicMaterial({ color: 0x000000 }));
   line.name = 'rhino-edges';
   mesh.add(line);
+}
+
+export function recreateAllEdges(thresholdAngle) {
+  if (thresholdAngle !== undefined) {
+    S.edgeThresholdAngle = thresholdAngle;
+  }
+  const angle = S.edgeThresholdAngle ?? 30;
+  if (!S.scene) return;
+
+  S.scene.traverse(child => {
+    if (child.isMesh && !['rhino-edges', 'rhino-outline', 'selection-outline', 'ground-plane'].includes(child.name)) {
+      // Skip if child is part of annotations
+      let isAnn = false;
+      let p = child.parent;
+      while (p) {
+        if (p.name === 'annotations-group') { isAnn = true; break; }
+        p = p.parent;
+      }
+      if (isAnn) return;
+
+      const oldEdges = child.getObjectByName('rhino-edges');
+      if (oldEdges) {
+        child.remove(oldEdges);
+        oldEdges.geometry?.dispose();
+        if (oldEdges.material) {
+          if (Array.isArray(oldEdges.material)) {
+            oldEdges.material.forEach(m => m.dispose());
+          } else {
+            oldEdges.material.dispose();
+          }
+        }
+      }
+      addEdges(child, angle);
+    }
+  });
+
+  applyDisplayMode();
 }
 
 export function applyLayerColorsToModel(model) {
@@ -593,6 +687,9 @@ export function applyLayerColorsToModel(model) {
         }
         
         if (child.isLine) {
+          if (child.userData.originalMaterial && child.material !== child.userData.originalMaterial) {
+            child.material = child.userData.originalMaterial;
+          }
           // Update line color directly
           child.material.color.copy(col);
           if (child.userData.originalMaterial) child.userData.originalMaterial.color.copy(col);

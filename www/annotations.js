@@ -5,19 +5,34 @@ import { isPageVisuallyDark } from './helpers.js';
 
 // ── Font (lazy singleton) ─────────────────────────────────────────────────────
 
-let _fontCache   = null;
+let _fontRegular = null;
+let _fontBold    = null;
 let _fontPromise = null;
 
-function loadFont() {
-  if (_fontCache)   return Promise.resolve(_fontCache);
+function loadFonts() {
+  if (_fontRegular && _fontBold) return Promise.resolve({ regular: _fontRegular, bold: _fontBold });
   if (_fontPromise) return _fontPromise;
   _fontPromise = new Promise(resolve => {
-    new FontLoader().load(
-      'https://unpkg.com/three@0.169.0/examples/fonts/helvetiker_regular.typeface.json',
-      font => { _fontCache = font; resolve(font); },
-      undefined,
-      () => { console.warn('[annotations] font load failed'); resolve(null); }
-    );
+    const loader = new FontLoader();
+    const loadReg = () => new Promise(res => {
+      loader.load(
+        'https://unpkg.com/three@0.169.0/examples/fonts/helvetiker_regular.typeface.json',
+        font => { _fontRegular = font; res(font); },
+        undefined,
+        () => { console.warn('[annotations] regular font load failed'); res(null); }
+      );
+    });
+    const loadBold = () => new Promise(res => {
+      loader.load(
+        'https://unpkg.com/three@0.169.0/examples/fonts/helvetiker_bold.typeface.json',
+        font => { _fontBold = font; res(font); },
+        undefined,
+        () => { console.warn('[annotations] bold font load failed'); res(null); }
+      );
+    });
+    Promise.all([loadReg(), loadBold()]).then(() => {
+      resolve({ regular: _fontRegular, bold: _fontBold });
+    });
   });
   return _fontPromise;
 }
@@ -80,7 +95,7 @@ export async function createAnnotationSprites() {
   const scaleMult = S.annotationScale !== undefined ? S.annotationScale : 1.0;
   const baseH    = Math.max(maxDim * 0.025, 0.5) * scaleMult;
 
-  const font = await loadFont();
+  const fonts = await loadFonts();
 
   S.annotationGroup = new THREE.Group();
   S.annotationGroup.name = 'annotations-group';
@@ -130,12 +145,12 @@ export async function createAnnotationSprites() {
       } else if (scaledAnn.isDimension && scaledAnn.dimPoints) {
         // Accurate dimension rendering using rhino3dm 8.17+ points data:
         // { defpt1, defpt2, arrowpt1, arrowpt2, dimline, textpt }
-        obj3d = makeDimensionAccurate(textVal, color, scaledAnn, baseH, font);
+        obj3d = makeDimensionAccurate(textVal, color, scaledAnn, baseH, fonts);
 
       } else {
         // TextEntity / plain Text
-        obj3d = font
-          ? makeTextMesh(textVal, color, scaledAnn, baseH, font)
+        obj3d = fonts.regular
+          ? makeTextMesh(textVal, color, scaledAnn, baseH, fonts)
           : makeTextSprite(textVal, color, scaledAnn, baseH);
       }
 
@@ -233,10 +248,11 @@ function makeTextDot(text, bgColor, baseH, isSelected = false) {
 // ── Text mesh (FontLoader + ShapeGeometry) ────────────────────────────────────
 // Placed in the Rhino annotation plane: xAxis=right, yAxis=up
 
-function makeTextMesh(text, color, ann, baseH, font, centerX = false) {
-  // baseH-relative floor: in models where Rhino's textHeight (e.g. 3.5mm) is
-  // too small to read, scale up. rhino3dm.js does not expose DimensionScale.
-  const textH  = Math.max(ann.textHeight || 0, baseH * 0.5);
+function makeTextMesh(text, color, ann, baseH, fonts, centerX = false) {
+  // Use original Rhino textHeight directly if present to preserve relative sizes.
+  // Fall back to baseH * 0.7 if undefined or 0.
+  const textH  = (ann.textHeight && ann.textHeight > 0) ? ann.textHeight : baseH * 0.7;
+  const font   = (ann.isBold && fonts.bold) ? fonts.bold : fonts.regular;
   const lines  = String(text).split(/\r?\n/);
   const lineGap = textH * 1.25;
   const group  = new THREE.Group();
@@ -255,7 +271,15 @@ function makeTextMesh(text, color, ann, baseH, font, centerX = false) {
       geo.translate(-(bb.min.x + bb.max.x) / 2, 0, 0);
     }
 
-    const mat  = new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide, depthTest: true, depthWrite: false });
+    const mat  = new THREE.MeshBasicMaterial({
+      color,
+      side: THREE.DoubleSide,
+      depthTest: true,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -2
+    });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.renderOrder = 997;
     mesh.position.y = -li * lineGap;
@@ -283,14 +307,15 @@ function makeTextMesh(text, color, ann, baseH, font, centerX = false) {
 function makeTextSprite(text, color, ann, baseH) {
   const canvas = document.createElement('canvas');
   const ctx    = canvas.getContext('2d');
-  const fs = 44;
-  ctx.font = `500 ${fs}px Arial, 'Helvetica Neue', Helvetica, sans-serif`;
+  const fs = 128; // Increased canvas font size for crisp rendering on high-DPI screens
+  const fontWeight = ann.isBold ? 'bold' : '500';
+  ctx.font = `${fontWeight} ${fs}px Arial, 'Helvetica Neue', Helvetica, sans-serif`;
   const tw = ctx.measureText(text).width;
-  const px = 14, py = 10;
+  const px = 40, py = 28;
   const cw = Math.ceil(tw + px * 2);
   const ch = Math.ceil(fs + py * 2);
   canvas.width = cw; canvas.height = ch;
-  ctx.font = `500 ${fs}px Arial, 'Helvetica Neue', Helvetica, sans-serif`;
+  ctx.font = `${fontWeight} ${fs}px Arial, 'Helvetica Neue', Helvetica, sans-serif`;
   ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
   ctx.clearRect(0, 0, cw, ch);
   ctx.beginPath();
@@ -300,12 +325,23 @@ function makeTextSprite(text, color, ann, baseH) {
   ctx.fillText(text, cw / 2, ch / 2);
   const tex = new THREE.CanvasTexture(canvas);
   tex.minFilter = tex.magFilter = THREE.LinearFilter;
-  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: false });
+  const mat = new THREE.SpriteMaterial({
+    map: tex,
+    transparent: true,
+    depthTest: true,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -4
+  });
   const spr = new THREE.Sprite(mat);
   spr.renderOrder = 997;
-  spr.scale.set(baseH * (cw / ch) * 1.1, baseH * 1.1, 1);
+  // Use original Rhino textHeight directly if present to preserve relative sizes.
+  const textH = (ann.textHeight && ann.textHeight > 0) ? ann.textHeight : baseH * 0.7;
+  const worldH = textH * (ch / fs);
+  spr.scale.set(worldH * (cw / ch), worldH, 1);
   const pos = ann.position || [0, 0, 0];
-  spr.position.set(pos[0], pos[1], pos[2]);
+  spr.position.set(pos[0], pos[1], pos[2] + textH * 0.25);
   return spr;
 }
 
@@ -318,10 +354,10 @@ function makeTextSprite(text, color, ann, baseH) {
 //   - arrowpt1/arrowpt2: dim line endpoints where arrows sit
 //   - dimline: a point on the dimension line (often the midpoint)
 //   - textpt: text insertion point
-function makeDimensionAccurate(text, color, ann, baseH, font) {
+function makeDimensionAccurate(text, color, ann, baseH, fonts) {
   const dp = ann.dimPoints;
   if (!dp || !dp.arrowpt1 || !dp.arrowpt2) {
-    return makeDimension(text, color, ann, baseH, font);
+    return makeDimension(text, color, ann, baseH, fonts);
   }
 
   const a1 = new THREE.Vector3(...dp.arrowpt1);
@@ -336,7 +372,14 @@ function makeDimensionAccurate(text, color, ann, baseH, font) {
 
   const group = new THREE.Group();
   // depthTest:true so dimension lines hide behind solid geometry (not see-through)
-  const lineMat = new THREE.LineBasicMaterial({ color, depthTest: true, depthWrite: false });
+  const lineMat = new THREE.LineBasicMaterial({
+    color,
+    depthTest: true,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -2
+  });
   const addSeg = (a, b) => {
     const geo  = new THREE.BufferGeometry().setFromPoints([a, b]);
     const line = new THREE.Line(geo, lineMat);
@@ -393,17 +436,19 @@ function makeDimensionAccurate(text, color, ann, baseH, font) {
   // ── Text at dim line midpoint (sprite — always faces camera) ──
   // We use a Sprite (same as TextDot) so dimension text always reads correctly
   // regardless of viewing angle. Mesh-based text appears mirrored from the back.
-  const textH = Math.max(ann.textHeight || 0, baseH * 0.5);
+  // Use original Rhino textHeight directly if present to preserve relative sizes.
+  const textH = (ann.textHeight && ann.textHeight > 0) ? ann.textHeight : baseH * 0.7;
   const textPos = a1.clone().add(a2).multiplyScalar(0.5);
   textPos.addScaledVector(yDir, textH * 0.6);
-  const spr = _makeDimTextSprite(text, color, textH);
+  const spr = _makeDimTextSprite(text, color, textH, ann.isBold);
   spr.position.copy(textPos);
+  spr.position.z += textH * 0.25;
   group.add(spr);
 
   return group;
 }
 
-function makeDimension(text, color, ann, baseH, font) {
+function makeDimension(text, color, ann, baseH, fonts) {
   const pos  = ann.position || [0, 0, 0];
 
   // Annotation plane axes
@@ -486,8 +531,8 @@ function makeDimension(text, color, ann, baseH, font) {
 
   if (p1.distanceTo(p2) < 1e-6) {
     // Truly degenerate — just render text
-    return font
-      ? makeTextMesh(text, color, ann, baseH, font)
+    return fonts.regular
+      ? makeTextMesh(text, color, ann, baseH, fonts)
       : makeTextSprite(text, color, ann, baseH);
   }
 
@@ -495,7 +540,14 @@ function makeDimension(text, color, ann, baseH, font) {
   const dimDir  = p2.clone().sub(p1).normalize();
   const arrowSz = Math.min(baseH * 0.45, p1.distanceTo(p2) * 0.07);
 
-  const lineMat = new THREE.LineBasicMaterial({ color, depthTest: true, depthWrite: false });
+  const lineMat = new THREE.LineBasicMaterial({
+    color,
+    depthTest: true,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -2
+  });
 
   const addSeg = (a, b) => {
     const geo  = new THREE.BufferGeometry().setFromPoints([a, b]);
@@ -533,8 +585,9 @@ function makeDimension(text, color, ann, baseH, font) {
   const textPos = new THREE.Vector3(...pos);
   const textH   = (ann.textHeight && ann.textHeight > 0) ? ann.textHeight : baseH * 0.7;
 
-  if (font) {
+  if (fonts.regular) {
     try {
+      const font = (ann.isBold && fonts.bold) ? fonts.bold : fonts.regular;
       const shapes = font.generateShapes(text, textH);
       const geo    = new THREE.ShapeGeometry(shapes);
       geo.computeBoundingBox();
@@ -545,7 +598,15 @@ function makeDimension(text, color, ann, baseH, font) {
         -(bb.min.y + bb.max.y) / 2,
         0
       );
-      const mat  = new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide, depthTest: true, depthWrite: false });
+      const mat  = new THREE.MeshBasicMaterial({
+        color,
+        side: THREE.DoubleSide,
+        depthTest: true,
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -2
+      });
       const mesh = new THREE.Mesh(geo, mat);
       mesh.renderOrder = 998;
       // Orient: text reads along the dimension line direction (Rhino default).
@@ -560,6 +621,7 @@ function makeDimension(text, color, ann, baseH, font) {
   } else {
     const spr = _makeLabelSprite(text, color, textH * 2);
     spr.position.copy(textPos);
+    spr.position.z += textH * 0.25;
     group.add(spr);
   }
 
@@ -578,19 +640,20 @@ function _perpToX(xDir) {
 
 // ── Dimension/Text label as Sprite (always faces camera) ────────────────────
 // modelH = desired text height in world (model) units.
-function _makeDimTextSprite(text, color, modelH) {
-  const fsPx   = 64;  // canvas font size (px) — fixed for crisp rendering
+function _makeDimTextSprite(text, color, modelH, isBold = false) {
+  const fsPx   = 128;  // canvas font size (px) — increased for crisp rendering on high-DPI screens
   const canvas = document.createElement('canvas');
   const ctx    = canvas.getContext('2d');
-  ctx.font = `500 ${fsPx}px Arial, 'Helvetica Neue', Helvetica, sans-serif`;
+  const fontWeight = isBold ? 'bold' : '500';
+  ctx.font = `${fontWeight} ${fsPx}px Arial, 'Helvetica Neue', Helvetica, sans-serif`;
   const tw  = ctx.measureText(text).width;
-  const pad = 6;
+  const pad = 12;
   const cw  = Math.ceil(tw + pad * 2);
   const ch  = Math.ceil(fsPx + pad * 2);
   canvas.width  = cw;
   canvas.height = ch;
   // Resizing the canvas resets the ctx state — re-set font.
-  ctx.font = `500 ${fsPx}px Arial, 'Helvetica Neue', Helvetica, sans-serif`;
+  ctx.font = `${fontWeight} ${fsPx}px Arial, 'Helvetica Neue', Helvetica, sans-serif`;
   ctx.textBaseline = 'middle';
   ctx.textAlign    = 'center';
   ctx.clearRect(0, 0, cw, ch);
@@ -601,7 +664,13 @@ function _makeDimTextSprite(text, color, modelH) {
   tex.minFilter = tex.magFilter = THREE.LinearFilter;
   // depthTest:true so the dim text hides behind geometry (not see-through)
   const mat = new THREE.SpriteMaterial({
-    map: tex, transparent: true, depthTest: true, depthWrite: false
+    map: tex,
+    transparent: true,
+    depthTest: true,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -4
   });
   const spr = new THREE.Sprite(mat);
   spr.renderOrder = 998;
@@ -628,7 +697,15 @@ function _makeLabelSprite(text, color, fontSize) {
   ctx.fillText(text, canvas.width / 2, canvas.height / 2);
   const tex  = new THREE.CanvasTexture(canvas);
   tex.minFilter = tex.magFilter = THREE.LinearFilter;
-  const mat  = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: false });
+  const mat  = new THREE.SpriteMaterial({
+    map: tex,
+    transparent: true,
+    depthTest: true,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -4
+  });
   const spr  = new THREE.Sprite(mat);
   spr.renderOrder = 998;
   const baseH = fs / 40;  // normalise

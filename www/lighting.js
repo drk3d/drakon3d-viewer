@@ -18,7 +18,7 @@ export function setupLights() {
       // Shaded: just enough light to read form, NO skylight/shadows.
       // Three directional lights from different angles give consistent surface tone
       // without strong directional shading or environment effects.
-      const ambInt = parseFloat(document.getElementById('sl-ambient-panel')?.value ?? 0.5);
+      const ambInt = parseFloat(document.getElementById('sl-ambient-panel')?.value ?? 0.55);
       const keyInt = parseFloat(document.getElementById('sl-key-panel')?.value ?? 1.4);
       S.scene.add(new THREE.AmbientLight(0xffffff, ambInt * 0.9));
       const key = new THREE.DirectionalLight(0xffffff, keyInt * 0.7);
@@ -203,7 +203,7 @@ export function addGroundPlane(box) {
   const span   = Math.max(size.x, size.y) * 5;
   const geo    = new THREE.PlaneGeometry(span, span);
   S.groundMesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial());
-  S.groundMesh.position.set(center.x, center.y, box.min.z - Math.max(0.001, maxDim * 0.001));
+  S.groundMesh.position.set(center.x, center.y, box.min.z - Math.max(0.005, maxDim * 0.005));
   S.groundMesh.name = 'ground-plane';
   S.scene.add(S.groundMesh);
   updateGroundAppearance();

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { S } from './state.js';
-import { applyDisplayMode } from './display.js';
+import { applyDisplayMode, applyCustomToMaterial } from './display.js';
 import { switchToPersp, getCustomViews } from './camera.js';
 import { updateSliderFill, isPageVisuallyDark } from './helpers.js';
 
@@ -59,17 +59,19 @@ export async function saveSession(customFileName = null) {
       shadowsEnabled:     S.shadowsEnabled,
       groundEnabled:      S.groundEnabled,
       edgeOverlay:        document.getElementById('chk-edges-panel')?.checked ?? true,
+      edgeThresholdAngle: parseFloat(document.getElementById('sl-edge-angle')?.value ?? 30),
       annotationsEnabled: document.getElementById('chk-annotations-panel')?.checked ?? true,
       sunLightEnabled:    document.getElementById('chk-sun-panel')?.checked ?? false,
       sunAzimuth:         parseFloat(document.getElementById('sl-sun-azimuth')?.value ?? 135),
       sunElevation:       parseFloat(document.getElementById('sl-sun-elevation')?.value ?? 45),
       sunIntensity:       parseFloat(document.getElementById('sl-sun-intensity')?.value ?? 1.8),
-      ambientIntensity:   parseFloat(document.getElementById('sl-ambient-panel')?.value ?? 0.5),
+      ambientIntensity:   parseFloat(document.getElementById('sl-ambient-panel')?.value ?? 0.55),
       cameraFov:          parseFloat(document.getElementById('sl-camera-fov')?.value ?? 45),
       dampingFactor:      parseFloat(document.getElementById('sl-damping-panel')?.value ?? 0.5),
-      envIntensity:       parseFloat(document.getElementById('sl-env-intensity')?.value ?? 1.0),
-      annotationScale:    parseFloat(document.getElementById('sl-measure-scale')?.value ?? 1.0),
-      hdrRotation:        parseInt(document.getElementById('sl-hdr-rotation')?.value ?? 0),
+      envIntensity:       parseFloat(document.getElementById('sl-env-intensity')?.value ?? 1.00),
+      measurementScale:   parseFloat(document.getElementById('sl-measure-scale')?.value ?? 1.0),
+      annotationScale:    parseFloat(document.getElementById('sl-annotation-scale')?.value ?? 1.0),
+      hdrRotation:        parseInt(document.getElementById('sl-hdr-rotation')?.value ?? 59),
       envPreset:          document.getElementById('env-preset-select')?.value || 'studio',
       bgType:             document.getElementById('bg-type-select')?.value || 'solid',
       bgC1:               document.getElementById('bg-panel-c1')?.value || '#2a2b2f',
@@ -128,12 +130,15 @@ export async function saveSession(customFileName = null) {
       namedViews:          getCustomViews(),
       rhinoNamedViews:     S.parsedNamedViews || [],
       parsedLayers:        S.parsedLayers || [],
+      parsedAnnotations:   S.parsedAnnotations || [],
       completedMeasurements: measurements,
       customHdrData:       S.customHdrData || null,
       customHdrName:       S.customHdrName || null
     };
 
-    // Temporarily hide UI outlines during GLB export
+    const activeMaterials = new Map();
+
+    // Temporarily hide UI outlines and apply Rendered/Custom PBR materials during GLB export
     S.currentModel.traverse(child => {
       if (['rhino-outline', 'selection-outline', 'rhino-edges', 'ground-plane'].includes(child.name)) {
         if (child.visible) { toHide.push(child); child.visible = false; }
@@ -143,8 +148,44 @@ export async function saveSession(customFileName = null) {
         const key = getObjectKey(child);
         if (child.userData.customMaterial) data.customMaterials[key] = { ...child.userData.customMaterial };
         if (!child.visible) data.hiddenKeys.push(key);
+
+        // Keep track of active material to restore later
+        activeMaterials.set(child, child.material);
+
+        // Temporarily apply Rendered-mode material (with custom overrides) so they get exported in GLB
+        const base = child.userData.renderedMaterial || child.userData.originalMaterial;
+        const m = base.clone();
+        if (child.userData.materialColor) m.color.copy(child.userData.materialColor);
+        if (m.roughness !== undefined && m.roughness < 0.05) m.roughness = 0.4;
+        if (m.metalness === undefined) m.metalness = 0.0;
+        m.polygonOffset = true; m.polygonOffsetFactor = 1; m.polygonOffsetUnits = 1;
+        m.envMap = null;
+        m.envMapIntensity = 1.0;
+
+        applyCustomToMaterial(m, child.userData.customMaterial);
+        child.material = m;
       }
     });
+
+    // Exclude annotations group from GLB export so they aren't baked as static outline-prone meshes
+    const annGroup = S.annotationGroup;
+    const annParent = annGroup?.parent;
+    if (annGroup && annParent) {
+      annParent.remove(annGroup);
+    }
+
+    const restoreSessionState = () => {
+      // Restore annotations parent
+      if (annGroup && annParent && !annGroup.parent) {
+        annParent.add(annGroup);
+      }
+      // Restore meshes materials
+      activeMaterials.forEach((mat, mesh) => {
+        mesh.material = mat;
+      });
+      // Restore outlines visibility
+      toHide.forEach(c => { c.visible = true; });
+    };
 
     const { GLTFExporter } = await import('three/addons/exporters/GLTFExporter.js');
     const exporter = new GLTFExporter();
@@ -152,7 +193,7 @@ export async function saveSession(customFileName = null) {
       S.currentModel,
       async (glbBuffer) => {
         try {
-          toHide.forEach(c => { c.visible = true; });
+          restoreSessionState();
 
           // Serialize metadata to UTF-8
           const jsonStr = JSON.stringify(data);
@@ -205,14 +246,14 @@ export async function saveSession(customFileName = null) {
 
           hideLoading();
         } catch (callbackErr) {
-          toHide.forEach(c => { c.visible = true; });
+          restoreSessionState();
           console.error('[Session Export] Callback error:', callbackErr);
           alert('Failed to save session file: ' + callbackErr.message);
           hideLoading();
         }
       },
       (err) => {
-        toHide.forEach(c => { c.visible = true; });
+        restoreSessionState();
         console.error('[Session Export] GLB export failed:', err);
         alert('Failed to pack geometry into session file.');
         hideLoading();
@@ -220,6 +261,12 @@ export async function saveSession(customFileName = null) {
       { binary: true }
     );
   } catch (err) {
+    if (annGroup && annParent && !annGroup.parent) {
+      annParent.add(annGroup);
+    }
+    activeMaterials.forEach((mat, mesh) => {
+      mesh.material = mat;
+    });
     toHide.forEach(c => { c.visible = true; });
     console.error('[Session Export] error:', err);
     alert('Failed to save session file: ' + err.message);
@@ -259,6 +306,12 @@ export async function loadSession(file) {
       const jsonBytes = new Uint8Array(arrayBuffer, 12, jsonLength);
       const jsonStr = new TextDecoder().decode(jsonBytes);
       data = JSON.parse(jsonStr);
+
+      // Restore parsedLayers early so that postProcessModel (called inside loadGeometryFromGLB)
+      // can resolve the correct layer colors for shadedMaterial and other color checks.
+      if (data.parsedLayers) {
+        S.parsedLayers = data.parsedLayers;
+      }
 
       const glbStart = 12 + jsonLength;
       glbBuffer = arrayBuffer.slice(glbStart);
@@ -363,7 +416,8 @@ export async function loadSession(file) {
         }
       }
       setSlider('sl-env-intensity', 'sl-env-intensity-val', s.envIntensity ?? 1.0, 'float');
-      setSlider('sl-measure-scale', 'sl-measure-scale-val', s.annotationScale ?? 1.0, 'xScale');
+      setSlider('sl-measure-scale', 'sl-measure-scale-val', s.measurementScale ?? s.annotationScale ?? 1.0, 'xScale');
+      setSlider('sl-annotation-scale', 'sl-annotation-scale-val', s.annotationScale ?? 1.0, 'xScale');
       setSlider('sl-hdr-rotation', 'sl-hdr-rotation-val', s.hdrRotation ?? 0, 'degree');
       setSlider('sl-ambient-panel', 'sl-ambient-val',     s.ambientIntensity, 'float');
       setSlider('sl-sun-intensity', 'sl-sun-intensity-val', s.sunIntensity ?? 1.8, 'float');
@@ -371,6 +425,11 @@ export async function loadSession(file) {
       setSlider('sl-sun-elevation', 'sl-sun-elevation-val', s.sunElevation,   'degree');
       setSlider('sl-camera-fov',    'sl-camera-fov-val',  s.cameraFov,        'degree');
       setSlider('sl-damping-panel', 'sl-damping-val',     s.dampingFactor,    'float');
+
+      if (s.edgeThresholdAngle !== undefined) {
+        S.edgeThresholdAngle = s.edgeThresholdAngle;
+      }
+      setSlider('sl-edge-angle', 'sl-edge-angle-val', S.edgeThresholdAngle ?? 30, 'degree');
 
       const bgSel = document.getElementById('bg-type-select');
       if (bgSel && s.bgType) bgSel.value = s.bgType;
@@ -548,9 +607,12 @@ export async function loadSession(file) {
       S.controls.update();
     }
 
-    document.querySelectorAll('#mode-dropdown .dropdown-item').forEach(b => {
-      b.classList.toggle('active', b.dataset.mode === S.currentMode);
-    });
+    // 8.5. Restore annotations
+    if (data.parsedAnnotations) {
+      S.parsedAnnotations = data.parsedAnnotations;
+      const { createAnnotationSprites } = await import('./annotations.js');
+      await createAnnotationSprites();
+    }
 
     applyDisplayMode();
     hideLoading();
@@ -570,6 +632,15 @@ export function resetSettingsToDefault() {
   S.groundEnabled  = false;
   S.selectedObjects = [];
   S.hiddenObjects.clear();
+
+  // Reset per-mode visibility settings
+  S.modeSettings = {
+    wireframe: { edges: true, curves: true, ground: false, shadows: false, annotations: true },
+    shaded: { edges: true, curves: true, ground: false, shadows: true, annotations: true },
+    arctic: { edges: false, curves: false, ground: true, shadows: true, annotations: true },
+    rendered: { edges: false, curves: false, ground: true, shadows: true, annotations: true },
+    technical: { edges: true, curves: true, ground: false, shadows: false, annotations: true }
+  };
 
   // Clear custom HDR state
   S.customHdrData = null;
@@ -618,16 +689,19 @@ export function resetSettingsToDefault() {
     }
   };
 
-  resetSlider('sl-env-intensity', 'sl-env-intensity-val', 1.0,  'float');
+  resetSlider('sl-env-intensity', 'sl-env-intensity-val', 1.00,  'float');
   resetSlider('sl-measure-scale', 'sl-measure-scale-val', 1.0,  'xScale');
-  resetSlider('sl-hdr-rotation', 'sl-hdr-rotation-val', 0,    'degree');
-  resetSlider('sl-ambient-panel', 'sl-ambient-val',       0.5,  'float');
+  resetSlider('sl-annotation-scale', 'sl-annotation-scale-val', 1.0, 'xScale');
+  resetSlider('sl-hdr-rotation', 'sl-hdr-rotation-val', 59,    'degree');
+  resetSlider('sl-ambient-panel', 'sl-ambient-val',       0.55,  'float');
   resetSlider('sl-sun-intensity', 'sl-sun-intensity-val', 1.8,  'float');
   resetSlider('sl-sun-azimuth',   'sl-sun-azimuth-val',   135,  'degree');
   resetSlider('sl-sun-elevation', 'sl-sun-elevation-val', 45,   'degree');
   resetSlider('sl-camera-fov',    'sl-camera-fov-val',    45,   'degree');
   resetSlider('sl-damping-panel', 'sl-damping-val',       0.5,  'float');
   resetSlider('bg-radial-spread', 'bg-radial-spread-val', 0.5,  'percent');
+  resetSlider('sl-edge-angle',    'sl-edge-angle-val',    30,   'degree');
+  S.edgeThresholdAngle = 30;
 
   const ttToggleBtn = document.getElementById('btn-tt-toggle');
   if (ttToggleBtn?.classList.contains('active')) ttToggleBtn.click();

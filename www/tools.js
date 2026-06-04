@@ -267,7 +267,7 @@ function makeMeasurementBillboard(text, position) {
   const modelSize = S.currentModel
     ? new THREE.Box3().setFromObject(S.currentModel).getSize(new THREE.Vector3()).length()
     : 100;
-  const scaleMult = S.annotationScale !== undefined ? S.annotationScale : 1.0;
+  const scaleMult = S.measurementScale !== undefined ? S.measurementScale : 1.0;
   sprite.scale.set(modelSize * 0.08 * scaleMult, modelSize * 0.026 * scaleMult, 1);
   sprite.userData = { type: 'billboard', baseScaleX: modelSize * 0.08, baseScaleY: modelSize * 0.026 };
   return sprite;
@@ -293,7 +293,7 @@ export function spawnAngleWidget() {
   hA.position.set(center.x + size.x * 0.2, center.y, center.z);
   hB.position.set(center.x, center.y + size.y * 0.2, center.z);
   
-  const scaleMult = S.annotationScale !== undefined ? S.annotationScale : 1.0;
+  const scaleMult = S.measurementScale !== undefined ? S.measurementScale : 1.0;
   hCenter.userData = { role: 'center', type: 'sphere' };
   hA.userData      = { role: 'ptA', type: 'sphere' };
   hB.userData      = { role: 'ptB', type: 'sphere' };
@@ -505,7 +505,7 @@ export function updateDistanceGhost(event) {
       S.distanceGhostSphere.receiveShadow = false;
       S.distanceGhostSphere.name = 'distance-ghost';
       S.distanceGhostSphere.userData = { type: 'sphere' };
-      const scaleMult = S.annotationScale !== undefined ? S.annotationScale : 1.0;
+      const scaleMult = S.measurementScale !== undefined ? S.measurementScale : 1.0;
       S.distanceGhostSphere.scale.setScalar(scaleMult);
       S.measurementGroup.add(S.distanceGhostSphere);
     }
@@ -645,7 +645,7 @@ export function updateAngleGhost(event) {
       S.distanceGhostSphere.receiveShadow = false;
       S.distanceGhostSphere.name = 'distance-ghost';
       S.distanceGhostSphere.userData = { type: 'sphere' };
-      const scaleMult = S.annotationScale !== undefined ? S.annotationScale : 1.0;
+      const scaleMult = S.measurementScale !== undefined ? S.measurementScale : 1.0;
       S.distanceGhostSphere.scale.setScalar(scaleMult);
       S.measurementGroup.add(S.distanceGhostSphere);
     }
@@ -682,7 +682,7 @@ export function onCanvasClick(event) {
     sphere.castShadow = false; sphere.receiveShadow = false;
     sphere.position.copy(p);
     sphere.userData = { type: 'sphere' };
-    const scaleMult = S.annotationScale !== undefined ? S.annotationScale : 1.0;
+    const scaleMult = S.measurementScale !== undefined ? S.measurementScale : 1.0;
     sphere.scale.setScalar(scaleMult);
     S.measurementGroup.add(sphere);
     S.distanceToolState.points.push(p);
@@ -731,7 +731,7 @@ export function onCanvasClick(event) {
     sphere.castShadow = false; sphere.receiveShadow = false;
     sphere.position.copy(p);
     sphere.userData = { type: 'sphere' };
-    const scaleMult = S.annotationScale !== undefined ? S.annotationScale : 1.0;
+    const scaleMult = S.measurementScale !== undefined ? S.measurementScale : 1.0;
     sphere.scale.setScalar(scaleMult);
     S.measurementGroup.add(sphere);
 
@@ -1018,7 +1018,7 @@ export function reconstructMeasurements(measurements) {
       const P2 = new THREE.Vector3(...m.p2);
 
       const stepColors = [0xef4444, 0x10b981, 0x3b82f6];
-      const scaleMult = S.annotationScale !== undefined ? S.annotationScale : 1.0;
+      const scaleMult = S.measurementScale !== undefined ? S.measurementScale : 1.0;
 
       const sphereC = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: stepColors[0], depthTest: false, depthWrite: false }));
       sphereC.castShadow = false; sphereC.receiveShadow = false;
@@ -1117,7 +1117,7 @@ export function reconstructMeasurements(measurements) {
       const p1 = new THREE.Vector3(...m.p1);
       const p2 = new THREE.Vector3(...m.p2);
 
-      const scaleMult = S.annotationScale !== undefined ? S.annotationScale : 1.0;
+      const scaleMult = S.measurementScale !== undefined ? S.measurementScale : 1.0;
 
       const sphere1 = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: 0x10b981, depthTest: false, depthWrite: false }));
       sphere1.castShadow = false;
@@ -1161,7 +1161,7 @@ export function reconstructMeasurements(measurements) {
 }
 
 export function updateMeasurementScales() {
-  const scaleMult = S.annotationScale !== undefined ? S.annotationScale : 1.0;
+  const scaleMult = S.measurementScale !== undefined ? S.measurementScale : 1.0;
 
   // 1. Scale objects in measurementGroup
   if (S.measurementGroup) {

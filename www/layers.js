@@ -2,6 +2,24 @@ import { S } from './state.js';
 import { applyLayerColorsToModel, applyDisplayMode } from './display.js';
 import { createAnnotationSprites } from './annotations.js';
 
+// Tracks which parent layers are collapsed (by layer index). Persists across
+// re-renders within a session; stale indices from a previous file are harmless.
+const collapsedLayers = new Set();
+
+const rgbToHex = (r, g, b) => '#' + [r, g, b].map(x => {
+  const hex = Math.min(255, Math.max(0, x)).toString(16);
+  return hex.length === 1 ? '0' + hex : hex;
+}).join('');
+
+const getLayerHex = (layer) => {
+  if (!layer || !layer.color) return '#888888';
+  const c = layer.color;
+  const r = c.r ?? c.R ?? 120;
+  const g = c.g ?? c.G ?? 120;
+  const b = c.b ?? c.B ?? 120;
+  return rgbToHex(r, g, b);
+};
+
 export function renderLayerUI() {
   const list = document.getElementById('layer-list-panel') || document.getElementById('layer-list');
   if (!list) return;
@@ -11,11 +29,6 @@ export function renderLayerUI() {
     list.innerHTML = '<span class="dropdown-empty-msg">No layers parsed</span>';
     return;
   }
-
-  const rgbToHex = (r, g, b) => '#' + [r, g, b].map(x => {
-    const hex = Math.min(255, Math.max(0, x)).toString(16);
-    return hex.length === 1 ? '0' + hex : hex;
-  }).join('');
 
   const nodeByIndex = {};
   const roots = [];
@@ -67,45 +80,50 @@ export function renderLayerUI() {
 
   function renderNode(node) {
     const { layer, label, depth, children } = node;
-    const hexColor = rgbToHex(layer.color.r, layer.color.g, layer.color.b);
+    const hexColor = getLayerHex(layer);
     const visColor = layer.visible ? 'var(--primary)' : 'var(--text-3)';
-    const indentPx = 8 + depth * 16;
+    const indentPx = 6 + depth * 14;
+    const hasChildren = children.length > 0;
+    const isCollapsed = collapsedLayers.has(layer.index);
 
     const div = document.createElement('div');
     div.className  = 'layer-item';
-    div.style.cssText = `
-      display:flex; align-items:center; gap:6px;
-      padding:4px 8px 4px ${indentPx}px;
-      margin-bottom:2px;
-      background:var(--surface-hi); border-radius:5px;
-      border:1px solid var(--border);
-    `;
+    // Only the dynamic indent is inline; the rest of the row styling lives in
+    // the #layer-list-panel .layer-item CSS rule (compact, Rhino-like list).
+    div.style.paddingLeft = indentPx + 'px';
+    if (depth > 0) div.style.position = 'relative';
 
-    if (depth > 0) {
-      div.style.position = 'relative';
-      const line = document.createElement('div');
-      line.style.cssText = `
-        position:absolute; left:${indentPx - 10}px; top:0; bottom:0;
-        width:1px; background:rgba(255,255,255,0.1); pointer-events:none;
-      `;
-      div.appendChild(line);
-    }
+    // Collapse/expand control — a chevron for parents, an equal-width spacer for
+    // leaves so the swatches line up vertically across siblings.
+    const collapseControl = hasChildren
+      ? `<button class="layer-collapse-btn" data-index="${layer.index}" title="${isCollapsed ? 'Expand' : 'Collapse'}"
+           style="background:transparent;border:none;cursor:pointer;color:var(--text-2);flex-shrink:0;
+                  width:14px;height:14px;padding:0;display:inline-flex;align-items:center;justify-content:center;
+                  transition:transform 0.12s; transform:rotate(${isCollapsed ? 0 : 90}deg);">
+           <svg viewBox="0 0 24 24" width="9" height="9" fill="none" stroke="currentColor"
+                stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>
+         </button>`
+      : `<span class="layer-collapse-spacer" style="display:inline-block;width:14px;flex-shrink:0;"></span>`;
 
     div.innerHTML += `
-      <input type="text" class="layer-color-picker-input" data-coloris data-index="${layer.index}" value="${hexColor}" inputmode="none"
-             style="width:14px; height:14px; border-radius:3px; border:1px solid rgba(255,255,255,0.18); cursor:pointer;
-                    background:${hexColor}; color:transparent; outline:none; flex-shrink:0; box-sizing:border-box; font-size:0; caret-color:transparent;">
+      ${collapseControl}
+      <div class="layer-swatches">
+        <input type="text" class="layer-color-picker-input" data-coloris data-index="${layer.index}" value="${hexColor}" inputmode="none"
+               style="background:${hexColor}; color:transparent; outline:none; font-size:0; caret-color:transparent; cursor:pointer;">
+        <button class="layer-material-swatch" data-index="${layer.index}" title="Edit Layer Material"
+                style="${getMaterialSwatchStyle(layer)}; border:${getSwatchBorder(layer)}; cursor:pointer; transition:transform 0.15s, box-shadow 0.15s;"></button>
+      </div>
       <input type="text" class="layer-rename-input" data-index="${layer.index}" value="${label}"
         style="background:transparent;border:none;border-bottom:1px solid transparent;
                color:var(--text);font-family:inherit;font-size:${depth > 0 ? '0.72' : '0.76'}rem;
-               width:100%;padding:1px 2px;outline:none;transition:border-bottom 0.2s;"
+               width:100%;padding:0 2px;outline:none;transition:border-bottom 0.2s;"
         onfocus="this.style.borderBottom='1px solid var(--primary)'"
         onblur="this.style.borderBottom='1px solid transparent'">
       <button class="layer-toggle-btn icon-btn sm ${layer.visible ? 'active' : ''}"
         data-index="${layer.index}"
         style="color:${visColor};background:transparent;border:none;cursor:pointer;
-               flex-shrink:0;width:22px;height:22px;" title="Toggle Visibility">
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none"
+               flex-shrink:0;width:18px;height:18px;" title="Toggle Visibility">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none"
              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           ${layer.visible
             ? '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>'
@@ -114,7 +132,8 @@ export function renderLayerUI() {
       </button>
     `;
     list.appendChild(div);
-    children.forEach(child => renderNode(child));
+    // Skip descendants entirely when this node is collapsed.
+    if (!isCollapsed) children.forEach(child => renderNode(child));
   }
 
   roots.forEach(node => renderNode(node));
@@ -169,6 +188,25 @@ export function renderLayerUI() {
       }
     });
   });
+
+  // Bind collapse/expand chevrons
+  list.querySelectorAll('.layer-collapse-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const idx = parseInt(e.currentTarget.dataset.index);
+      if (collapsedLayers.has(idx)) collapsedLayers.delete(idx);
+      else collapsedLayers.add(idx);
+      renderLayerUI();
+    });
+  });
+
+  // Bind material swatch buttons to open the layer material dialog
+  list.querySelectorAll('.layer-material-swatch').forEach(btn => {
+    btn.addEventListener('click', e => {
+      const idx = parseInt(e.currentTarget.dataset.index);
+      openLayerMaterialDialog(idx);
+    });
+  });
 }
 
 function applyNewLayerColor(idx, hex) {
@@ -184,6 +222,211 @@ function applyNewLayerColor(idx, hex) {
     createAnnotationSprites();
   }
 }
+
+// ── Material sphere swatch CSS style ─────────────────────────────────────────
+function getMaterialSwatchStyle(layer) {
+  const cm = layer.customMaterial;
+
+  // No material assigned: show a white matte sphere — matches Rhino's "default
+  // material" appearance in the Layers panel. The subtle shading reads as a
+  // sphere on both light and dark themes.
+  if (!cm) {
+    return `background: radial-gradient(circle at 35% 30%, #ffffff 0%, #f3f3f3 35%, #c8c8c8 75%, #8a8a8a 100%)`;
+  }
+
+  // Material assigned: use the material's color, fall back to layer color!
+  const layerHex = getLayerHex(layer);
+  const baseHex = cm.color || layerHex || '#ffffff';
+  const roughness = cm.roughness ?? 0.5;
+  const metalness = cm.metalness ?? 0.0;
+
+  // Glossiness for highlight (roughness 0→sharp highlight, 1→diffuse)
+  const highlightAlpha = Math.max(0.05, 1.0 - roughness * 0.95);
+  const highlightSize  = 20 + (1.0 - roughness) * 30;  // 20%–50%
+  // Metalness: shift base toward specular
+  const specularBright = metalness > 0.5 ? 'rgba(255,255,255,0.85)' : `rgba(255,255,255,${highlightAlpha.toFixed(2)})`;
+  const bg = `radial-gradient(circle at 35% 30%, ${specularBright} 0%, ${specularBright} ${highlightSize}%, ${baseHex} ${highlightSize + 10}%, ${metalness > 0.3 ? baseHex : '#222'} 100%)`;
+  return `background:${bg}`;
+}
+
+// ── Update sphere swatch button border to reflect material state ──────────────
+function getSwatchBorder(layer) {
+  return layer.customMaterial
+    ? '1px solid rgba(255,255,255,0.30)'   // has material: solid border
+    : '1px dashed rgba(255,255,255,0.25)'; // no material: dashed = "empty slot"
+}
+
+
+// ── Update sphere swatch button appearance ────────────────────────────────────
+function updateSwatchButton(layer) {
+  const btn = document.querySelector(`.layer-material-swatch[data-index="${layer.index}"]`);
+  // Sizing / positioning come from CSS (#layer-list-panel .layer-swatches > ...).
+  // We only refresh the visual fill (background gradient) and border style here.
+  if (btn) btn.style.cssText = `${getMaterialSwatchStyle(layer)}; border:${getSwatchBorder(layer)}; cursor:pointer; transition:transform 0.15s, box-shadow 0.15s;`;
+}
+
+// ── Layer Material Dialog controller ─────────────────────────────────────────
+let _lmdLayerIdx = null;  // which layer is currently being edited
+
+// Module-level AbortController to cleanly remove previous dialog listeners on each open
+let _lmdAbortController = null;
+
+function openLayerMaterialDialog(layerIdx) {
+  const layer = S.parsedLayers.find(l => l.index === layerIdx);
+  if (!layer) return;
+  _lmdLayerIdx = layerIdx;
+
+  // Cancel previous listeners
+  if (_lmdAbortController) { _lmdAbortController.abort(); }
+  _lmdAbortController = new AbortController();
+  const { signal } = _lmdAbortController;
+
+  const dialog     = document.getElementById('layer-material-dialog');
+  const nameEl     = document.getElementById('lmd-layer-name');
+  const roughSlider= document.getElementById('lmd-roughness');
+  const roughVal   = document.getElementById('lmd-roughness-val');
+  const metalSlider= document.getElementById('lmd-metalness');
+  const metalVal   = document.getElementById('lmd-metalness-val');
+  const opacSlider = document.getElementById('lmd-opacity');
+  const opacVal    = document.getElementById('lmd-opacity-val');
+  const resetBtn   = document.getElementById('lmd-reset-btn');
+  const okBtn      = document.getElementById('lmd-ok-btn');
+  const closeBtn   = document.getElementById('lmd-close-btn');
+  if (!dialog) return;
+
+  // Show dialog and wrap input immediately to ensure Coloris initializes on a visible element
+  dialog.style.display = 'flex';
+  if (window.Coloris) {
+    Coloris.wrap('#lmd-color-input');
+  }
+
+  // ── Populate fields ────────────────────────────────────────────────────
+  const cm = layer.customMaterial || {};
+  const shortLabel = layer.name.includes('::') ? layer.name.split('::').pop() : layer.name;
+  if (nameEl) nameEl.textContent = shortLabel;
+
+  // initColor: use cm.color if set. Fall back to layer display color, then white.
+  const layerHex = getLayerHex(layer);
+  const initColor = cm.color || layerHex || '#ffffff';
+
+  // Update color input without cloneNode (preserves Coloris binding)
+  const colorInput = document.getElementById('lmd-color-input');
+  if (colorInput) {
+    colorInput.value = initColor;
+    colorInput.style.background = initColor;
+    // Also update the Coloris wrapper element & inner button so the swatch reflects initColor
+    const clrField = colorInput.closest('.clr-field');
+    if (clrField) {
+      clrField.style.color = initColor;                                       // drives Coloris currentColor
+      const clrBtn = clrField.querySelector('button');
+      if (clrBtn) clrBtn.style.backgroundColor = initColor;
+    }
+    const colorValue = document.getElementById('lmd-color-value');
+    if (colorValue) colorValue.textContent = initColor;
+  }
+
+  const roughInit = cm.roughness ?? 0.5;
+  const metalInit = cm.metalness ?? 0.0;
+  const opacInit  = cm.opacity   ?? 1.0;
+
+  if (roughSlider) roughSlider.value = roughInit;
+  if (roughVal)    roughVal.textContent = roughInit.toFixed(2);
+  if (metalSlider) metalSlider.value = metalInit;
+  if (metalVal)    metalVal.textContent = metalInit.toFixed(2);
+  if (opacSlider)  opacSlider.value = opacInit;
+  if (opacVal)     opacVal.textContent = opacInit.toFixed(2);
+
+  updateDialogSphere(initColor, roughInit, metalInit);
+
+  // ── Helper: read all dialog fields and write to layer ─────────────────
+  function applyDialogToLayer() {
+    const lay = S.parsedLayers.find(l => l.index === _lmdLayerIdx);
+    if (!lay) return;
+    const cEl = document.getElementById('lmd-color-input');
+    const rEl = document.getElementById('lmd-roughness');
+    const mEl = document.getElementById('lmd-metalness');
+    const oEl = document.getElementById('lmd-opacity');
+    const c = cEl?.value || initColor;
+    const r = parseFloat(rEl?.value ?? 0.5);
+    const m = parseFloat(mEl?.value ?? 0.0);
+    const o = parseFloat(oEl?.value ?? 1.0);
+    if (!lay.customMaterial) lay.customMaterial = {};
+    lay.customMaterial.color     = c;
+    lay.customMaterial.roughness = r;
+    lay.customMaterial.metalness = m;
+    lay.customMaterial.opacity   = o;
+    updateSwatchButton(lay);
+    updateDialogSphere(c, r, m);
+    if (S.currentModel) applyDisplayMode();
+  }
+
+  // ── Sliders ───────────────────────────────────────────────────────────
+  roughSlider?.addEventListener('input', () => {
+    if (roughVal) roughVal.textContent = parseFloat(roughSlider.value).toFixed(2);
+    applyDialogToLayer();
+  }, { signal });
+  metalSlider?.addEventListener('input', () => {
+    if (metalVal) metalVal.textContent = parseFloat(metalSlider.value).toFixed(2);
+    applyDialogToLayer();
+  }, { signal });
+  opacSlider?.addEventListener('input', () => {
+    if (opacVal) opacVal.textContent = parseFloat(opacSlider.value).toFixed(2);
+    applyDialogToLayer();
+  }, { signal });
+
+  // ── Color input (Coloris fires 'input' on the text element) ──────────
+  colorInput?.addEventListener('input', e => {
+    const hex = e.target.value;
+    colorInput.style.background = hex;
+    // Keep the wrapper swatch in sync (Coloris reads its visible color from `color`)
+    const clrField = colorInput.closest('.clr-field');
+    if (clrField) clrField.style.color = hex;
+    const cv = document.getElementById('lmd-color-value');
+    if (cv) cv.textContent = hex;
+    applyDialogToLayer();
+  }, { signal });
+
+  // ── Reset ─────────────────────────────────────────────────────────────
+  // Restore the layer material exactly as it was loaded from the 3DM file.
+  // If the file had no layer material assigned, drop back to "no material" (null).
+  resetBtn?.addEventListener('click', () => {
+    const lay = S.parsedLayers.find(l => l.index === _lmdLayerIdx);
+    if (!lay) return;
+    lay.customMaterial = lay.originalCustomMaterial
+      ? { ...lay.originalCustomMaterial }
+      : null;
+    updateSwatchButton(lay);
+    if (S.currentModel) applyDisplayMode();
+    openLayerMaterialDialog(_lmdLayerIdx); // re-open refreshes fields
+  }, { signal });
+
+  // ── OK ────────────────────────────────────────────────────────────────
+  okBtn?.addEventListener('click', () => {
+    closeLayerMaterialDialog();
+  }, { signal });
+
+  // ── Close ─────────────────────────────────────────────────────────────
+  closeBtn?.addEventListener('click', closeLayerMaterialDialog, { signal });
+  dialog.onclick = (e) => { if (e.target === dialog) closeLayerMaterialDialog(); };
+}
+
+function updateDialogSphere(color, roughness, metalness) {
+  const sphere = document.getElementById('lmd-preview-sphere');
+  if (!sphere) return;
+  const safeColor = color || '#ffffff';
+  const highlightAlpha = Math.max(0.05, 1.0 - roughness * 0.95);
+  const highlightSize  = 20 + (1.0 - roughness) * 30;
+  const specularBright = metalness > 0.5 ? 'rgba(255,255,255,0.85)' : `rgba(255,255,255,${highlightAlpha.toFixed(2)})`;
+  sphere.style.background = `radial-gradient(circle at 35% 30%, ${specularBright} 0%, ${specularBright} ${highlightSize}%, ${safeColor} ${highlightSize + 10}%, ${metalness > 0.3 ? safeColor : '#222'} 100%)`;
+}
+
+function closeLayerMaterialDialog() {
+  if (_lmdAbortController) { _lmdAbortController.abort(); _lmdAbortController = null; }
+  const dialog = document.getElementById('layer-material-dialog');
+  if (dialog) { dialog.style.display = 'none'; dialog.onclick = null; }
+  _lmdLayerIdx = null;
+}
+
 
 // Load custom swatches from localStorage or fall back to default
 const defaultSwatches = [
@@ -263,6 +506,8 @@ function injectColorisStyles() {
     /* Force Coloris picker width so 6 swatches (20px each + 6px gap) fit perfectly in one row! */
     .clr-picker {
       width: 212px !important;
+      /* layer-material-dialog uses z-index 9999, so picker must sit above it */
+      z-index: 10001 !important;
     }
 
     /* Coloris Swatches: center-aligned grid with uniform gap */

@@ -90,7 +90,10 @@ class HistoryManager {
         if (state.customMaterial) {
           obj.userData.customMaterial = { ...state.customMaterial };
         } else {
-          delete obj.userData.customMaterial;
+          obj.userData.customMaterial = null;
+        }
+        if (state.isMaterialByLayer !== undefined) {
+          obj.userData.isMaterialByLayer = !!state.isMaterialByLayer;
         }
       }
     });

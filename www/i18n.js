@@ -85,9 +85,11 @@ export const TRANSLATIONS = {
 
     'vis.title':          'Visibility',
     'vis.edges':          'Edges',
+    'vis.edge_angle':     'Edge Angle',
     'vis.shadows':        'Shadows',
     'vis.ground':         'Ground',
     'vis.annotations':    'Annotations',
+    'vis.annotation_size': 'Annotation Size',
 
     'light.title':        'Lighting',
     'light.ambient':      'Ambient',
@@ -118,6 +120,7 @@ export const TRANSLATIONS = {
     'cg.contrast':        'Contrast',
     'cg.saturation':      'Saturation',
     'cg.temperature':     'Temperature',
+
 
     'props.title':        'Properties',
     'props.name':         'Name',
@@ -260,9 +263,11 @@ export const TRANSLATIONS = {
 
     'vis.title':          '가시성',
     'vis.edges':          '모서리',
+    'vis.edge_angle':     '모서리 각도',
     'vis.shadows':        '그림자',
     'vis.ground':         '지면',
     'vis.annotations':    '주석',
+    'vis.annotation_size': '주석 크기',
 
     'light.title':        '조명',
     'light.ambient':      '주변광',
@@ -293,6 +298,7 @@ export const TRANSLATIONS = {
     'cg.contrast':        '대비',
     'cg.saturation':      '채도',
     'cg.temperature':     '색온도',
+
 
     'props.title':        '속성',
     'props.name':         '이름',
@@ -435,9 +441,11 @@ export const TRANSLATIONS = {
 
     'vis.title':          'Visibilité',
     'vis.edges':          'Arêtes',
+    'vis.edge_angle':     'Angle d\'arête',
     'vis.shadows':        'Ombres',
     'vis.ground':         'Sol',
     'vis.annotations':    'Annotations',
+    'vis.annotation_size': 'Taille d\'annotation',
 
     'light.title':        'Éclairage',
     'light.ambient':      'Ambiant',
@@ -595,9 +603,11 @@ export const TRANSLATIONS = {
 
     'vis.title':          'Sichtbarkeit',
     'vis.edges':          'Kanten',
+    'vis.edge_angle':     'Kantenwinkel',
     'vis.shadows':        'Schatten',
     'vis.ground':         'Boden',
     'vis.annotations':    'Anmerkungen',
+    'vis.annotation_size': 'Anmerkungsgröße',
 
     'light.title':        'Beleuchtung',
     'light.ambient':      'Umgebungslicht',
@@ -755,9 +765,11 @@ export const TRANSLATIONS = {
 
     'vis.title':          'Visibilidad',
     'vis.edges':          'Aristas',
+    'vis.edge_angle':     'Ángulo de arista',
     'vis.shadows':        'Sombras',
     'vis.ground':         'Suelo',
     'vis.annotations':    'Anotaciones',
+    'vis.annotation_size': 'Tamaño de anotación',
 
     'light.title':        'Iluminación',
     'light.ambient':      'Ambiental',
@@ -915,9 +927,11 @@ export const TRANSLATIONS = {
 
     'vis.title':          'Visibilità',
     'vis.edges':          'Bordi',
+    'vis.edge_angle':     'Angolo di bordo',
     'vis.shadows':        'Ombre',
     'vis.ground':         'Pavimento',
     'vis.annotations':    'Annotazioni',
+    'vis.annotation_size': 'Dimensione annotazione',
 
     'light.title':        'Illuminazione',
     'light.ambient':      'Luce ambientale',
@@ -1075,9 +1089,11 @@ export const TRANSLATIONS = {
 
     'vis.title':          '表示設定',
     'vis.edges':          'エッジ',
+    'vis.edge_angle':     'エッジ角度',
     'vis.shadows':        'シャドウ',
     'vis.ground':         '地面',
     'vis.annotations':    '注釈',
+    'vis.annotation_size': '注釈サイズ',
 
     'light.title':        'ライティング',
     'light.ambient':      'アンビエント',
@@ -1235,9 +1251,11 @@ export const TRANSLATIONS = {
 
     'vis.title':          '可见性',
     'vis.edges':          '边缘',
+    'vis.edge_angle':     '边缘角度',
     'vis.shadows':        '阴影',
     'vis.ground':         '地面',
     'vis.annotations':    '注释',
+    'vis.annotation_size': '注释大小',
 
     'light.title':        '灯光',
     'light.ambient':      '环境光',
@@ -1395,9 +1413,11 @@ export const TRANSLATIONS = {
 
     'vis.title':          '可見性',
     'vis.edges':          '邊緣',
+    'vis.edge_angle':     '邊緣角度',
     'vis.shadows':        '陰影',
     'vis.ground':         '地面',
     'vis.annotations':    '標註',
+    'vis.annotation_size': '標註大小',
 
     'light.title':        '燈光',
     'light.ambient':      '環境光',
@@ -1555,9 +1575,11 @@ export const TRANSLATIONS = {
 
     'vis.title':          'Visibilidade',
     'vis.edges':          'Arestas',
+    'vis.edge_angle':     'Ângulo de aresta',
     'vis.shadows':        'Sombras',
     'vis.ground':         'Chão',
     'vis.annotations':    'Anotações',
+    'vis.annotation_size': 'Tamanho da anotação',
 
     'light.title':        'Iluminação',
     'light.ambient':      'Ambiental',
@@ -1715,9 +1737,11 @@ export const TRANSLATIONS = {
 
     'vis.title':          'Viditelnost',
     'vis.edges':          'Hrany',
+    'vis.edge_angle':     'Úhel hran',
     'vis.shadows':        'Stíny',
     'vis.ground':         'Podlaha',
     'vis.annotations':    'Anotace',
+    'vis.annotation_size': 'Velikost anotace',
 
     'light.title':        'Osvětlení',
     'light.ambient':      'Okolní světlo',
@@ -1875,9 +1899,11 @@ export const TRANSLATIONS = {
 
     'vis.title':          'Widoczność',
     'vis.edges':          'Krawędzie',
+    'vis.edge_angle':     'Kąt krawędzi',
     'vis.shadows':        'Cienie',
     'vis.ground':         'Podłoże',
     'vis.annotations':    'Adnotacje',
+    'vis.annotation_size': 'Rozmiar adnotacji',
 
     'light.title':        'Oświetlenie',
     'light.ambient':      'Światło otoczenia',

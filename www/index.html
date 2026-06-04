@@ -307,7 +307,7 @@
   <aside id="settings-right-panel" class="right-panel">
     <div class="right-panel-header">
       <h2 data-i18n="panel.settings">Settings</h2>
-      <span id="app-version-tag" class="app-version-tag">byRhinoView v0.8.8</span>
+      <span id="app-version-tag" class="app-version-tag">byRhinoView v0.9.1</span>
       <button id="btn-close-settings-panel" class="icon-btn sm" title="Close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
           <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -368,13 +368,13 @@
         <div class="sliders-grid" style="margin-bottom:8px;">
           <div class="slider-row">
             <span class="slider-label" data-i18n="env.intensity">Env Intensity</span>
-            <input type="range" id="sl-env-intensity" min="0" max="3" step="0.05" value="1.0">
+            <input type="range" id="sl-env-intensity" min="0" max="3" step="0.05" value="1.00">
             <span id="sl-env-intensity-val" class="slider-val">1.00</span>
           </div>
           <div class="slider-row" id="row-hdr-rotation">
             <span class="slider-label" data-i18n="env.rotation">HDR Rotation</span>
-            <input type="range" id="sl-hdr-rotation" min="0" max="360" step="1" value="0">
-            <span id="sl-hdr-rotation-val" class="slider-val">0°</span>
+            <input type="range" id="sl-hdr-rotation" min="0" max="360" step="1" value="59">
+            <span id="sl-hdr-rotation-val" class="slider-val">59°</span>
           </div>
         </div>
         <input type="file" id="hdr-file-input" accept=".hdr,.exr">
@@ -404,6 +404,18 @@
             <input type="checkbox" id="chk-shadows-panel" checked>
           </label>
         </div>
+        <div class="sliders-grid" style="margin-top:10px; border-top:1px solid var(--border); padding-top:10px;">
+          <div class="slider-row">
+            <span class="slider-label" data-i18n="vis.edge_angle">Edge Angle</span>
+            <input type="range" id="sl-edge-angle" min="0" max="90" step="1" value="30">
+            <span id="sl-edge-angle-val" class="slider-val">30°</span>
+          </div>
+          <div class="slider-row">
+            <span class="slider-label" data-i18n="vis.annotation_size">Annotation Size</span>
+            <input type="range" id="sl-annotation-scale" min="0.2" max="3.0" step="0.1" value="1.0">
+            <span id="sl-annotation-scale-val" class="slider-val">1.0x</span>
+          </div>
+        </div>
       </div>
 
       <div class="setting-group-card">
@@ -411,8 +423,8 @@
         <div class="sliders-grid">
           <div class="slider-row">
             <span class="slider-label" data-i18n="light.ambient">Ambient</span>
-            <input type="range" id="sl-ambient-panel" min="0" max="2" step="0.05" value="0.5">
-            <span id="sl-ambient-val" class="slider-val">0.50</span>
+            <input type="range" id="sl-ambient-panel" min="0" max="2" step="0.05" value="0.55">
+            <span id="sl-ambient-val" class="slider-val">0.55</span>
           </div>
         </div>
         <!-- Sun -->
@@ -800,6 +812,63 @@
     <button id="btn-redo" class="bottom-tool-btn" title="Redo (Ctrl+Y)" disabled style="opacity: 0.35;">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 5.5h-7a3.5 3.5 0 0 0 0 7h2.5"/><polyline points="10.5 2.5 13.5 5.5 10.5 8.5"/></svg>
     </button>
+  </div>
+
+  <!-- ── Layer Material Editor Dialog ── -->
+  <div id="layer-material-dialog" style="display:none; position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.55); backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); align-items:center; justify-content:center;">
+    <div class="lmd-card">
+
+      <!-- Header -->
+      <div class="lmd-header">
+        <div id="lmd-preview-sphere" class="lmd-sphere"></div>
+        <div class="lmd-title-wrap">
+          <div class="lmd-title">Layer Material</div>
+          <div id="lmd-layer-name" class="lmd-subtitle"></div>
+        </div>
+        <button id="lmd-close-btn" class="lmd-close" title="Close">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="12" y1="4" x2="4" y2="12"/><line x1="4" y1="4" x2="12" y2="12"/></svg>
+        </button>
+      </div>
+
+      <div class="lmd-body mat-editor">
+        <!-- Color -->
+        <div class="mat-row">
+          <span class="mat-label">Color</span>
+          <div class="lmd-color-cell">
+            <input type="text" id="lmd-color-input" class="layer-color-picker-input" data-coloris value="#cccccc" inputmode="none"
+              style="background:#cccccc; color:transparent; caret-color:transparent; font-size:0; outline:none;">
+            <span id="lmd-color-value" class="lmd-color-value">#cccccc</span>
+          </div>
+        </div>
+
+        <!-- Roughness -->
+        <div class="mat-row">
+          <span class="mat-label">Roughness</span>
+          <input type="range" id="lmd-roughness" min="0" max="1" step="0.01" value="0.5">
+          <span class="mat-val" id="lmd-roughness-val">0.50</span>
+        </div>
+
+        <!-- Metalness -->
+        <div class="mat-row">
+          <span class="mat-label">Metalness</span>
+          <input type="range" id="lmd-metalness" min="0" max="1" step="0.01" value="0.0">
+          <span class="mat-val" id="lmd-metalness-val">0.00</span>
+        </div>
+
+        <!-- Opacity -->
+        <div class="mat-row">
+          <span class="mat-label">Opacity</span>
+          <input type="range" id="lmd-opacity" min="0" max="1" step="0.01" value="1.0">
+          <span class="mat-val" id="lmd-opacity-val">1.00</span>
+        </div>
+      </div>
+
+      <!-- Action buttons -->
+      <div class="lmd-actions">
+        <button id="lmd-reset-btn" class="lmd-btn lmd-btn-secondary">Reset</button>
+        <button id="lmd-ok-btn" class="lmd-btn lmd-btn-primary">OK</button>
+      </div>
+    </div>
   </div>
 
   <script type="module" src="app.js"></script>

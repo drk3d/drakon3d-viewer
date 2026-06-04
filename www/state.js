@@ -21,6 +21,7 @@ export const S = {
   // ── Scene objects ────────────────────────────────────────────────────────
   currentModel:    null,
   currentMode:     'shaded',
+  edgeThresholdAngle: 30,
   measurementGroup: null,
 
   // ── Environment ──────────────────────────────────────────────────────────
@@ -28,7 +29,7 @@ export const S = {
   envMaps:           {},
   currentEnvPreset:  'studio',
   envAsBackground:   false,
-  hdrRotation:       0,
+  hdrRotation:       59,
 
   // ── Layers ───────────────────────────────────────────────────────────────
   parsedLayers:    [],
@@ -67,6 +68,45 @@ export const S = {
   shadowsEnabled:   true,
   groundEnabled:    false,
 
+  // ── Per-mode visibility settings ──
+  modeSettings: {
+    wireframe: {
+      edges: true,
+      curves: true,
+      ground: false,
+      shadows: false,
+      annotations: true
+    },
+    shaded: {
+      edges: true,
+      curves: true,
+      ground: false,
+      shadows: true,
+      annotations: true
+    },
+    arctic: {
+      edges: false,
+      curves: false,
+      ground: true,
+      shadows: true,
+      annotations: true
+    },
+    rendered: {
+      edges: false,
+      curves: false,
+      ground: true,
+      shadows: true,
+      annotations: true
+    },
+    technical: {
+      edges: true,
+      curves: true,
+      ground: false,
+      shadows: false,
+      annotations: true
+    }
+  },
+
   // ── Hidden objects ───────────────────────────────────────────────────────
   hiddenObjects: new Set(),
 
@@ -92,7 +132,8 @@ export const S = {
   completedMeasurements: [],
   angleWidget:    null,
   draggedHandle:  null,
-  annotationScale:       1.0,
+  annotationScale:       1.0,   // scale for imported Rhino annotations (dims/text/dots)
+  measurementScale:      1.0,   // scale for the Distance/Angle measurement tool only
 
   // ── Clipping ─────────────────────────────────────────────────────────────
   clippingPlane:             null,
