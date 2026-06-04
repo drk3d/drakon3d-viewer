@@ -20,3 +20,5 @@ android/
 ios/
 capacitor.config.json
 
+# Python (root directory only)
+/*.py
