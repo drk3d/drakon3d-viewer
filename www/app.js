@@ -526,7 +526,14 @@ function init() {
     S.scene.backgroundIntensity = (bgType === 'hdr') ? val : 1.0;
   }
 
-  hideLoading();
+  // Check for auto-loading a model via query parameter (e.g., ?model=path/to/file.3dm)
+  const urlParams = new URLSearchParams(window.location.search);
+  const modelUrl = urlParams.get('model') || urlParams.get('url');
+  if (modelUrl) {
+    loadModelFromUrl(modelUrl);
+  } else {
+    hideLoading();
+  }
 }
 
 // ── Environment gradient helper ────────────────────────────────────────────
@@ -2589,6 +2596,35 @@ async function handleIncomingSharedFile(url) {
   } catch (e) {
     console.error('Error loading shared file:', e);
     alert('Failed to open shared file: ' + e.message);
+  } finally {
+    hideLoading();
+  }
+}
+
+// ── Handle loading a 3D file from a URL ──
+async function loadModelFromUrl(url) {
+  if (!url) return;
+  try {
+    showLoading(t('loading.parse') || 'Parsing file...');
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Failed to fetch file data: ' + res.statusText);
+    const blob = await res.blob();
+    
+    // Extract clean filename from URL (remove query parameters if any)
+    let filename = url.substring(url.lastIndexOf('/') + 1);
+    if (filename.includes('?')) filename = filename.split('?')[0];
+    if (!filename) filename = 'model.3dm';
+    
+    const file = new File([blob], filename, { type: blob.type });
+    
+    if (filename.toLowerCase().endsWith('.rhinoview')) {
+      await loadSession(file);
+    } else {
+      await handleFile(file, rhinoLoader, gltfLoader);
+    }
+  } catch (e) {
+    console.error('Error loading file from URL:', e);
+    alert('Failed to load file from URL: ' + e.message);
   } finally {
     hideLoading();
   }
