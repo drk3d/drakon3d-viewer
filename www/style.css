@@ -1131,17 +1131,31 @@ input[type="range"]::-moz-range-thumb {
   gap: 12px;
 }
 .left-sidebar-footer {
-  padding: 16px;
-  font-size: 0.78rem; /* 약간 더 크게 */
-  font-weight: 700; /* 로고타입 형태의 볼드 서체 */
-  color: var(--text); /* 자동으로 어두운 배경에선 밝은색, 밝은 배경에선 어두운색 */
-  letter-spacing: 0.08em; /* 자간을 벌려 브랜드 느낌 강화 */
-  text-align: left;
+  padding: 14px 16px;
   flex-shrink: 0;
-  opacity: 0.8; /* 한층 더 또렷하고 선명하게 */
-  user-select: none;
-  font-family: 'Noto Sans', sans-serif;
   border-top: 1px solid var(--panel-border-color);
+  user-select: none;
+}
+.footer-logo {
+  max-width: 126px;
+  height: auto;
+  opacity: 0.8;
+  transition: opacity 0.15s ease;
+}
+.footer-logo:hover {
+  opacity: 1;
+}
+.footer-logo.dark-only {
+  display: none;
+}
+.footer-logo.light-only {
+  display: block;
+}
+body.dark-theme .footer-logo.dark-only {
+  display: block;
+}
+body.dark-theme .footer-logo.light-only {
+  display: none;
 }
 
 .tab-section {
