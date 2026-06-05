@@ -100,6 +100,10 @@ rhinoLoader.setLibraryPath('https://cdn.jsdelivr.net/npm/rhino3dm@8.17.0/');
 
 const gltfLoader = new GLTFLoader();
 
+// Module-scope state used by animate() — must be initialized before bootstrap
+// so the very first frame doesn't hit the TDZ.
+let barContrastFrameCount = 0;
+
 // ── Bootstrap ─────────────────────────────────────────────────────────────
 document.getElementById('loading')?.classList.remove('hidden');
 initThemeSync();
@@ -2463,7 +2467,6 @@ function bindUI() {
 }
 
 // ── Core render loop ───────────────────────────────────────────────────────
-let barContrastFrameCount = 0;
 function animate() {
   requestAnimationFrame(animate);
 
@@ -2577,54 +2580,65 @@ function animate() {
     S.renderer.clippingPlanes = savedPlanes;  // restore clipping for next frame
   }
 
-  // Dynamic color contrast adaptation for bottom tools bar in HDR mode
+  // Dynamic color contrast adaptation for the bottom tools bar — runs for ALL
+  // background types (solid, gradient2, gradient4, radial, hdr). We sample the
+  // pixel directly behind the bar so the icons stay legible regardless of UI theme.
   if (S.renderer) {
-    const bgType = document.getElementById('bg-type-select')?.value;
-    if (bgType === 'hdr') {
-      barContrastFrameCount++;
-      if (barContrastFrameCount % 6 === 0) {
-        try {
-          const bottomBar = document.getElementById('bottom-view-tools-bar');
-          if (bottomBar) {
-            const gl = S.renderer.getContext();
-            if (gl) {
-              const width = S.renderer.domElement.width;
-              const height = S.renderer.domElement.height;
-              // Sample a pixel at the horizontal center, ~44px from the bottom in screen coordinates.
-              const x = Math.round(width / 2);
-              // WebGL coordinate Y=0 starts at the bottom
-              const y = Math.round(44 * window.devicePixelRatio);
-              
-              if (x >= 0 && x < width && y >= 0 && y < height) {
-                const pixel = new Uint8Array(4);
-                gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
-                const r = pixel[0], g = pixel[1], b = pixel[2];
-                
-                // Calculate relative luminance using ITU-R BT.709 formula
-                const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-                
-                // If the background behind the bar is dark, use light buttons/icons (.local-dark)
-                // Otherwise, use dark buttons/icons (.local-light)
-                if (luminance < 0.45) {
-                  bottomBar.classList.add('local-dark');
-                  bottomBar.classList.remove('local-light');
-                } else {
-                  bottomBar.classList.add('local-light');
-                  bottomBar.classList.remove('local-dark');
-                }
-              }
-            }
-          }
-        } catch (e) {
-          console.warn('Luminance sampling error:', e);
-        }
-      }
-    } else {
-      const bottomBar = document.getElementById('bottom-view-tools-bar');
-      if (bottomBar && (bottomBar.classList.contains('local-dark') || bottomBar.classList.contains('local-light'))) {
-        bottomBar.classList.remove('local-dark', 'local-light');
+    barContrastFrameCount++;
+    if (barContrastFrameCount % 6 === 0) {
+      updateBottomBarLocalContrast();
+    }
+  }
+}
+
+function updateBottomBarLocalContrast() {
+  const bottomBar = document.getElementById('bottom-view-tools-bar');
+  if (!bottomBar || !S.renderer) return;
+  try {
+    const gl = S.renderer.getContext();
+    if (!gl) return;
+    const width  = S.renderer.domElement.width;
+    const height = S.renderer.domElement.height;
+    // Sample a pixel at the horizontal center, ~44px from the bottom in screen coords.
+    const x = Math.round(width / 2);
+    // WebGL coordinate Y=0 starts at the bottom
+    const y = Math.round(44 * window.devicePixelRatio);
+    if (x < 0 || x >= width || y < 0 || y >= height) return;
+
+    const pixel = new Uint8Array(4);
+    gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+    let r = pixel[0], g = pixel[1], b = pixel[2], a = pixel[3];
+
+    // With alpha:true the canvas can be transparent over the page bg —
+    // composite onto body's actual bg color so the luminance reflects what
+    // the user actually sees through the bar's blur.
+    if (a < 255) {
+      const bodyBg = window.getComputedStyle(document.body).backgroundColor;
+      const m = bodyBg.match(/\d+/g);
+      if (m && m.length >= 3) {
+        const bgR = parseInt(m[0]), bgG = parseInt(m[1]), bgB = parseInt(m[2]);
+        const af = a / 255;
+        r = Math.round(r * af + bgR * (1 - af));
+        g = Math.round(g * af + bgG * (1 - af));
+        b = Math.round(b * af + bgB * (1 - af));
       }
     }
+
+    // ITU-R BT.709 relative luminance
+    const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+
+    // luminance < 0.45 → background is dark → use light icons (local-dark)
+    // else → background is light → use dark icons (local-light)
+    // Only mutate classList when the decision changes — keeps DevTools quiet
+    // and avoids unnecessary style recalcs during the animate loop.
+    const wantClass   = luminance < 0.45 ? 'local-dark'  : 'local-light';
+    const removeClass = luminance < 0.45 ? 'local-light' : 'local-dark';
+    if (!bottomBar.classList.contains(wantClass)) {
+      bottomBar.classList.add(wantClass);
+      bottomBar.classList.remove(removeClass);
+    }
+  } catch (e) {
+    console.warn('Luminance sampling error:', e);
   }
 }
 

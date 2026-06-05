@@ -16,7 +16,7 @@
   <link rel="apple-touch-icon" href="images/apple-touch-icon.png"/>
 
   <link rel="stylesheet" href="libs/coloris.min.css">
-  <link rel="stylesheet" href="style.css?v=1.2.89">
+  <link rel="stylesheet" href="style.css?v=1.2.91">
   <!-- Noto Sans: covers all 12 UI languages (Latin, Korean, Japanese, Chinese, Arabic, Thai, etc.) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -313,7 +313,7 @@
   <aside id="settings-right-panel" class="right-panel">
     <div class="right-panel-header">
       <h2 data-i18n="panel.settings">Settings</h2>
-      <span id="app-version-tag" class="app-version-tag">byRhinoView v0.9.2</span>
+      <span id="app-version-tag" class="app-version-tag">byRhinoView v0.9.3</span>
       <button id="btn-close-settings-panel" class="icon-btn sm" title="Close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
           <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -650,10 +650,8 @@
   <!-- ── Empty State ── -->
   <div id="empty-state">
     <div id="empty-icon">
-      <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M32 4L8 18v28l24 14 24-14V18z" stroke-opacity="0.5"/>
-        <path d="M32 4v42M8 18l24 14 24-14"/>
-      </svg>
+      <img src="images/byrhinoview-horizontal-black.svg" class="light-only" alt="byRhinoView" />
+      <img src="images/byrhinoview-horizontal-white.svg" class="dark-only" alt="byRhinoView" />
     </div>
     <p class="empty-title" data-i18n="empty.title">No model loaded</p>
     <p class="empty-sub" data-i18n="empty.sub">Open the FILE sidebar or drop a .3dm, .glb, .stp file here</p>

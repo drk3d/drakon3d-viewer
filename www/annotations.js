@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { FontLoader } from 'three/addons/loaders/FontLoader.js';
 import { S } from './state.js';
-import { isPageVisuallyDark } from './helpers.js';
 
 // ── Font (lazy singleton) ─────────────────────────────────────────────────────
 
@@ -122,17 +121,9 @@ export async function createAnnotationSprites() {
         color.setRGB(layer.color.r / 255, layer.color.g / 255, layer.color.b / 255);
       }
 
-      if (!ann.objectColorCustom) {
-        if (isPageVisuallyDark()) {
-          if (color.r < 0.08 && color.g < 0.08 && color.b < 0.08) {
-            color.setHex(0xffffff); // In dark mode, map black/very-dark annotations to white
-          }
-        } else {
-          if (color.r > 0.92 && color.g > 0.92 && color.b > 0.92) {
-            color.setHex(0x000000); // In light mode, map white/very-light annotations to black
-          }
-        }
-      }
+      // Keep the Rhino-original annotation color. We no longer flip
+      // black↔white based on UI theme — the scene background comes from
+      // the 3dm file, so the original color is what the file author intended.
 
       const textVal    = String(ann.text || '');
       const isSelected = selectedIndices.includes(index);

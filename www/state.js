@@ -43,6 +43,20 @@ export const S = {
   rhinoInstance:       null,
   rhinoBackgroundColor: null,
   fileDefaultBgStyle:  null,
+  fileBackgroundColorTop: null,      // sRGB hex string '#rrggbb' (or null)
+  fileBackgroundColorBottom: null,   // sRGB hex string '#rrggbb' (or null)
+  fileBackgroundColorTL: null,       // 4-color gradient corners (hex), null if not present
+  fileBackgroundColorTR: null,
+  fileBackgroundColorBL: null,
+  fileBackgroundColorBR: null,
+  fileSunEnabled:      null,
+  fileSunAzimuth:      null,
+  fileSunElevation:    null,
+  fileSunIntensity:    null,
+  fileGroundEnabled:   null,
+  fileAmbientIntensity: null,
+  fileSkylightEnabled:  null,
+  fileSkylightIntensity: null,
   customBackgroundColor: null,
   parsedAnnotations:   [],
   annotationGroup:     null,

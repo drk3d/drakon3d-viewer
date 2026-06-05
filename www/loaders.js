@@ -9,7 +9,187 @@ import { createAnnotationSprites } from './annotations.js';
 import { renderNamedViewsUI } from './camera.js';
 import { resetSettingsToDefault } from './session.js';
 import { showLoading, hideLoading, setProgress, setFileName, showModelInfo } from './helpers.js';
-import { setToolbarModelState } from './app.js';
+import { setToolbarModelState, changeDisplayMode } from './app.js';
+
+// ── 3dm render-settings helpers ──────────────────────────────────────────────
+
+// Convert a rhino3dm Color object {r,g,b} (0-255, sRGB) to a '#rrggbb' string.
+// Direct integer → hex avoids any sRGB↔linear conversion that THREE.Color would do.
+function rhinoColorToHex(c) {
+  if (!c) return null;
+  const clamp = v => Math.max(0, Math.min(255, Math.round(Number(v) || 0)));
+  const r = clamp(c.r ?? c.R);
+  const g = clamp(c.g ?? c.G);
+  const b = clamp(c.b ?? c.B);
+  return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
+}
+
+// rhino3dm enum values can be plain numbers or wrapped objects with .value
+function readEnumValue(v) {
+  if (v === null || v === undefined) return null;
+  if (typeof v === 'number') return v;
+  if (typeof v === 'object' && typeof v.value === 'number') return v.value;
+  return null;
+}
+
+// Rhino BackgroundStyle enum: 0=SolidColor, 1=Gradient(2 or 4-corner), 2=Backdrop, 3=Environment
+function bgStyleEnumToName(n) {
+  if (n === 0) return 'solid';
+  if (n === 1) return 'gradient2';
+  return null;
+}
+
+// Pull 4 corner colors from RDK XML if the file carries a 4-corner gradient.
+// Returns { tl, tr, bl, br } as hex strings, or null if not found.
+function extract4CornerGradient(xml) {
+  if (!xml) return null;
+  // Look for any block that names 4 corner colors. Rhino has historically
+  // written these under names like background-color-{tl,tr,bl,br} or
+  // background-gradient-color-{1..4} depending on version.
+  const pat = (name) => new RegExp('<' + name + '\\b[^>]*>\\s*([0-9.,\\s]+)\\s*</' + name + '>', 'i');
+  const tryNames = (names) => {
+    const out = [];
+    for (const n of names) {
+      const m = xml.match(pat(n));
+      if (!m) return null;
+      const parts = m[1].split(/[,\s]+/).filter(Boolean).map(Number);
+      if (parts.length < 3) return null;
+      const [r, g, b] = parts;
+      out.push(rhinoColorToHex({ r, g, b }));
+    }
+    return out;
+  };
+  const tl = tryNames(['background-color-top-left', 'background-color-tl']);
+  if (tl) {
+    const tr = tryNames(['background-color-top-right', 'background-color-tr']);
+    const bl = tryNames(['background-color-bottom-left', 'background-color-bl']);
+    const br = tryNames(['background-color-bottom-right', 'background-color-br']);
+    if (tr && bl && br) return { tl: tl[0], tr: tr[0], bl: bl[0], br: br[0] };
+  }
+  const quad = tryNames([
+    'background-gradient-color-1',
+    'background-gradient-color-2',
+    'background-gradient-color-3',
+    'background-gradient-color-4'
+  ]);
+  if (quad) return { tl: quad[0], tr: quad[1], bl: quad[2], br: quad[3] };
+  return null;
+}
+
+function extractBackgroundSettings(rs, rdkXml) {
+  const topHex = rhinoColorToHex(rs.backgroundColorTop);
+  const botHex = rhinoColorToHex(rs.backgroundColorBottom);
+  S.fileBackgroundColorTop    = topHex;
+  S.fileBackgroundColorBottom = botHex;
+
+  const styleNum = readEnumValue(rs.backgroundStyle);
+  let style = bgStyleEnumToName(styleNum);
+  if (style === null) {
+    // Fallback: infer from colors when the enum isn't exposed
+    if (topHex && botHex && topHex !== botHex) style = 'gradient2';
+    else style = 'solid';
+  }
+
+  // 4-corner gradient is not part of standard ON_3dmRenderSettings —
+  // try the RDK XML; if found, upgrade style to 'gradient4'.
+  const corners = extract4CornerGradient(rdkXml);
+  if (corners) {
+    S.fileBackgroundColorTL = corners.tl;
+    S.fileBackgroundColorTR = corners.tr;
+    S.fileBackgroundColorBL = corners.bl;
+    S.fileBackgroundColorBR = corners.br;
+    style = 'gradient4';
+  } else {
+    S.fileBackgroundColorTL = null;
+    S.fileBackgroundColorTR = null;
+    S.fileBackgroundColorBL = null;
+    S.fileBackgroundColorBR = null;
+  }
+
+  S.fileDefaultBgStyle = style;
+  console.log('[pre] Background:', { style, topHex, botHex, corners });
+}
+
+function extractSunSettings(rs) {
+  const sun = rs.sun;
+  if (sun) {
+    S.fileSunEnabled   = sun.enableOn ?? false;
+    S.fileSunAzimuth   = sun.azimuth ?? 135;
+    S.fileSunElevation = sun.altitude ?? 45;
+    S.fileSunIntensity = sun.intensity ?? 1.8;
+  } else {
+    S.fileSunEnabled   = null;
+    S.fileSunAzimuth   = null;
+    S.fileSunElevation = null;
+    S.fileSunIntensity = null;
+  }
+}
+
+function extractGroundSettings(rs) {
+  const gp = rs.groundPlane;
+  S.fileGroundEnabled = gp ? (gp.enabled ?? false) : null;
+}
+
+// Rhino's Skylight intensity is what we want to mirror onto both:
+//   - Ambient slider (supplemental ambient light)
+//   - Environment intensity slider (IBL strength)
+// If we can't read it, default both to 1.0.
+function extractSkylightAndAmbient(rs, rdkXml) {
+  const sky = rs.skylight;
+  const skyEnabled = !!(sky && sky.enabled);
+
+  let skyIntensity = null;
+  if (sky && typeof sky.shadowIntensity === 'number') {
+    skyIntensity = sky.shadowIntensity;
+  }
+
+  // Override from RDK XML if present (<skylight><shadow-intensity>…</shadow-intensity></skylight>)
+  if (rdkXml) {
+    try {
+      const skyBlock = rdkXml.match(/<skylight\b[^>]*>([\s\S]*?)<\/skylight>/i);
+      if (skyBlock) {
+        const m = skyBlock[1].match(/<shadow-intensity\b[^>]*>\s*([0-9.eE+\-]+)\s*<\/shadow-intensity>/i);
+        if (m) {
+          const v = parseFloat(m[1]);
+          if (!isNaN(v)) skyIntensity = v;
+        }
+      }
+    } catch (e) {
+      console.warn('[pre] skylight XML parse error:', e);
+    }
+  }
+
+  // If skylight intensity couldn't be determined, fall back to 1.0
+  // (per spec: when we can't read the file value, Ambient + Environment both default to 1.0).
+  const FALLBACK = 1.0;
+  const intensity = (typeof skyIntensity === 'number' && !isNaN(skyIntensity))
+    ? skyIntensity
+    : FALLBACK;
+
+  S.fileSkylightEnabled   = skyEnabled;
+  S.fileSkylightIntensity = intensity;
+  S.fileAmbientIntensity  = intensity;
+
+  console.log('[pre] Skylight:', { enabled: skyEnabled, intensity, raw: skyIntensity });
+}
+
+function resetFileRenderSettings() {
+  S.fileBackgroundColorTop    = null;
+  S.fileBackgroundColorBottom = null;
+  S.fileBackgroundColorTL = null;
+  S.fileBackgroundColorTR = null;
+  S.fileBackgroundColorBL = null;
+  S.fileBackgroundColorBR = null;
+  S.fileDefaultBgStyle  = null;
+  S.fileSunEnabled      = null;
+  S.fileSunAzimuth      = null;
+  S.fileSunElevation    = null;
+  S.fileSunIntensity    = null;
+  S.fileGroundEnabled   = null;
+  S.fileAmbientIntensity  = null;
+  S.fileSkylightEnabled   = null;
+  S.fileSkylightIntensity = null;
+}
 
 // ── Dynamic OCCT loader ───────────────────────────────────────────────────────
 
@@ -503,12 +683,20 @@ export async function preprocess3dm(file, skipLayerParse) {
     // ── Layer / render settings ───────────────────────────────────────────
     if (!skipLayerParse) {
       try {
-        const rs = doc.settings()?.renderSettings;
-        S.rhinoBackgroundColor = rs?.backgroundColor
-          ? new THREE.Color(rs.backgroundColor.r / 255, rs.backgroundColor.g / 255, rs.backgroundColor.b / 255)
-          : null;
-        S.fileDefaultBgStyle = rs?.backgroundStyle ?? null;
-      } catch { S.rhinoBackgroundColor = null; S.fileDefaultBgStyle = null; }
+        const settings = doc.settings();
+        const rs = (settings && typeof settings.renderSettings === 'function') ? settings.renderSettings() : null;
+        const rdkXml = (typeof doc.rdkXml === 'function') ? (doc.rdkXml() || '') : '';
+
+        if (rs) {
+          extractBackgroundSettings(rs, rdkXml);
+          extractSunSettings(rs);
+          extractGroundSettings(rs);
+          extractSkylightAndAmbient(rs, rdkXml);
+        }
+      } catch (rsErr) {
+        console.warn('[pre] render settings extraction err:', rsErr);
+        resetFileRenderSettings();
+      }
 
       try {
         const us = doc.settings()?.modelUnitSystem;
@@ -758,7 +946,7 @@ export async function preprocess3dm(file, skipLayerParse) {
 
       S.parsedNamedViews = [];
       try {
-        const views = doc.views();
+        const views = doc.namedViews();
         const safePt = (v, dx = 0, dy = 0, dz = 0) => {
           if (!v) return [dx, dy, dz];
           return [
@@ -768,17 +956,90 @@ export async function preprocess3dm(file, skipLayerParse) {
           ];
         };
         for (let i = 0; i < views.count; i++) {
-          const v   = views.get(i);
-          const loc = v.cameraLocation;
-          const up  = v.cameraUp;
-          const tgt = v.cameraTarget;
-          S.parsedNamedViews.push({
-            name:     v.name || `Named View ${i}`,
-            position: safePt(loc),
-            up:       safePt(up, 0, 1, 0),
-            target:   safePt(tgt)
-          });
-          v.delete();
+          let v = null;
+          let vp = null;
+          try {
+            v = views.get(i);
+            if (!v) continue;
+            vp = v.getViewport();
+            if (!vp) {
+              v.delete();
+              continue;
+            }
+            const loc = vp.cameraLocation;
+            const up  = vp.cameraUp;
+            const tgt = vp.targetPoint;
+            const dir = vp.cameraDirection;
+            
+            const isUnsetVal = (val) => {
+              if (val === undefined || val === null) return true;
+              if (typeof val === 'number') {
+                return val < -1e300 || val > 1e300 || isNaN(val);
+              }
+              if (Array.isArray(val)) {
+                return val.some(isUnsetVal);
+              }
+              const x = val.X ?? val.x ?? val[0];
+              const y = val.Y ?? val.y ?? val[1];
+              const z = val.Z ?? val.z ?? val[2];
+              return isUnsetVal(x) || isUnsetVal(y) || isUnsetVal(z);
+            };
+
+            const pLoc = safePt(loc);
+            const pDir = safePt(dir, 0, 0, -1);
+            
+            // Check if looking straight up or down (parallel to Z axis)
+            const isVerticalLook = Math.abs(pDir[0]) < 0.01 && Math.abs(pDir[1]) < 0.01;
+            
+            let finalUp = [0, 0, 1];
+            if (isVerticalLook) {
+              const parsedUp = safePt(up, 0, 1, 0);
+              const len = Math.hypot(parsedUp[0], parsedUp[1]);
+              if (len > 0.001) {
+                finalUp = [parsedUp[0] / len, parsedUp[1] / len, 0];
+              } else {
+                finalUp = [0, 1, 0];
+              }
+            } else {
+              // For all non-vertical views, force the global Z-up vector [0, 0, 1].
+              // This guarantees that OrbitControls orbits around the Z-axis, keeping the ground plane horizontal.
+              finalUp = [0, 0, 1];
+            }
+
+            let parsedTgt = safePt(tgt);
+            if (isUnsetVal(parsedTgt)) {
+              let dist = 100;
+              try {
+                if (typeof vp.targetDistance === 'function') {
+                  const d = vp.targetDistance(true);
+                  if (!isUnsetVal(d)) dist = d;
+                }
+              } catch (e) {
+                console.warn('[pre] targetDistance calculation failed:', e);
+              }
+              parsedTgt = [
+                pLoc[0] + pDir[0] * dist,
+                pLoc[1] + pDir[1] * dist,
+                pLoc[2] + pDir[2] * dist
+              ];
+            }
+
+            S.parsedNamedViews.push({
+              name:     v.name || `Named View ${i}`,
+              position: pLoc,
+              up:       finalUp,
+              target:   parsedTgt
+            });
+          } catch (itemErr) {
+            console.warn(`[pre] failed to parse named view at index ${i}:`, itemErr);
+          } finally {
+            if (vp && typeof vp.delete === 'function') {
+              try { vp.delete(); } catch {}
+            }
+            if (v && typeof v.delete === 'function') {
+              try { v.delete(); } catch {}
+            }
+          }
         }
         views.delete();
       } catch (e) { console.warn('[pre] named views err:', e); }
@@ -1529,7 +1790,7 @@ export function clearCurrentModel() {
   S.parsedAnnotations    = [];
   S.parsed3dmFileInfo    = null;
   S.rhinoBackgroundColor = null;
-  S.fileDefaultBgStyle   = null;
+  resetFileRenderSettings();
 
   const bgSelReset = document.getElementById('bg-type-select');
   if (bgSelReset) bgSelReset.value = 'solid';
@@ -1640,7 +1901,11 @@ export async function handleFile(file, rhinoLoader, gltfLoader) {
         setupModelShadowFrustum(box);
         if (S.groundEnabled) addGroundPlane(box);
         applyFileBackground();
-        applyDisplayMode();
+        if (S.fileSkylightEnabled) {
+          changeDisplayMode('rendered');
+        } else {
+          applyDisplayMode();
+        }
         createAnnotationSprites();
         renderNamedViewsUI();
         setFileName(file.name);

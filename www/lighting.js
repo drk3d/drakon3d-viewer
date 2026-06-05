@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { S } from './state.js';
+import { updateSliderFill } from './helpers.js';
 
 export function setupLights() {
   S.scene.children.slice().forEach(c => {
@@ -216,4 +217,101 @@ export function removeGroundPlane() {
     S.scene.remove(S.groundMesh);
     S.groundMesh = null;
   }
+}
+
+export function applyFileSunSettings() {
+  const chkSun       = document.getElementById('chk-sun-panel');
+  const sunControls  = document.getElementById('sun-controls');
+  const slAzimuth    = document.getElementById('sl-sun-azimuth');
+  const slElevation  = document.getElementById('sl-sun-elevation');
+  const slSunInt     = document.getElementById('sl-sun-intensity');
+
+  if (S.fileSunEnabled !== null && S.fileSunEnabled !== undefined) {
+    if (chkSun) {
+      chkSun.checked = S.fileSunEnabled;
+      sunControls?.classList.toggle('hidden', !S.fileSunEnabled);
+    }
+  } else {
+    if (chkSun) {
+      chkSun.checked = false;
+      sunControls?.classList.add('hidden');
+    }
+  }
+
+  if (S.fileSunAzimuth !== null && S.fileSunAzimuth !== undefined) {
+    if (slAzimuth) {
+      slAzimuth.value = Math.round(S.fileSunAzimuth);
+      const valText = document.getElementById('sl-sun-azimuth-val');
+      if (valText) valText.textContent = Math.round(S.fileSunAzimuth) + '°';
+      updateSliderFill(slAzimuth);
+    }
+  }
+
+  if (S.fileSunElevation !== null && S.fileSunElevation !== undefined) {
+    if (slElevation) {
+      slElevation.value = Math.round(S.fileSunElevation);
+      const valText = document.getElementById('sl-sun-elevation-val');
+      if (valText) valText.textContent = Math.round(S.fileSunElevation) + '°';
+      updateSliderFill(slElevation);
+    }
+  }
+
+  if (S.fileSunIntensity !== null && S.fileSunIntensity !== undefined) {
+    if (slSunInt) {
+      slSunInt.value = S.fileSunIntensity;
+      const valText = document.getElementById('sl-sun-intensity-val');
+      if (valText) valText.textContent = parseFloat(S.fileSunIntensity).toFixed(2);
+      updateSliderFill(slSunInt);
+    }
+  }
+
+  updateSunLight();
+
+  // Ground plane settings sync
+  const chkGround = document.getElementById('chk-ground-panel');
+  if (S.fileGroundEnabled !== null && S.fileGroundEnabled !== undefined) {
+    S.groundEnabled = S.fileGroundEnabled;
+    if (chkGround) {
+      chkGround.checked = S.fileGroundEnabled;
+      const chkGroundLinked = document.getElementById('chk-ground');
+      if (chkGroundLinked) chkGroundLinked.checked = S.fileGroundEnabled;
+    }
+    if (S.modeSettings && S.modeSettings[S.currentMode]) {
+      S.modeSettings[S.currentMode]['ground'] = S.fileGroundEnabled;
+    }
+    
+    if (S.currentModel) {
+      if (S.groundEnabled) {
+        const box = new THREE.Box3().setFromObject(S.currentModel);
+        addGroundPlane(box);
+      } else {
+        removeGroundPlane();
+      }
+    }
+  }
+
+  // Ambient + Environment intensity sync — both mirror Rhino's Skylight intensity.
+  // loaders.js falls back to 1.0 on read failure, so we can rely on the values being set.
+  applySliderValue('sl-ambient-panel',   'sl-ambient-val',       S.fileAmbientIntensity);
+  applySliderValue('sl-env-intensity',   'sl-env-intensity-val', S.fileSkylightIntensity);
+
+  if (S.scene && S.fileSkylightIntensity !== null && S.fileSkylightIntensity !== undefined) {
+    const envVal = S.fileSkylightIntensity;
+    S.scene.environmentIntensity = envVal;
+    const bgType = document.getElementById('bg-type-select')?.value || 'solid';
+    S.scene.backgroundIntensity = (bgType === 'hdr') ? envVal : 1.0;
+  }
+
+  // Refresh scene lights to apply new ambient values
+  setupLights();
+}
+
+function applySliderValue(sliderId, valTextId, value) {
+  if (value === null || value === undefined) return;
+  const sl = document.getElementById(sliderId);
+  if (!sl) return;
+  sl.value = value;
+  const valText = document.getElementById(valTextId);
+  if (valText) valText.textContent = parseFloat(value).toFixed(2);
+  updateSliderFill(sl);
 }

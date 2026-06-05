@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { S } from './state.js';
-import { setupLights, updateGroundAppearance } from './lighting.js';
+import { setupLights, updateGroundAppearance, applyFileSunSettings } from './lighting.js';
 import { isPageVisuallyDark } from './helpers.js';
 
 // ── Skybox sphere for rendered mode (bypasses tone mapping) ─────────────────
@@ -134,33 +134,38 @@ export function applySceneBackground() {
 export function applyFileBackground() {
   const bgSel    = document.getElementById('bg-type-select');
   const c1Input  = document.getElementById('bg-panel-c1');
-  const c1Swatch = document.getElementById('bg-panel-swatch-c1');
+  const c2Input  = document.getElementById('bg-panel-c2');
+  const c3Input  = document.getElementById('bg-panel-c3');
+  const c4Input  = document.getElementById('bg-panel-c4');
   if (!bgSel) return;
 
+  // bg type — driven by S.fileDefaultBgStyle (loaders.js sets it from
+  // rs.backgroundStyle enum, with 4-corner upgrade if RDK XML carries one).
   let newType = 'solid';
-  if (S.fileDefaultBgStyle !== null && S.fileDefaultBgStyle !== undefined) {
-    const s = String(S.fileDefaultBgStyle).toLowerCase();
-    if (s === '1' || s.includes('gradient')) newType = 'gradient2';
-  }
+  const styleStr = String(S.fileDefaultBgStyle || '').toLowerCase();
+  if (styleStr === 'gradient4')      newType = 'gradient4';
+  else if (styleStr === 'gradient2') newType = 'gradient2';
+  else if (styleStr === 'solid')     newType = 'solid';
+  else if (styleStr.includes('gradient')) newType = 'gradient2';
   bgSel.value = newType;
 
+  // Colors — already stored as sRGB hex strings in state (no THREE.Color round-trip).
   const isDark = isPageVisuallyDark();
+  const defaults = isDark
+    ? { c1: '#24252a', c2: '#1b1c20', c3: '#2d3748', c4: '#1a202c' }
+    : { c1: '#ffffff', c2: '#e0e0e0', c3: '#d6dae0', c4: '#bfc4cc' };
 
-  if (c1Input) {
-    let hex = isDark ? '#24252a' : '#ffffff'; // default: soft charcoal for dark mode, white for light mode
-    c1Input.value = hex;
-    if (c1Swatch) c1Swatch.style.background = hex;
-    
-    // Also update Coloris parent wrapper color if present
-    const wrapper = c1Input.parentNode;
-    if (wrapper && wrapper.classList.contains('clr-field')) {
-      wrapper.style.color = hex;
-      const btn = wrapper.querySelector('button');
-      if (btn) btn.style.backgroundColor = hex;
-    }
-    
-    c1Input.dispatchEvent(new Event('input', { bubbles: true }));
-  }
+  // For gradient4, prefer 4 explicit corners. Map TL→c1, TR→c2, BL→c3, BR→c4
+  // (matches the bilinear-weight layout in applySceneBackground's gradient4 branch).
+  const hex1 = (newType === 'gradient4' ? S.fileBackgroundColorTL : S.fileBackgroundColorTop)    || defaults.c1;
+  const hex2 = (newType === 'gradient4' ? S.fileBackgroundColorTR : S.fileBackgroundColorBottom) || defaults.c2;
+  const hex3 = (newType === 'gradient4' ? S.fileBackgroundColorBL : null) || defaults.c3;
+  const hex4 = (newType === 'gradient4' ? S.fileBackgroundColorBR : null) || defaults.c4;
+
+  updateColorPickerInput(c1Input, hex1);
+  updateColorPickerInput(c2Input, hex2);
+  updateColorPickerInput(c3Input, hex3);
+  updateColorPickerInput(c4Input, hex4);
 
   const isSolid  = newType === 'solid';
   const isRadial = newType === 'radial';
@@ -170,6 +175,25 @@ export function applyFileBackground() {
   document.getElementById('picker-c3')?.classList.toggle('hidden', !isGrad4);
   document.getElementById('picker-c4')?.classList.toggle('hidden', !isGrad4);
   document.getElementById('bg-radial-section')?.classList.toggle('hidden', !isRadial);
+
+  // Apply file sun settings (on/off, azimuth, elevation, intensity) as well
+  try {
+    applyFileSunSettings();
+  } catch (err) {
+    console.warn('[display] applyFileSunSettings err:', err);
+  }
+}
+
+function updateColorPickerInput(inputEl, hex) {
+  if (!inputEl) return;
+  inputEl.value = hex;
+  const wrapper = inputEl.parentNode;
+  if (wrapper && wrapper.classList.contains('clr-field')) {
+    wrapper.style.color = hex;
+    const btn = wrapper.querySelector('button');
+    if (btn) btn.style.backgroundColor = hex;
+  }
+  inputEl.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
 // ── Display Modes ────────────────────────────────────────────────────────────
@@ -397,15 +421,9 @@ export function applyDisplayMode() {
         out.setRGB(oc.r / 255, oc.g / 255, oc.b / 255);
       }
 
-      if (isPageVisuallyDark()) {
-        if (out.r < 0.08 && out.g < 0.08 && out.b < 0.08) {
-          out.setHex(0xffffff); // Map invisible black/dark curves to white in dark mode
-        }
-      } else {
-        if (out.r > 0.92 && out.g > 0.92 && out.b > 0.92) {
-          out.setHex(0x000000); // Map invisible white/light curves to black in light mode
-        }
-      }
+      // Curves keep their Rhino-original color — no black↔white flip based
+      // on UI theme. Scene background mirrors the 3dm file, so the file's
+      // intended color is what the user should see.
       return out;
     };
 
@@ -439,8 +457,6 @@ export function applyDisplayMode() {
     const orig  = child.userData.originalMaterial;
     const edges = child.getObjectByName('rhino-edges');
     if (edges) edges.renderOrder = 0;
-
-    const darkThemeActive = isPageVisuallyDark();
 
     switch (S.currentMode) {
 
@@ -653,7 +669,6 @@ export function recreateAllEdges(thresholdAngle) {
 
 export function applyLayerColorsToModel(model) {
   if (!S.parsedLayers.length) return;
-  const darkThemeActive = isPageVisuallyDark();
   model.traverse(child => {
     if (child.name === 'rhino-edges' || child.name === 'rhino-outline' || child.name === 'selection-outline') return;
     if ((!child.isMesh && !child.isLine) || !child.userData.originalMaterial) return;
@@ -669,22 +684,15 @@ export function applyLayerColorsToModel(model) {
         );
         
         if (!child.isLine) {
-          // Geometry (mesh) black -> white mapping is always active regardless of mode
+          // Mesh black → white safety mapping (mode-independent): a pitch-black
+          // shaded mesh receives no lighting and reads as invisible blobs, so we
+          // promote it to white. This is unrelated to UI theme.
           if (col.r < 0.08 && col.g < 0.08 && col.b < 0.08) {
             col.setHex(0xffffff);
           }
-        } else {
-          // Curve black -> white mapping only in dark mode, white -> black only in light mode
-          if (darkThemeActive) {
-            if (col.r < 0.08 && col.g < 0.08 && col.b < 0.08) {
-              col.setHex(0xffffff);
-            }
-          } else {
-            if (col.r > 0.92 && col.g > 0.92 && col.b > 0.92) {
-              col.setHex(0x000000);
-            }
-          }
         }
+        // Curves keep their Rhino-original color — no black↔white flip based
+        // on UI theme.
         
         if (child.isLine) {
           if (child.userData.originalMaterial && child.material !== child.userData.originalMaterial) {
