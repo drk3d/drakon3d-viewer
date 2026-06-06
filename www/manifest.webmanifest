@@ -1,0 +1,45 @@
+{
+  "name": "byRhinoView",
+  "short_name": "byRhinoView",
+  "description": "Web viewer for Rhino 3DM and other CAD/3D files",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#10141d",
+  "theme_color": "#10141d",
+  "orientation": "any",
+  "lang": "ko",
+  "icons": [
+    {
+      "src": "images/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any"
+    },
+    {
+      "src": "images/apple-touch-icon.png",
+      "type": "image/png",
+      "sizes": "180x180",
+      "purpose": "any"
+    }
+  ],
+  "file_handlers": [
+    {
+      "action": "./",
+      "accept": {
+        "application/octet-stream": [".rhv"]
+      },
+      "icons": [
+        {
+          "src": "images/file-icon.svg",
+          "type": "image/svg+xml",
+          "sizes": "any"
+        }
+      ],
+      "launch_type": "single-client"
+    }
+  ],
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  }
+}

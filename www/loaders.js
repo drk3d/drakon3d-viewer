@@ -130,47 +130,79 @@ function extractGroundSettings(rs) {
   S.fileGroundEnabled = gp ? (gp.enabled ?? false) : null;
 }
 
-// Rhino's Skylight intensity is what we want to mirror onto both:
-//   - Ambient slider (supplemental ambient light)
-//   - Environment intensity slider (IBL strength)
-// If we can't read it, default both to 1.0.
+// Rhino's Skylight Intensity slider is stored as the HDR texture `multiplier`
+// inside the environment that the skylight references — NOT in the <skylight>
+// block or in rhino3dm's sky.shadowIntensity (which is a separate "shadow
+// strength" value, almost always 1.0).
+//
+// Reading path:
+//   1. <skylight-custom-environment type="uuid">UUID</skylight-custom-environment>
+//   2. <environment ... instance-id="UUID"> ... </environment>
+//   3. inside <texture> ... <multiplier type="double">VALUE</multiplier>
+//
+// We try this path first and fall back to rhino3dm's sky.shadowIntensity, then 1.0.
 function extractSkylightAndAmbient(rs, rdkXml) {
   const sky = rs.skylight;
   const skyEnabled = !!(sky && sky.enabled);
 
   let skyIntensity = null;
-  if (sky && typeof sky.shadowIntensity === 'number') {
-    skyIntensity = sky.shadowIntensity;
-  }
+  let source = 'fallback';
 
-  // Override from RDK XML if present (<skylight><shadow-intensity>…</shadow-intensity></skylight>)
+  // 1. Preferred: read the env-texture multiplier referenced by the skylight.
   if (rdkXml) {
     try {
-      const skyBlock = rdkXml.match(/<skylight\b[^>]*>([\s\S]*?)<\/skylight>/i);
-      if (skyBlock) {
-        const m = skyBlock[1].match(/<shadow-intensity\b[^>]*>\s*([0-9.eE+\-]+)\s*<\/shadow-intensity>/i);
-        if (m) {
-          const v = parseFloat(m[1]);
-          if (!isNaN(v)) skyIntensity = v;
+      const uuidMatch = rdkXml.match(/<skylight-custom-environment\b[^>]*>\s*([0-9A-Fa-f\-]+)\s*<\/skylight-custom-environment>/i);
+      if (uuidMatch) {
+        const uuid = uuidMatch[1];
+        // Locate the matching <environment ... instance-id="UUID"> ... </environment> block.
+        // The attribute uses escaped quotes — match instance-id="UUID" case-insensitive.
+        const envRegex = new RegExp(
+          '<environment\\b[^>]*instance-id="' + uuid.replace(/[-]/g, '\\-') + '"[^>]*>([\\s\\S]*?)<\\/environment>',
+          'i'
+        );
+        const envMatch = rdkXml.match(envRegex);
+        if (envMatch) {
+          const envInner = envMatch[1];
+          // Look for the multiplier inside the texture's parameters (either the
+          // v8 form <parameter name="multiplier"> or the plain <multiplier> tag).
+          const multMatch =
+            envInner.match(/<parameter\s+name="multiplier"\s+type="double"[^>]*>\s*([0-9.eE+\-]+)\s*<\/parameter>/i) ||
+            envInner.match(/<multiplier\b[^>]*type="double"[^>]*>\s*([0-9.eE+\-]+)\s*<\/multiplier>/i);
+          if (multMatch) {
+            const v = parseFloat(multMatch[1]);
+            if (!isNaN(v)) { skyIntensity = v; source = 'env-texture-multiplier'; }
+          }
         }
       }
     } catch (e) {
-      console.warn('[pre] skylight XML parse error:', e);
+      console.warn('[pre] skylight env-multiplier parse error:', e);
     }
   }
 
-  // If skylight intensity couldn't be determined, fall back to 1.0
-  // (per spec: when we can't read the file value, Ambient + Environment both default to 1.0).
+  // 2. Legacy fallback: rhino3dm's sky.shadowIntensity. This is technically
+  //    "skylight shadow strength" not "intensity" but is the only value rhino3dm
+  //    exposes when the env-texture multiplier can't be located.
+  if (skyIntensity === null && sky && typeof sky.shadowIntensity === 'number') {
+    skyIntensity = sky.shadowIntensity;
+    source = 'sky.shadowIntensity';
+  }
+
   const FALLBACK = 1.0;
   const intensity = (typeof skyIntensity === 'number' && !isNaN(skyIntensity))
     ? skyIntensity
     : FALLBACK;
+  if (skyIntensity === null) source = 'fallback-1.0';
 
   S.fileSkylightEnabled   = skyEnabled;
   S.fileSkylightIntensity = intensity;
-  S.fileAmbientIntensity  = intensity;
+  // Ambient is intentionally NOT mirrored from Skylight. Three.js's PBR pipeline
+  // already gets the bulk of indirect light from scene.environment (driven by
+  // sl-env-intensity), so mirroring Skylight onto AmbientLight too caused dark
+  // dielectrics like #1c1c1c to render ~2x brighter than their swatch. A small
+  // fixed default lifts shadowed faces without washing out blacks.
+  S.fileAmbientIntensity  = 0.4;
 
-  console.log('[pre] Skylight:', { enabled: skyEnabled, intensity, raw: skyIntensity });
+  console.log('[pre] Skylight:', { enabled: skyEnabled, intensity, source, ambientDefault: 0.4 });
 }
 
 function resetFileRenderSettings() {
@@ -1562,7 +1594,21 @@ export async function preprocess3dm(file, skipLayerParse) {
 
 // ── Model post-processing (called after every load) ───────────────────────────
 
-export function postProcessModel(model, addEdgesFlag) {
+// `colorsAreSRGBStoredAsLinear` — set true when called from the 3dm path:
+// Rhino3dmLoader writes sRGB 0–1 values into material.color via setRGB(), which
+// stores them WITHOUT the ColorManagement conversion. We then call
+// convertSRGBToLinear() once to put the values back into the working linear
+// space the renderer expects.
+//
+// For GLB-based loads (direct .glb/.gltf, or .rhv packages) the GLTFLoader
+// already produces correctly-spaced linear colors, so the conversion would be
+// a DOUBLE convert and surfaces render too dark. Pass false in those paths.
+export function postProcessModel(model, addEdgesFlag, colorsAreSRGBStoredAsLinear = true) {
+  // Three.js Rhino3dmLoader deduplicates materials by color via _compareMaterials,
+  // so several meshes can share one Material instance. convertSRGBToLinear()
+  // mutates color in place — calling it once per mesh would convert the same
+  // shared color N times (compounding darkening: N=2 → 0.61 → 0.331). Tag each
+  // material we touch so any later visits skip the conversion.
   model.traverse(child => {
     if (child.name === 'rhino-edges' || child.name === 'rhino-outline' || child.name === 'selection-outline' || child.name === 'ground-plane') return;
 
@@ -1645,9 +1691,29 @@ export function postProcessModel(model, addEdgesFlag) {
 
     if (!child.isMesh && !child.isLine) return;
 
-    if (child.isMesh && child.material?.color) {
-      const mc = child.material.color;
-      if (mc.r < 0.02 && mc.g < 0.02 && mc.b < 0.02) child.material.color.setHex(0xffffff);
+    if (child.material?.color) {
+      const mat = child.material;
+      // Tag the material so repeated visits (3DMLoader's _compareMaterials
+      // shares one Material across N meshes) don't convert the SAME color
+      // object multiple times — compounding darkening (N=2 → 0.61 → 0.331).
+      if (!mat.userData?.__sRGBPostProcessed) {
+        mat.userData = mat.userData || {};
+        mat.userData.__sRGBPostProcessed = true;
+        const mc = mat.color;
+        // Pure-black-to-white safety check first — a pitch-black PBR mesh
+        // receives no diffuse lighting and reads as invisible blobs.
+        if (mc.r < 0.02 && mc.g < 0.02 && mc.b < 0.02) {
+          mat.color.set('#ffffff');
+        } else if (colorsAreSRGBStoredAsLinear) {
+          // 3dm path: Rhino3dmLoader stored sRGB values raw via setRGB(), so
+          // we convert them to true linear here. Skipped for GLB-based paths
+          // where GLTFLoader already produced linear values.
+          mat.color.convertSRGBToLinear();
+        }
+        if (mat.emissive && colorsAreSRGBStoredAsLinear) {
+          mat.emissive.convertSRGBToLinear();
+        }
+      }
     }
     if (child.material?.color) child.userData.materialColor = child.material.color.clone();
     fixMaterialTransparency(child.material);
@@ -1672,11 +1738,14 @@ export function postProcessModel(model, addEdgesFlag) {
     const isByMaterial = csVal === 2;
 
     child.userData.isColorByLayer = isByLayer;
+    // Use .set(hex) so Three.js r169 ColorManagement converts sRGB→linear correctly.
     child.userData.layerColor = layer?.color
-      ? new THREE.Color(
-          (layer.color.r ?? layer.color.R ?? 0) / 255,
-          (layer.color.g ?? layer.color.G ?? 0) / 255,
-          (layer.color.b ?? layer.color.B ?? 0) / 255
+      ? new THREE.Color().set(
+          '#' + [
+            layer.color.r ?? layer.color.R ?? 0,
+            layer.color.g ?? layer.color.G ?? 0,
+            layer.color.b ?? layer.color.B ?? 0
+          ].map(v => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('')
         )
       : null;
 
@@ -1701,20 +1770,25 @@ export function postProcessModel(model, addEdgesFlag) {
       g: (c.g ?? c.G ?? 0) / 255,
       b: (c.b ?? c.B ?? 0) / 255
     };
+    // toSRGBHex: build a '#rrggbb' string from 0–255 components so .set() can
+    // apply the correct sRGB→linear conversion expected by Three.js r169.
+    const toSRGBHex = (c) => '#' + [
+      c.r ?? c.R ?? 0,
+      c.g ?? c.G ?? 0,
+      c.b ?? c.B ?? 0
+    ].map(v => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('');
+
     const shadedColor = new THREE.Color();
     if (isByMaterial && child.material?.color) {
       shadedColor.copy(child.material.color);
     } else if (isByObject && oc) {
-      const c = colRGB(oc);
-      shadedColor.setRGB(c.r, c.g, c.b);
+      shadedColor.set(toSRGBHex(oc));
     } else if (isByLayer && layer?.color) {
-      const lc = colRGB(layer.color);
-      shadedColor.setRGB(lc.r, lc.g, lc.b);
+      shadedColor.set(toSRGBHex(layer.color));
     } else if (child.material?.color) {
       shadedColor.copy(child.material.color);
     } else if (layer?.color) {
-      const lc = colRGB(layer.color);
-      shadedColor.setRGB(lc.r, lc.g, lc.b);
+      shadedColor.set(toSRGBHex(layer.color));
     } else {
       shadedColor.setHex(0xffffff);
     }
@@ -1813,10 +1887,10 @@ export async function handleFile(file, rhinoLoader, gltfLoader) {
   if (!file) return;
 
   const fileName = file.name.toLowerCase();
-  const supportedExtensions = ['.3dm', '.glb', '.gltf', '.stl', '.3mf', '.stp', '.step', '.iges', '.igs', '.rhinoview'];
+  const supportedExtensions = ['.3dm', '.glb', '.gltf', '.stl', '.3mf', '.stp', '.step', '.iges', '.igs', '.rhv'];
   const hasValidExt = supportedExtensions.some(ext => fileName.endsWith(ext));
   if (!hasValidExt) {
-    alert('지원되지 않는 파일 형식입니다.\n지원 포맷: .3dm, .glb, .gltf, .stl, .3mf, .stp, .step, .iges, .igs, .rhinoview');
+    alert('지원되지 않는 파일 형식입니다.\n지원 포맷: .3dm, .glb, .gltf, .stl, .3mf, .stp, .step, .iges, .igs, .rhv');
     return;
   }
 
@@ -1842,7 +1916,9 @@ export async function handleFile(file, rhinoLoader, gltfLoader) {
         S.scene.add(S.currentModel);
         document.getElementById('empty-state')?.classList.add('hidden');
         setToolbarModelState(true);
-        postProcessModel(S.currentModel, extractEdges);
+        // GLB/GLTF colors are already in working linear space — skip the
+        // 3dm-specific sRGB→linear convert that would otherwise double-apply.
+        postProcessModel(S.currentModel, extractEdges, false);
         fitCameraToObject(S.currentModel, false);
         const box = new THREE.Box3().setFromObject(S.currentModel);
         setupModelShadowFrustum(box);
@@ -1943,7 +2019,10 @@ export async function loadGeometryFromGLB(glbBuffer, fileName, fileSize) {
   setToolbarModelState(true);
   
   const extractEdges = document.getElementById('chk-edges-panel')?.checked ?? true;
-  postProcessModel(S.currentModel, extractEdges);
+  // .rhv packages embed a GLB — colors are already linear, so skip the
+  // 3dm-specific sRGB→linear conversion (would otherwise darken the scene
+  // on reopen and the brightness wouldn't match the original 3dm load).
+  postProcessModel(S.currentModel, extractEdges, false);
   fitCameraToObject(S.currentModel, false);
   const box = new THREE.Box3().setFromObject(S.currentModel);
   setupModelShadowFrustum(box);

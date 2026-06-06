@@ -777,8 +777,8 @@ let pointerDownPos = new THREE.Vector2();
 
 function bindUI() {
   const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  const fileAccept = isMobile ? '*/*' : '.3dm,.glb,.gltf,.stp,.step,.iges,.igs,.stl,.3mf,.rhinoview';
-  const sessionAccept = isMobile ? '*/*' : '.rhinoview';
+  const fileAccept = isMobile ? '*/*' : '.3dm,.glb,.gltf,.stp,.step,.iges,.igs,.stl,.3mf,.rhv';
+  const sessionAccept = isMobile ? '*/*' : '.rhv';
 
   let fileInput = document.getElementById('file-upload');
   if (!fileInput) {
@@ -794,7 +794,7 @@ function bindUI() {
   fileInput.addEventListener('change', async e => {
     const f = e.target.files[0];
     if (f) {
-      if (f.name.toLowerCase().endsWith('.rhinoview')) {
+      if (f.name.toLowerCase().endsWith('.rhv')) {
         await loadSession(f);
       } else {
         handleFile(f, rhinoLoader, gltfLoader);
@@ -1186,6 +1186,22 @@ function bindUI() {
       });
     });
     bindSliderDblClickInput(slAmbient, slAmbientVal);
+  }
+
+  // AO intensity slider — wires the existing GTAOPass to the user-facing
+  // value. Without this listener the slider was decorative: display.js's
+  // per-mode hardcoded blendIntensity overrode any value the user set.
+  const slAoInt = document.getElementById('sl-ao-intensity');
+  const slAoIntVal = document.getElementById('sl-ao-intensity-val');
+  if (slAoInt) {
+    slAoInt.addEventListener('input', e => {
+      const val = parseFloat(e.target.value);
+      if (slAoIntVal) slAoIntVal.textContent = val.toFixed(2);
+      updateSliderFill(e.target);
+      if (S.gtaoPass) S.gtaoPass.blendIntensity = val;
+    });
+    updateSliderFill(slAoInt);
+    bindSliderDblClickInput(slAoInt, slAoIntVal);
   }
 
   const chkSun       = document.getElementById('chk-sun-panel');
@@ -2321,7 +2337,7 @@ function bindUI() {
     if (files?.length > 0) {
       const f = files[0];
       const name = f.name.toLowerCase();
-      if (name.endsWith('.rhinoview')) {
+      if (name.endsWith('.rhv')) {
         loadSession(f);
       } else if (name.endsWith('.hdr')) {
         const { showLoading, hideLoading } = await import('./helpers.js');
@@ -2842,7 +2858,7 @@ async function handleIncomingSharedFile(url) {
     
     const file = new File([blob], filename, { type: blob.type });
     
-    if (filename.toLowerCase().endsWith('.rhinoview')) {
+    if (filename.toLowerCase().endsWith('.rhv')) {
       await loadSession(file);
     } else {
       await handleFile(file, rhinoLoader, gltfLoader);
@@ -2871,7 +2887,7 @@ async function loadModelFromUrl(url) {
     
     const file = new File([blob], filename, { type: blob.type });
     
-    if (filename.toLowerCase().endsWith('.rhinoview')) {
+    if (filename.toLowerCase().endsWith('.rhv')) {
       await loadSession(file);
     } else {
       await handleFile(file, rhinoLoader, gltfLoader);
@@ -2901,6 +2917,20 @@ export function applyModeSettings(mode) {
   setCheckboxState('chk-shadows-panel', settings.shadows);
   setCheckboxState('chk-ground-panel', settings.ground);
   setCheckboxState('chk-annotations-panel', settings.annotations);
+
+  // Sync AO slider to this mode's default. Shaded/wireframe/technical have no
+  // aoIntensity, so we leave the slider untouched (display.js disables GTAO
+  // there anyway). The slider row's visibility is handled in session.js's
+  // mode-change path.
+  if (settings.aoIntensity !== undefined) {
+    const aoSl = document.getElementById('sl-ao-intensity');
+    const aoSlVal = document.getElementById('sl-ao-intensity-val');
+    if (aoSl) {
+      aoSl.value = settings.aoIntensity;
+      if (aoSlVal) aoSlVal.textContent = settings.aoIntensity.toFixed(2);
+      updateSliderFill(aoSl);
+    }
+  }
 
   // Sync secondary checkboxes
   const chkEdge = document.getElementById('chk-edge');

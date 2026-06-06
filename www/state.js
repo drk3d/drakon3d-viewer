@@ -81,6 +81,7 @@ export const S = {
   groundMesh:       null,
   shadowsEnabled:   true,
   groundEnabled:    false,
+  aoIntensity:      0.40,
 
   // ── Per-mode visibility settings ──
   modeSettings: {
@@ -103,14 +104,16 @@ export const S = {
       curves: false,
       ground: true,
       shadows: true,
-      annotations: true
+      annotations: true,
+      aoIntensity: 0.70
     },
     rendered: {
       edges: false,
       curves: false,
       ground: true,
       shadows: true,
-      annotations: true
+      annotations: true,
+      aoIntensity: 0.40
     },
     technical: {
       edges: true,
@@ -157,6 +160,10 @@ export const S = {
   clippingArcDrag: null,           // Active drag state: {axis, startAngle, startQuat}
   arcOverlayScene: null,           // Separate scene for arc handles — rendered without clipping planes
   clippingEnabled:           false,
+  // True once the clipping plane has been first positioned for this model.
+  // Used to skip the default-position computation on toggle off→on so the
+  // user's manually-dragged transform is preserved.
+  clippingHasBeenInitialized: false,
   clippingBaseQuaternion:    null,
   clipAxis:                  'z',
   clipFlipped:               false,

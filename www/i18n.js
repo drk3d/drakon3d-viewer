@@ -93,6 +93,7 @@ export const TRANSLATIONS = {
 
     'light.title':        'Lighting',
     'light.ambient':      'Ambient',
+    'light.ao_intensity': 'AO Intensity',
     'light.key':          'Key',
     'light.sun':          'Sun',
     'light.sun_intensity':'Intensity',
@@ -140,6 +141,8 @@ export const TRANSLATIONS = {
     'turntable.continuous':  'Auto-Rotate',
     'turntable.on':          'On',
     'turntable.off':         'Off',
+    'clip.on':               'On',
+    'clip.off':              'Off',
     'clip.axis':             'Axis',
     'clip.flip':             'Flip',
     'clip.reset':            'Reset',
@@ -271,6 +274,7 @@ export const TRANSLATIONS = {
 
     'light.title':        '조명',
     'light.ambient':      '주변광',
+    'light.ao_intensity': 'AO 음영 강도',
     'light.key':          '주요광',
     'light.sun':          '태양',
     'light.sun_intensity':'세기',
@@ -318,6 +322,8 @@ export const TRANSLATIONS = {
     'turntable.continuous':  '자동 회전',
     'turntable.on':          '켜짐',
     'turntable.off':         '꺼짐',
+    'clip.on':               '켜짐',
+    'clip.off':              '꺼짐',
     'clip.axis':             '축',
     'clip.flip':             '반전',
     'clip.reset':            '초기화',
@@ -449,6 +455,7 @@ export const TRANSLATIONS = {
 
     'light.title':        'Éclairage',
     'light.ambient':      'Ambiant',
+    'light.ao_intensity': 'Intensité de l\'AO',
     'light.key':          'Lumière principale',
     'light.sun':          'Soleil',
     'light.sun_intensity':'Intensité',
@@ -611,6 +618,7 @@ export const TRANSLATIONS = {
 
     'light.title':        'Beleuchtung',
     'light.ambient':      'Umgebungslicht',
+    'light.ao_intensity': 'AO-Intensität',
     'light.key':          'Hauptlicht',
     'light.sun':          'Sonne',
     'light.sun_intensity':'Intensität',
@@ -773,6 +781,7 @@ export const TRANSLATIONS = {
 
     'light.title':        'Iluminación',
     'light.ambient':      'Ambiental',
+    'light.ao_intensity': 'Intensidad de AO',
     'light.key':          'Luz principal',
     'light.sun':          'Sol',
     'light.sun_intensity':'Intensidad',
@@ -935,6 +944,7 @@ export const TRANSLATIONS = {
 
     'light.title':        'Illuminazione',
     'light.ambient':      'Luce ambientale',
+    'light.ao_intensity': 'Intensità AO',
     'light.key':          'Luce principale',
     'light.sun':          'Sole',
     'light.sun_intensity':'Intensità',
@@ -1097,6 +1107,7 @@ export const TRANSLATIONS = {
 
     'light.title':        'ライティング',
     'light.ambient':      'アンビエント',
+    'light.ao_intensity': 'AOの強度',
     'light.key':          'キーライト',
     'light.sun':          '太陽光',
     'light.sun_intensity':'強度',
@@ -1259,6 +1270,7 @@ export const TRANSLATIONS = {
 
     'light.title':        '灯光',
     'light.ambient':      '环境光',
+    'light.ao_intensity': 'AO 阴影强度',
     'light.key':          '主光源',
     'light.sun':          '太阳光',
     'light.sun_intensity':'强度',
@@ -1421,6 +1433,7 @@ export const TRANSLATIONS = {
 
     'light.title':        '燈光',
     'light.ambient':      '環境光',
+    'light.ao_intensity': 'AO 陰影強度',
     'light.key':          '主光源',
     'light.sun':          '太陽光',
     'light.sun_intensity':'強度',
@@ -1583,6 +1596,7 @@ export const TRANSLATIONS = {
 
     'light.title':        'Iluminação',
     'light.ambient':      'Ambiental',
+    'light.ao_intensity': 'Intensidad de AO',
     'light.key':          'Luz principal',
     'light.sun':          'Sol',
     'light.sun_intensity':'Intensidade',
@@ -1745,6 +1759,7 @@ export const TRANSLATIONS = {
 
     'light.title':        'Osvětlení',
     'light.ambient':      'Okolní světlo',
+    'light.ao_intensity': 'Intenzita AO',
     'light.key':          'Hlavní světlo',
     'light.sun':          'Slunce',
     'light.sun_intensity':'Intenzita',
@@ -1907,6 +1922,7 @@ export const TRANSLATIONS = {
 
     'light.title':        'Oświetlenie',
     'light.ambient':      'Światło otoczenia',
+    'light.ao_intensity': 'Intensywność AO',
     'light.key':          'Światło kluczowe',
     'light.sun':          'Słońce',
     'light.sun_intensity':'Intensywność',

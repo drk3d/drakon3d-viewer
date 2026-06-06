@@ -2794,22 +2794,22 @@ body.light-theme .color-circle {
   position: absolute;
   bottom: calc(100% + 8px); /* Float 8px above the bottom bar */
   left: 50%;
-  transform: translateX(-50%);
-  background: rgba(18, 18, 22, 0.85); /* Premium glassmorphic dark */
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 8px;
   padding: 4px;
   display: flex;
   flex-direction: column; /* Vertical alignment */
   gap: 4px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
   z-index: 100;
   opacity: 0;
   pointer-events: none;
   transform: translateX(-50%) translateY(10px);
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  /* Default = dark glassmorphic; the .local-* class on .bottom-tools-bar overrides. */
+  background: rgba(18, 18, 22, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }
 
 .group-popup.show {
@@ -2818,26 +2818,41 @@ body.light-theme .color-circle {
   transform: translateX(-50%) translateY(0);
 }
 
-body.light-theme .group-popup {
+/* Popup follows the SAME local-dark/local-light decision as the parent bar,
+   so the flyout and its host button always read the same contrast. */
+.bottom-tools-bar.local-dark .group-popup {
+  background: rgba(18, 18, 22, 0.85);
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+.bottom-tools-bar.local-dark .group-popup .bottom-tool-btn {
+  color: rgba(255, 255, 255, 0.72) !important;
+}
+.bottom-tools-bar.local-dark .group-popup .bottom-tool-btn:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+}
+
+.bottom-tools-bar.local-light .group-popup {
   background: rgba(255, 255, 255, 0.85);
   border-color: rgba(0, 0, 0, 0.12);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
 }
+.bottom-tools-bar.local-light .group-popup .bottom-tool-btn {
+  color: rgba(24, 24, 27, 0.75) !important;
+}
+.bottom-tools-bar.local-light .group-popup .bottom-tool-btn:hover {
+  background: rgba(24, 24, 27, 0.08) !important;
+  color: #000000 !important;
+}
 
-/* Color overrides inside popups */
+/* Default (neither local-* class present yet) — keep dark icons for safety. */
 .group-popup .bottom-tool-btn {
   color: rgba(255, 255, 255, 0.72) !important;
 }
 .group-popup .bottom-tool-btn:hover {
   background: rgba(255, 255, 255, 0.12) !important;
   color: #ffffff !important;
-}
-body.light-theme .group-popup .bottom-tool-btn {
-  color: rgba(24, 24, 27, 0.75) !important;
-}
-body.light-theme .group-popup .bottom-tool-btn:hover {
-  background: rgba(24, 24, 27, 0.08) !important;
-  color: #000000 !important;
 }
 
 

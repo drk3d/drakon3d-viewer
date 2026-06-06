@@ -18,10 +18,10 @@
 ### 2. Processing of 3D & Session Files (3D 모델 및 세션 파일 처리)
 
 * **English:**  
-  All 3D models (such as `.3dm`, `.glb`, `.gltf`, `.stl`, `.3mf`, `.stp`, `.step`) and session packages (`.rhinoview`) opened within the app are processed entirely **offline and locally** on your device's webview. No files, geometry, or meshes are ever uploaded or transmitted to any external server.
+  All 3D models (such as `.3dm`, `.glb`, `.gltf`, `.stl`, `.3mf`, `.stp`, `.step`) and session packages (`.rhv`) opened within the app are processed entirely **offline and locally** on your device's webview. No files, geometry, or meshes are ever uploaded or transmitted to any external server.
   
 * **한국어:**  
-  앱 내에서 열어보거나 불러오는 모든 3D 모델 파일(`.3dm`, `.glb`, `.stl`, `.3mf`, `.stp` 등) 및 세션 패키지 파일(`.rhinoview`)은 외부 서버로 절대 업로드되거나 전송되지 않으며, 오직 사용자의 모바일 기기 내부(Local Webview)에서만 **100% 오프라인 로컬 환경에서 안전하게 처리**됩니다.
+  앱 내에서 열어보거나 불러오는 모든 3D 모델 파일(`.3dm`, `.glb`, `.stl`, `.3mf`, `.stp` 등) 및 세션 패키지 파일(`.rhv`)은 외부 서버로 절대 업로드되거나 전송되지 않으며, 오직 사용자의 모바일 기기 내부(Local Webview)에서만 **100% 오프라인 로컬 환경에서 안전하게 처리**됩니다.
 
 ---
 

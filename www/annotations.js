@@ -116,9 +116,9 @@ export async function createAnnotationSprites() {
       if (ann.objectColorCustom) {
         color.set(ann.objectColorCustom);
       } else if (ann.objectColor) {
-        color.setRGB(ann.objectColor.r / 255, ann.objectColor.g / 255, ann.objectColor.b / 255);
+        color.setHex((ann.objectColor.r << 16) | (ann.objectColor.g << 8) | ann.objectColor.b);
       } else if (layer?.color) {
-        color.setRGB(layer.color.r / 255, layer.color.g / 255, layer.color.b / 255);
+        color.setHex((layer.color.r << 16) | (layer.color.g << 8) | layer.color.b);
       }
 
       // Keep the Rhino-original annotation color. We no longer flip

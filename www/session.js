@@ -3,6 +3,7 @@ import { S } from './state.js';
 import { applyDisplayMode, applyCustomToMaterial } from './display.js';
 import { switchToPersp, getCustomViews } from './camera.js';
 import { updateSliderFill, isPageVisuallyDark } from './helpers.js';
+import { History } from './history.js';
 
 // ── IndexedDB for last-used file handle ──────────────────────────────────────
 
@@ -41,6 +42,13 @@ export function getObjectKey(obj) {
   return (a.name || 'obj') + '_L' + (a.layerIndex ?? 0);
 }
 
+// (No GLB-level mesh compression. We tried meshopt FILTER/QUANTIZE and Draco;
+// FILTER gave ~0 reduction, QUANTIZE + gltf-transform collapsed geometry on
+// round-trip, and Draco's browser encoder couldn't be loaded via CDN with the
+// current setup. So we keep only the gzip wrap below — browser-native, fast,
+// and the only step actually saving bytes on the GLB binary right now.
+// Real geometry compression will require a proper bundled Draco WASM build.)
+
 // ── Save session ─────────────────────────────────────────────────────────────
 
 export async function saveSession(customFileName = null) {
@@ -65,7 +73,8 @@ export async function saveSession(customFileName = null) {
       sunAzimuth:         parseFloat(document.getElementById('sl-sun-azimuth')?.value ?? 135),
       sunElevation:       parseFloat(document.getElementById('sl-sun-elevation')?.value ?? 45),
       sunIntensity:       parseFloat(document.getElementById('sl-sun-intensity')?.value ?? 1.8),
-      ambientIntensity:   parseFloat(document.getElementById('sl-ambient-panel')?.value ?? 0.55),
+      ambientIntensity:   parseFloat(document.getElementById('sl-ambient-panel')?.value ?? 0.4),
+      aoIntensity:        parseFloat(document.getElementById('sl-ao-intensity')?.value ?? 0.40),
       cameraFov:          parseFloat(document.getElementById('sl-camera-fov')?.value ?? 45),
       dampingFactor:      parseFloat(document.getElementById('sl-damping-panel')?.value ?? 0.5),
       envIntensity:       parseFloat(document.getElementById('sl-env-intensity')?.value ?? 1.00),
@@ -156,7 +165,6 @@ export async function saveSession(customFileName = null) {
         const base = child.userData.renderedMaterial || child.userData.originalMaterial;
         const m = base.clone();
         if (child.userData.materialColor) m.color.copy(child.userData.materialColor);
-        if (m.roughness !== undefined && m.roughness < 0.05) m.roughness = 0.4;
         if (m.metalness === undefined) m.metalness = 0.0;
         m.polygonOffset = true; m.polygonOffsetFactor = 1; m.polygonOffsetUnits = 1;
         m.envMap = null;
@@ -225,23 +233,43 @@ export async function saveSession(customFileName = null) {
           // Copy JSON payload
           uint8.set(jsonBytes, 12);
 
-          // Copy GLB payload
+          // Copy GLB binary payload (no extra compression — see comment block
+          // above compressGlbWithDraco/Meshopt discussion in this file).
           uint8.set(new Uint8Array(glbBuffer), 12 + jsonBytes.byteLength);
 
-          const blob = new Blob([combinedBuffer], { type: 'application/octet-stream' });
+          // Gzip the whole RV3D container. Loaders auto-detect compression via
+          // the gzip magic (0x1f 0x8b).
+          let finalBuffer = combinedBuffer;
+          if (typeof CompressionStream === 'function') {
+            try {
+              const cs = new CompressionStream('gzip');
+              const writer = cs.writable.getWriter();
+              writer.write(new Uint8Array(combinedBuffer));
+              writer.close();
+              finalBuffer = await new Response(cs.readable).arrayBuffer();
+            } catch (gzipErr) {
+              console.warn('[Session Export] gzip failed, saving uncompressed:', gzipErr);
+              finalBuffer = combinedBuffer;
+            }
+          }
+
+          console.log('[Session Export] sizes (bytes):', {
+            raw_glb: glbBuffer.byteLength,
+            after_gzip: finalBuffer.byteLength,
+          });
+
+          const blob = new Blob([finalBuffer], { type: 'application/octet-stream' });
           const a = document.createElement('a');
           a.href = URL.createObjectURL(blob);
           let finalName = customFileName || S.currentFileName || 'scene';
-          if (finalName.toLowerCase().endsWith('.rhinoview')) {
-            finalName = finalName.slice(0, -10);
-          }
-          a.download = finalName + '.rhinoview';
+          if (finalName.toLowerCase().endsWith('.rhv')) finalName = finalName.slice(0, -4);
+          a.download = finalName + '.rhv';
           a.click();
           URL.revokeObjectURL(a.href);
 
           if (customFileName) {
             const { setFileName } = await import('./helpers.js');
-            setFileName(finalName + '.rhinoview');
+            setFileName(finalName + '.rhv');
           }
 
           hideLoading();
@@ -280,8 +308,30 @@ export async function loadSession(file) {
   const { showLoading, hideLoading } = await import('./helpers.js');
   showLoading('Loading session file…');
 
+  // Suppress history recording for the duration of restore — dispatched
+  // input/change events during settings playback would otherwise fill the
+  // undo stack with the entire session reload, drowning the user's history.
+  History.suppress = true;
   try {
-    const arrayBuffer = await file.arrayBuffer();
+    let arrayBuffer = await file.arrayBuffer();
+
+    // Auto-detect gzip wrapper (magic 0x1f 0x8b). .rhv files are gzip-wrapped
+    // around the RV3D container for a 3–5× size reduction.
+    if (arrayBuffer.byteLength >= 2) {
+      const head = new Uint8Array(arrayBuffer, 0, 2);
+      if (head[0] === 0x1f && head[1] === 0x8b && typeof DecompressionStream === 'function') {
+        try {
+          const ds = new DecompressionStream('gzip');
+          const writer = ds.writable.getWriter();
+          writer.write(new Uint8Array(arrayBuffer));
+          writer.close();
+          arrayBuffer = await new Response(ds.readable).arrayBuffer();
+        } catch (gunzipErr) {
+          console.warn('[Session Load] gunzip failed, treating as raw:', gunzipErr);
+        }
+      }
+    }
+
     const view = new DataView(arrayBuffer);
 
     // Check magic bytes
@@ -420,6 +470,7 @@ export async function loadSession(file) {
       setSlider('sl-annotation-scale', 'sl-annotation-scale-val', s.annotationScale ?? 1.0, 'xScale');
       setSlider('sl-hdr-rotation', 'sl-hdr-rotation-val', s.hdrRotation ?? 0, 'degree');
       setSlider('sl-ambient-panel', 'sl-ambient-val',     s.ambientIntensity, 'float');
+      setSlider('sl-ao-intensity',  'sl-ao-intensity-val', s.aoIntensity ?? (S.modeSettings[S.currentMode]?.aoIntensity ?? 0.40), 'float');
       setSlider('sl-sun-intensity', 'sl-sun-intensity-val', s.sunIntensity ?? 1.8, 'float');
       setSlider('sl-sun-azimuth',   'sl-sun-azimuth-val', s.sunAzimuth,       'degree');
       setSlider('sl-sun-elevation', 'sl-sun-elevation-val', s.sunElevation,   'degree');
@@ -486,6 +537,9 @@ export async function loadSession(file) {
         
         const { updateClippingPlane, setupClippingHelper } = await import('./tools.js');
         updateClippingPlane();
+        // Mark as already-initialized so future toggle off/on preserves this
+        // restored position instead of re-running the default-position logic.
+        S.clippingHasBeenInitialized = true;
         if (s.clippingEnabled) {
           S.renderer.clippingPlanes = [S.clippingPlane];
           setupClippingHelper();
@@ -614,12 +668,46 @@ export async function loadSession(file) {
       await createAnnotationSprites();
     }
 
+    // Sync display mode dropdown UI
+    const dropdown = document.getElementById('mode-dropdown');
+    if (dropdown) {
+      const activeItem = dropdown.querySelector(`.dropdown-item[data-mode="${S.currentMode}"]`);
+      if (activeItem) {
+        dropdown.querySelectorAll('.dropdown-item').forEach(b => b.classList.toggle('active', b === activeItem));
+        const triggerBtn = document.getElementById('btn-mode-dropdown');
+        if (triggerBtn) {
+          const label = activeItem.querySelector('span').textContent.split(' ')[0];
+          const triggerLabel = triggerBtn.querySelector('span');
+          if (triggerLabel) triggerLabel.textContent = label;
+          triggerBtn.title = `Display Mode (${label})`;
+          const svg = activeItem.querySelector('svg').cloneNode(true);
+          const oldSvg = triggerBtn.querySelector('svg');
+          if (oldSvg) triggerBtn.replaceChild(svg, oldSvg);
+        }
+      }
+    }
+
+    // Sync AO Intensity slider row visibility
+    const slAoInt = document.getElementById('sl-ao-intensity');
+    const aoSliderRow = slAoInt?.closest('.slider-row');
+    const settings = S.modeSettings[S.currentMode];
+    if (settings && settings.aoIntensity !== undefined) {
+      if (aoSliderRow) aoSliderRow.classList.remove('hidden');
+    } else {
+      if (aoSliderRow) aoSliderRow.classList.add('hidden');
+    }
+
     applyDisplayMode();
     hideLoading();
   } catch (e) {
     console.error('Session load failed', e);
     alert('Failed to load session file.');
     hideLoading();
+  } finally {
+    History.suppress = false;
+    // Drop anything that snuck in via History.clear in clearCurrentModel;
+    // the restored session represents a fresh starting point for undo/redo.
+    History.clear();
   }
 }
 
@@ -637,8 +725,8 @@ export function resetSettingsToDefault() {
   S.modeSettings = {
     wireframe: { edges: true, curves: true, ground: false, shadows: false, annotations: true },
     shaded: { edges: true, curves: true, ground: false, shadows: true, annotations: true },
-    arctic: { edges: false, curves: false, ground: true, shadows: true, annotations: true },
-    rendered: { edges: false, curves: false, ground: true, shadows: true, annotations: true },
+    arctic: { edges: false, curves: false, ground: true, shadows: true, annotations: true, aoIntensity: 0.70 },
+    rendered: { edges: false, curves: false, ground: true, shadows: true, annotations: true, aoIntensity: 0.40 },
     technical: { edges: true, curves: true, ground: false, shadows: false, annotations: true }
   };
 

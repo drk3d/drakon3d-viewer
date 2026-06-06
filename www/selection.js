@@ -254,27 +254,41 @@ export function updatePropertiesPanel() {
   }
 
   // ── Extract Object Color (Shaded) ────────────────────────────────────
+  // r169's getHexString() ALREADY converts working-linear → sRGB internally
+  // (defaults to SRGBColorSpace via ColorManagement.fromWorkingColorSpace).
+  // A previous fix mistakenly added .convertLinearToSRGB() on top, producing
+  // a DOUBLE conversion — linear 0.012 (#1c1c1c sRGB) was emitted as #5d5d5d.
+  // That made the color picker show a much lighter value than the surface
+  // actually rendered, and editing it then over-brightened the material.
+  const linearToSRGBHex = (color) => color.getHexString();
+  // toHexFromRGB255: build sRGB hex from 0–255 components and use .set() so
+  // Three.js applies the correct sRGB→linear conversion when storing the colour.
+  const toHexFrom255 = (r, g, b) =>
+    '#' + [r, g, b].map(v => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('');
+
   const getObjColorHex = (o) => {
     const li = (o.userData.layerIndex !== undefined) ? o.userData.layerIndex : (o.userData.attributes?.layerIndex);
     const l = S.parsedLayers.find(pl => pl.index === li);
     if (o.userData.objectColorCustom) {
       return o.userData.objectColorCustom;
     } else if (o.userData.isColorByLayer && l) {
-      const lc = new THREE.Color(l.color.r/255, l.color.g/255, l.color.b/255);
-      if (lc.r < 0.02 && lc.g < 0.02 && lc.b < 0.02) lc.setHex(0xffffff);
-      return '#' + lc.getHexString();
+      const hex = toHexFrom255(l.color.r ?? l.color.R ?? 0, l.color.g ?? l.color.G ?? 0, l.color.b ?? l.color.B ?? 0);
+      const lc = new THREE.Color().set(hex);
+      if (lc.r < 0.02 && lc.g < 0.02 && lc.b < 0.02) lc.set('#ffffff');
+      return '#' + linearToSRGBHex(lc);
     } else if (o.userData.annIndex !== undefined) {
       const ann = S.parsedAnnotations[o.userData.annIndex];
       let c = new THREE.Color(0xffffff);
       if (ann.objectColor) {
-        c.setRGB(ann.objectColor.r/255, ann.objectColor.g/255, ann.objectColor.b/255);
+        c.set(toHexFrom255(ann.objectColor.r, ann.objectColor.g, ann.objectColor.b));
       } else if (l?.color) {
-        c.setRGB(l.color.r/255, l.color.g/255, l.color.b/255);
+        c.set(toHexFrom255(l.color.r ?? l.color.R ?? 0, l.color.g ?? l.color.G ?? 0, l.color.b ?? l.color.B ?? 0));
       }
-      return '#' + c.getHexString();
+      return '#' + linearToSRGBHex(c);
     } else {
       const shadedMat = o.userData.shadedMaterial || o.userData.originalMaterial;
-      return '#' + (shadedMat?.color?.getHexString() ?? o.material?.color?.getHexString() ?? 'ffffff');
+      const mc = shadedMat?.color ?? o.material?.color;
+      return mc ? ('#' + linearToSRGBHex(mc)) : '#ffffff';
     }
   };
 
@@ -339,7 +353,7 @@ export function updatePropertiesPanel() {
         return layer.customMaterial.color;
       }
       const orig = o.userData.renderedMaterial || o.userData.originalMaterial;
-      return '#' + (orig?.color?.getHexString() ?? 'ffffff');
+      return orig?.color ? ('#' + linearToSRGBHex(orig.color)) : '#ffffff';
     };
 
     let matHexSame = true;
@@ -531,11 +545,13 @@ export function updatePropertiesPanel() {
         if (checked) {
           const l = S.parsedLayers.find(pl => pl.index === li);
           if (l) {
-            const r = (l.color?.r ?? l.color?.R ?? 120) / 255;
-            const g = (l.color?.g ?? l.color?.G ?? 120) / 255;
-            const b = (l.color?.b ?? l.color?.B ?? 120) / 255;
-            const lc = new THREE.Color(r, g, b);
-            if (lc.r < 0.02 && lc.g < 0.02 && lc.b < 0.02) lc.setHex(0xffffff);
+            const hexStr = '#' + [
+              l.color?.r ?? l.color?.R ?? 120,
+              l.color?.g ?? l.color?.G ?? 120,
+              l.color?.b ?? l.color?.B ?? 120
+            ].map(v => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('');
+            const lc = new THREE.Color().set(hexStr);
+            if (lc.r < 0.02 && lc.g < 0.02 && lc.b < 0.02) lc.set('#ffffff');
             if (obj.userData.shadedMaterial) obj.userData.shadedMaterial.color.copy(lc);
             obj.traverse(child => {
               if (child.userData.selectionBackup) {
@@ -549,7 +565,9 @@ export function updatePropertiesPanel() {
             obj.userData.objectColorCustom = undefined;
           }
         } else {
-          const current = '#' + (obj.userData.shadedMaterial?.color?.getHexString() || obj.material?.color?.getHexString() || 'cccccc');
+          // Read the current linear-space colour and convert to sRGB hex for storage.
+          const mc = obj.userData.shadedMaterial?.color ?? obj.material?.color;
+          const current = mc ? ('#' + mc.getHexString()) : '#cccccc';
           obj.userData.objectColorCustom = current;
         }
       }
@@ -683,7 +701,7 @@ export function updatePropertiesPanel() {
           const layerCm = layer?.customMaterial;
           obj.userData.isMaterialByLayer = false;
           obj.userData.customMaterial = {
-            color:      layerCm?.color      ?? ('#' + (orig?.color?.getHexString() ?? 'cccccc')),
+            color:      layerCm?.color      ?? (orig?.color ? ('#' + orig.color.getHexString()) : '#cccccc'),
             roughness:  layerCm?.roughness  ?? orig?.roughness  ?? 0.5,
             metalness:  layerCm?.metalness  ?? orig?.metalness  ?? 0.0,
             opacity:    layerCm?.opacity    ?? orig?.opacity    ?? 1.0,
@@ -991,7 +1009,7 @@ export function ensureCustomMaterial(obj) {
     if (obj.userData.isMaterialByLayer && layer?.customMaterial) {
       const lcm = layer.customMaterial;
       obj.userData.customMaterial = {
-        color:      lcm.color      ?? ('#' + (orig?.color?.getHexString() ?? 'ffffff')),
+        color:      lcm.color      ?? (orig?.color ? ('#' + orig.color.getHexString()) : '#ffffff'),
         roughness:  lcm.roughness  ?? orig?.roughness  ?? 0.5,
         metalness:  lcm.metalness  ?? orig?.metalness  ?? 0.0,
         opacity:    lcm.opacity    ?? orig?.opacity    ?? 1.0,
@@ -1000,7 +1018,7 @@ export function ensureCustomMaterial(obj) {
       };
     } else {
       obj.userData.customMaterial = {
-        color:      '#' + (orig?.color?.getHexString() ?? 'ffffff'),
+        color:      orig?.color ? ('#' + orig.color.getHexString()) : '#ffffff',
         roughness:  orig?.roughness ?? 0.5,
         metalness:  orig?.metalness ?? 0.0,
         opacity:    orig?.opacity   ?? 1.0,

@@ -15,8 +15,13 @@
   <link rel="alternate icon" href="images/favicon-32x32.png" type="image/png"/>
   <link rel="apple-touch-icon" href="images/apple-touch-icon.png"/>
 
+  <!-- PWA manifest: enables "Install" + .rhv file association on Windows
+       (Edge/Chrome). Pure metadata — has no effect on regular browser users. -->
+  <link rel="manifest" href="manifest.webmanifest"/>
+  <meta name="theme-color" content="#10141d"/>
+
   <link rel="stylesheet" href="libs/coloris.min.css">
-  <link rel="stylesheet" href="style.css?v=1.2.91">
+  <link rel="stylesheet" href="style.css?v=1.2.92">
   <!-- Noto Sans: covers all 12 UI languages (Latin, Korean, Japanese, Chinese, Arabic, Thai, etc.) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -313,7 +318,7 @@
   <aside id="settings-right-panel" class="right-panel">
     <div class="right-panel-header">
       <h2 data-i18n="panel.settings">Settings</h2>
-      <span id="app-version-tag" class="app-version-tag">byRhinoView v0.9.3</span>
+      <span id="app-version-tag" class="app-version-tag">byRhinoView v0.9.4</span>
       <button id="btn-close-settings-panel" class="icon-btn sm" title="Close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
           <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -429,8 +434,13 @@
         <div class="sliders-grid">
           <div class="slider-row">
             <span class="slider-label" data-i18n="light.ambient">Ambient</span>
-            <input type="range" id="sl-ambient-panel" min="0" max="2" step="0.05" value="0.55">
-            <span id="sl-ambient-val" class="slider-val">0.55</span>
+            <input type="range" id="sl-ambient-panel" min="0" max="5" step="0.05" value="0.4">
+            <span id="sl-ambient-val" class="slider-val">0.40</span>
+          </div>
+          <div class="slider-row">
+            <span class="slider-label" data-i18n="light.ao_intensity">AO Intensity</span>
+            <input type="range" id="sl-ao-intensity" min="0" max="1" step="0.02" value="0.40">
+            <span id="sl-ao-intensity-val" class="slider-val">0.40</span>
           </div>
         </div>
         <!-- Sun -->
@@ -442,7 +452,7 @@
           <div id="sun-controls" class="sliders-grid" style="margin-top:6px;">
             <div class="slider-row">
               <span class="slider-label" data-i18n="light.sun_intensity">Intensity</span>
-              <input type="range" id="sl-sun-intensity" min="0" max="3" step="0.05" value="1.8">
+              <input type="range" id="sl-sun-intensity" min="0" max="6" step="0.05" value="1.8">
               <span id="sl-sun-intensity-val" class="slider-val">1.80</span>
             </div>
             <div class="slider-row">
@@ -466,22 +476,22 @@
           <div class="sliders-grid">
             <div class="slider-row">
               <span class="slider-label" data-i18n="cg.exposure">Exposure</span>
-              <input type="range" id="cg-exposure" min="-2" max="2" step="0.05" value="0">
+              <input type="range" id="cg-exposure" min="-2" max="2" step="0.01" value="0">
               <span id="cg-exposure-val" class="slider-val">+0.00</span>
             </div>
             <div class="slider-row">
               <span class="slider-label" data-i18n="cg.contrast">Contrast</span>
-              <input type="range" id="cg-contrast" min="-1" max="1" step="0.05" value="0">
+              <input type="range" id="cg-contrast" min="-0.5" max="0.5" step="0.01" value="0">
               <span id="cg-contrast-val" class="slider-val">+0.00</span>
             </div>
             <div class="slider-row">
               <span class="slider-label" data-i18n="cg.saturation">Saturation</span>
-              <input type="range" id="cg-saturation" min="-1" max="1" step="0.05" value="0">
+              <input type="range" id="cg-saturation" min="-1" max="1" step="0.01" value="0">
               <span id="cg-saturation-val" class="slider-val">+0.00</span>
             </div>
             <div class="slider-row">
               <span class="slider-label" data-i18n="cg.temperature">Temperature</span>
-              <input type="range" id="cg-temperature" min="-1" max="1" step="0.05" value="0">
+              <input type="range" id="cg-temperature" min="-1" max="1" step="0.01" value="0">
               <span id="cg-temperature-val" class="slider-val">+0.00</span>
             </div>
           </div>
@@ -549,11 +559,14 @@
   <div id="clipping-panel" class="cg-panel hidden" data-rot-x="0" data-rot-y="180">
     <div class="cg-header">
       <h3 data-i18n="clip.title">Clipping Plane</h3>
-      <button id="btn-close-clipping" class="icon-btn sm">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
-      </button>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <button id="btn-clip-toggle" class="tt-toggle-btn" data-i18n="clip.on">On</button>
+        <button id="btn-close-clipping" class="icon-btn sm">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
     </div>
     <div class="cg-body">
       <!-- Axis selector + Flip button -->
@@ -663,8 +676,8 @@
   </div>
 
   <!-- Hidden File Inputs to prevent mobile WebView user gesture block -->
-  <input type="file" id="file-upload" style="display: none;" accept=".3dm,.glb,.gltf,.stp,.step,.iges,.igs,.stl,.3mf,.rhinoview">
-  <input type="file" id="session-upload" style="display: none;" accept=".rhinoview">
+  <input type="file" id="file-upload" style="display: none;" accept=".3dm,.glb,.gltf,.stp,.step,.iges,.igs,.stl,.3mf,.rhv">
+  <input type="file" id="session-upload" style="display: none;" accept=".rhv">
 
   <script type="importmap">
     {
@@ -779,12 +792,15 @@
 
     <!-- Gumball widget -->
     <button id="btn-gumball" class="bottom-tool-btn" title="Gumball (Move/Rotate Selected)">
+      <!-- 4-direction move gumball: cross + arrowheads on all four ends + center dot. -->
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="8" cy="8" r="6" stroke-dasharray="2 2" opacity="0.6"/>
-        <line x1="8" y1="2" x2="8" y2="14"/>
-        <line x1="2" y1="8" x2="14" y2="8"/>
-        <polyline points="6 4 8 2 10 4"/>
-        <polyline points="12 6 14 8 12 10"/>
+        <line x1="8" y1="2.5" x2="8" y2="13.5"/>
+        <line x1="2.5" y1="8" x2="13.5" y2="8"/>
+        <polyline points="6 4.5 8 2.5 10 4.5"/>
+        <polyline points="6 11.5 8 13.5 10 11.5"/>
+        <polyline points="4.5 6 2.5 8 4.5 10"/>
+        <polyline points="11.5 6 13.5 8 11.5 10"/>
+        <circle cx="8" cy="8" r="1.2" fill="currentColor" stroke="none"/>
       </svg>
     </button>
 

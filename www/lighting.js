@@ -13,15 +13,22 @@ export function setupLights() {
 
   const keyPos = new THREE.Vector3(-0.8, -0.6, 1.5).normalize();
 
+  // Read the user-controlled ambient slider. We honor it directly (1:1) in
+  // every mode so the value the user sees + saves is the value the scene
+  // actually uses — preventing a previous "darker after reload" bug where
+  // the slider read 1.15 but rendered mode held a hardcoded 0.12 internally.
+  // The slider's input handler also rebuilds lights via setupLights() so
+  // the two paths stay consistent.
+  const ambSlider = parseFloat(document.getElementById('sl-ambient-panel')?.value ?? 0.4);
+
   switch (S.currentMode) {
     case 'shaded':
     case 'wireframe': {
       // Shaded: just enough light to read form, NO skylight/shadows.
       // Three directional lights from different angles give consistent surface tone
       // without strong directional shading or environment effects.
-      const ambInt = parseFloat(document.getElementById('sl-ambient-panel')?.value ?? 0.55);
       const keyInt = parseFloat(document.getElementById('sl-key-panel')?.value ?? 1.4);
-      S.scene.add(new THREE.AmbientLight(0xffffff, ambInt * 0.9));
+      S.scene.add(new THREE.AmbientLight(0xffffff, ambSlider));
       const key = new THREE.DirectionalLight(0xffffff, keyInt * 0.7);
       key.position.copy(keyPos);
       S.scene.add(key);
@@ -34,10 +41,9 @@ export function setupLights() {
       break;
     }
     case 'arctic': {
-      // Env map (set in display.js) is the main ambient source — keep supplemental
-      // lights weak so the model doesn't wash out.  A tiny ambient prevents
-      // pitch-black back-faces; the key gives subtle form definition.
-      S.scene.add(new THREE.AmbientLight(0xffffff, 0.08));
+      // Env map (set in display.js) is the main ambient source — the ambient
+      // light is just a back-face fill on top of IBL.
+      S.scene.add(new THREE.AmbientLight(0xffffff, ambSlider));
       const key = new THREE.DirectionalLight(0xffffff, 0.45);
       key.position.copy(keyPos);
       S.scene.add(key);
@@ -45,7 +51,18 @@ export function setupLights() {
     }
     case 'rendered': {
       // Env map provides realistic ambient; sun handled separately.
-      S.scene.add(new THREE.AmbientLight(0xffffff, 0.12));
+      S.scene.add(new THREE.AmbientLight(0xffffff, ambSlider));
+      // HemisphereLight (sky-from-above + ground-from-below) fills shaded
+      // surfaces so dark sides don't hue-shift. Three.js PBR diffuse uses
+      // Lambertian /π normalisation, so a single directional light produces
+      // only ~32% of baseColor at the lit face — shaded sides stay much dimmer
+      // and bright dielectrics (cyan #00cdff, etc.) blue-shift because G falls
+      // while B stays saturated. The hemispherical fill is directional
+      // (top > bottom), so it preserves shading depth instead of flattening it.
+      // App is Z-up — the "sky" direction is +Z.
+      const hemi = new THREE.HemisphereLight(0xffffff, 0x404040, 1.4);
+      hemi.position.set(0, 0, 1);
+      S.scene.add(hemi);
       const key = new THREE.DirectionalLight(0xfff8f0, 0.65);
       key.position.copy(keyPos);
       S.scene.add(key);
@@ -121,6 +138,7 @@ export function updateSunLight() {
   S.sunLight.shadow.camera.updateProjectionMatrix();
   // Sync model castShadow state and ground receiveShadow together.
   updateShadowCasting();
+  setupLights();
 }
 
 export function setupModelShadowFrustum(box) {

@@ -30,7 +30,7 @@ Welcome to the **byRhinoView** features and capabilities guide. byRhinoView is a
 * **`.stl`:** 3D printing stereolithography mesh models.
 * **`.3mf`:** High-efficiency 3D manufacturing format files.
 * **`.stp` / `.step` / `.igs` / `.iges`:** Supports sessions and imports via standard file drops and native OS file associations.
-* **`.rhinoview`:** The custom package file format for byRhinoView that saves your entire viewing state.
+* **`.rhv`:** The custom package file format for byRhinoView that saves your entire viewing state.
 
 ---
 
@@ -83,7 +83,7 @@ Customize how your models are displayed using professional viewport modes:
 ---
 
 ### 7. 💾 Smart Session Management / 스마트 세션 및 내보내기
-* **`.rhinoview` Session Packages:** Instead of raw files, save your entire design session into a single `.rhinoview` zip archive. This bundle captures:
+* **`.rhv` Session Packages:** Instead of raw files, save your entire design session into a single `.rhv` zip archive. This bundle captures:
   1. The 3D model geometry.
   2. Active camera angle and projection.
   3. Custom background gradient colors or active HDR.

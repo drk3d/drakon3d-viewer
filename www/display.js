@@ -353,7 +353,12 @@ export function applyDisplayMode() {
         // blend formula: mix(white, AO, intensity) then MultiplyBlend onto scene.
         // intensity > 1 clamps AO < (1 - 1/intensity) to pure black — avoid this.
         // three.js example slider max is 1.0.
-        S.gtaoPass.blendIntensity = 0.85;
+        // Read from the AO slider so the user-facing control actually controls
+        // GTAO. Falls back to the mode default if the slider is missing.
+        S.gtaoPass.blendIntensity = parseFloat(
+          document.getElementById('sl-ao-intensity')?.value
+          ?? S.modeSettings?.arctic?.aoIntensity ?? 0.7
+        );
         S.gtaoPass.updateGtaoMaterial(gtaoParams);
         S.gtaoPass.updatePdMaterial(pdParams);
       }
@@ -363,7 +368,10 @@ export function applyDisplayMode() {
       if (S.gtaoPass) {
         S.gtaoPass.output         = 0;
         S.gtaoPass.enabled        = true;
-        S.gtaoPass.blendIntensity = 0.65;
+        S.gtaoPass.blendIntensity = parseFloat(
+          document.getElementById('sl-ao-intensity')?.value
+          ?? S.modeSettings?.rendered?.aoIntensity ?? 0.4
+        );
         S.gtaoPass.updateGtaoMaterial(gtaoParams);
         S.gtaoPass.updatePdMaterial(pdParams);
       }
@@ -407,18 +415,21 @@ export function applyDisplayMode() {
 
       const oc = childAttrs.objectColor;
       const out = new THREE.Color(0, 0, 0);
+      // Rhino layer/object colors are sRGB. Pass SRGBColorSpace so r169's
+      // ColorManagement converts to linear before storing — otherwise values
+      // are stored raw and curves/edges render with a hue shift (e.g. cyan
+      // #00cdff → too-blue because G channel reads ~0.61 instead of ~0.39).
       if (isByMaterial && child.material?.color) {
         out.copy(child.material.color);
       } else if (isByObject && oc) {
-        out.setRGB(oc.r / 255, oc.g / 255, oc.b / 255);
+        out.setRGB(oc.r / 255, oc.g / 255, oc.b / 255, THREE.SRGBColorSpace);
       } else if (childLayer?.color) {
-        // ByLayer: use layer color
         const lc = childLayer.color;
-        out.setRGB((lc.r ?? lc.R ?? 0) / 255, (lc.g ?? lc.G ?? 0) / 255, (lc.b ?? lc.B ?? 0) / 255);
+        out.setRGB((lc.r ?? lc.R ?? 0) / 255, (lc.g ?? lc.G ?? 0) / 255, (lc.b ?? lc.B ?? 0) / 255, THREE.SRGBColorSpace);
       } else if (oc && ((oc.r ?? 0) > 0 || (oc.g ?? 0) > 0 || (oc.b ?? 0) > 0)) {
         // Fallback: objectColor stores the layer color redundantly in Rhino for ByLayer objects.
         // Use it when the layer lookup fails (e.g., index mismatch between cleanDoc and original doc).
-        out.setRGB(oc.r / 255, oc.g / 255, oc.b / 255);
+        out.setRGB(oc.r / 255, oc.g / 255, oc.b / 255, THREE.SRGBColorSpace);
       }
 
       // Curves keep their Rhino-original color — no black↔white flip based
@@ -515,7 +526,32 @@ export function applyDisplayMode() {
 
       case 'rendered': {
         const base = child.userData.renderedMaterial || orig;
-        const m = base.clone();
+        // 3DMLoader builds a MeshPhysicalMaterial with ior≈1.7 (from Rhino's
+        // reflectivity) and specularIntensity=0.5. Those Physical-only terms
+        // shift the BRDF away from a standard PBR look — cyan surfaces pick
+        // up extra fresnel and end up reading too saturated/blue vs. Rhino's
+        // own renderer. Our UI only exposes color/roughness/metalness/opacity,
+        // so downgrade to MeshStandardMaterial and copy just those four; this
+        // matches what Rhino's Rendered viewport draws for a Physically Based
+        // material with no clearcoat/sheen/transmission.
+        let m;
+        if (base.isMeshPhysicalMaterial) {
+          m = new THREE.MeshStandardMaterial({
+            color:       base.color?.clone() ?? new THREE.Color(0xffffff),
+            roughness:   base.roughness ?? 0.5,
+            metalness:   base.metalness ?? 0.0,
+            opacity:     base.opacity   ?? 1.0,
+            transparent: !!base.transparent,
+            depthWrite:  base.depthWrite ?? true,
+            side:        base.side ?? THREE.FrontSide,
+            map:         base.map ?? null,
+            normalMap:   base.normalMap ?? null,
+            emissive:    base.emissive?.clone() ?? new THREE.Color(0x000000),
+            emissiveIntensity: base.emissiveIntensity ?? 1.0
+          });
+        } else {
+          m = base.clone();
+        }
         if (child.userData.materialColor) m.color.copy(child.userData.materialColor);
         if (m.roughness !== undefined && m.roughness < 0.05) m.roughness = 0.4;
         if (m.metalness === undefined) m.metalness = 0.0;
@@ -677,11 +713,15 @@ export function applyLayerColorsToModel(model) {
       const layer = S.parsedLayers.find(l => l.index === attrs.layerIndex);
       if (layer?.color) {
         const lc = layer.color;
-        const col = new THREE.Color(
-          (lc.r ?? lc.R ?? 0) / 255,
-          (lc.g ?? lc.G ?? 0) / 255,
-          (lc.b ?? lc.B ?? 0) / 255
-        );
+        // Build via hex string so r169 ColorManagement applies sRGB→linear
+        // conversion. The 3-arg `new Color(r,g,b)` form routes through setRGB
+        // which stores raw values (linear), causing a visible hue shift.
+        const hex = '#' + [
+          lc.r ?? lc.R ?? 0,
+          lc.g ?? lc.G ?? 0,
+          lc.b ?? lc.B ?? 0
+        ].map(v => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('');
+        const col = new THREE.Color().set(hex);
         
         if (!child.isLine) {
           // Mesh black → white safety mapping (mode-independent): a pitch-black

@@ -10,7 +10,7 @@ A lightweight Rhino 3D & CAD Web Viewer designed for seamless model interaction 
 
 * **High-Fidelity CAD Formats:** Support for `.3dm` (Rhino 3D), `.glb`, `.stl`, `.3mf`, and `.stp` (via session loads) file drops.
 * **Premium Shading Modes:** Interactive shaded, wireframe, technical sketch, rendered, and beautiful **Arctic (Ambient Occlusion style)** modes.
-* **Smart Session Management:** Save your entire viewing session—including camera perspectives, custom colors, layer visibilities, measurements, and lights—into a single `.rhinoview` package.
+* **Smart Session Management:** Save your entire viewing session—including camera perspectives, custom colors, layer visibilities, measurements, and lights—into a single `.rhv` package.
 * **Named Views:** Save custom camera viewpoints and animate transitions seamlessly.
 * **Analysis Tools:** In-app distance/angle measurement utilities and real-time interactive clipping plane sections.
 * **12-Language Support (i18n):** Automatically adapts to 12 languages matching Rhino 3D (en, ko, fr, de, es, it, ja, zh-CN, zh-TW, pt-BR, cs, pl).
@@ -21,7 +21,7 @@ A lightweight Rhino 3D & CAD Web Viewer designed for seamless model interaction 
 
 * **프리미엄 쉐이딩 모드:** 음영, 와이어프레임, 스케치(Technical), 렌더링 및 아키텍처(앰비언트 오클루전 스타일) 모드 제공
 
-* **스마트 세션 저장:** 카메라 각도, 조명 세기, 측정값, 레이어 가시성, 커스텀 색상까지 단일 `.rhinoview` 파일 하나로 저장 및 읽기
+* **스마트 세션 저장:** 카메라 각도, 조명 세기, 측정값, 레이어 가시성, 커스텀 색상까지 단일 `.rhv` 파일 하나로 저장 및 읽기
 
 * **뷰 저장:** 라이노 NamedView 지원 및 나만의 카메라 앵글을 저장하고 애니메이션 트랜지션으로 시점을 전환.
 

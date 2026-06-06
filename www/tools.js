@@ -73,8 +73,8 @@ export function deactivateAllTools() {
     }
   }
 
-  document.getElementById('clipping-panel')?.classList.add('hidden');
-  document.getElementById('btn-tool-clipping')?.classList.remove('active');
+  // Clipping plane is INTENTIONALLY left alone here — it's a toggle that
+  // coexists with other tools. To turn it off, click its toolbar button again.
   document.getElementById('find-panel')?.classList.add('hidden');
   document.getElementById('btn-tool-find')?.classList.remove('active');
   document.getElementById('btn-tool-distance')?.classList.remove('active');
