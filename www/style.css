@@ -374,6 +374,7 @@ body.dark-theme .dark-only {
   padding: 3px 8px;
   border-radius: 5px;
   transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
 }
 .text-btn:hover { background: var(--surface-hi); color: var(--text); }
 
