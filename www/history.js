@@ -7,6 +7,7 @@ class HistoryManager {
     this.redoStack = [];
     this.maxStates = 50; // Keep up to 50 states
     this.suppress = false;
+    this.processing = false;
   }
 
   clear() {
@@ -27,7 +28,8 @@ class HistoryManager {
     this.updateButtons();
   }
 
-  undo() {
+  async undo() {
+    if (this.processing) return;
     console.log('[History] Undo requested. Stack size:', this.undoStack.length);
     if (this.undoStack.length === 0) {
       console.log('[History] Undo stack empty.');
@@ -35,12 +37,18 @@ class HistoryManager {
     }
     const action = this.undoStack.pop();
     console.log('[History] Undoing action:', action);
-    this.applyState(action, 'before');
+    this.processing = true;
+    try {
+      await this.applyState(action, 'before');
+    } finally {
+      this.processing = false;
+    }
     this.redoStack.push(action);
     this.updateButtons();
   }
 
-  redo() {
+  async redo() {
+    if (this.processing) return;
     console.log('[History] Redo requested. Stack size:', this.redoStack.length);
     if (this.redoStack.length === 0) {
       console.log('[History] Redo stack empty.');
@@ -48,12 +56,17 @@ class HistoryManager {
     }
     const action = this.redoStack.pop();
     console.log('[History] Redoing action:', action);
-    this.applyState(action, 'after');
+    this.processing = true;
+    try {
+      await this.applyState(action, 'after');
+    } finally {
+      this.processing = false;
+    }
     this.undoStack.push(action);
     this.updateButtons();
   }
 
-  applyState(action, key) {
+  async applyState(action, key) {
     const oldSuppress = this.suppress;
     this.suppress = true;
     try {
@@ -85,32 +98,34 @@ class HistoryManager {
         });
         const toggleBtn = document.getElementById('btn-clip-toggle');
         if (toggleBtn) {
-          import('./i18n.js').then(m => {
-            toggleBtn.classList.toggle('active', S.clippingToggleOn);
-            toggleBtn.textContent = S.clippingToggleOn ? m.t('clip.on') : m.t('clip.off');
-          });
+          const m = await import('./i18n.js');
+          toggleBtn.classList.toggle('active', S.clippingToggleOn);
+          toggleBtn.textContent = S.clippingToggleOn ? m.t('clip.on') : m.t('clip.off');
         }
 
-        import('./tools.js').then(tools => {
-          tools.updateClippingPlane();
-          if (S.clippingEnabled) {
-            tools.setupClippingHelper();
-          } else {
-            if (window.deactivateClippingHelper) window.deactivateClippingHelper();
-          }
-        });
+        const tools = await import('./tools.js');
+        tools.updateClippingPlane();
+        if (S.clippingEnabled) {
+          tools.setupClippingHelper();
+        } else {
+          if (window.deactivateClippingHelper) window.deactivateClippingHelper();
+        }
       } else if (action.type === 'displayMode') {
         const mode = (key === 'before') ? action.before : action.after;
-        import('./app.js').then(app => {
-          app.changeDisplayMode(mode);
-        });
+        const app = await import('./app.js');
+        app.changeDisplayMode(mode);
       } else if (action.type === 'measurements') {
         const state = (key === 'before') ? action.before : action.after;
-        import('./tools.js').then(tools => {
-          tools.reconstructMeasurements(state);
-        });
+        const tools = await import('./tools.js');
+        tools.reconstructMeasurements(state);
       } else if (action.targets) {
         const states = action[key];
+        
+        let sel = null;
+        if (action.type === 'transform' && S.gumballActive && S.gumballHelper) {
+          sel = await import('./selection.js');
+        }
+
         action.targets.forEach((obj, idx) => {
           const state = states[idx];
           if (action.type === 'transform') {
@@ -120,8 +135,8 @@ class HistoryManager {
             obj.updateMatrixWorld(true);
             
             // Sync Gumball helper if it's attached
-            if (S.gumballActive && S.gumballHelper && S.selectedObjects.includes(obj)) {
-              import('./selection.js').then(sel => sel.setupGumballHelper());
+            if (sel && S.selectedObjects.includes(obj)) {
+              sel.setupGumballHelper();
             }
           } else if (action.type === 'color') {
             obj.userData.objectColorCustom = state.objectColorCustom;
@@ -157,9 +172,11 @@ class HistoryManager {
 
         // Rebuild annotations if any changed
         if (action.type === 'color' && action.targets.some(o => o.userData.annIndex !== undefined)) {
-          import('./annotations.js').then(a => a.createAnnotationSprites());
+          const a = await import('./annotations.js');
+          a.createAnnotationSprites();
         } else {
-          import('./display.js').then(d => d.applyDisplayMode());
+          const d = await import('./display.js');
+          d.applyDisplayMode();
         }
 
         // Refresh Selection Outline and Properties Panel
@@ -168,7 +185,8 @@ class HistoryManager {
         }
         
         // Update panel
-        import('./selection.js').then(sel => sel.updatePropertiesPanel());
+        const selPanel = await import('./selection.js');
+        selPanel.updatePropertiesPanel();
       }
     } finally {
       this.suppress = oldSuppress;
