@@ -467,8 +467,46 @@ function init() {
     });
   } catch(e) { console.warn('Negative arrow or plane hide failed:', e); }
 
+  let clippingDragBefore = null;
+
   S.clippingTransformControls.addEventListener('dragging-changed', (event) => {
     S.controls.enabled = !event.value;
+
+    if (History.suppress) return;
+
+    if (event.value) {
+      clippingDragBefore = {
+        position: S.clippingPosition ? S.clippingPosition.clone() : null,
+        quaternion: S.clippingQuaternion ? S.clippingQuaternion.clone() : null,
+        clipAxis: S.clipAxis,
+        clipFlipped: S.clipFlipped
+      };
+    } else {
+      if (clippingDragBefore) {
+        const afterState = {
+          position: S.clippingPosition ? S.clippingPosition.clone() : null,
+          quaternion: S.clippingQuaternion ? S.clippingQuaternion.clone() : null,
+          clipAxis: S.clipAxis,
+          clipFlipped: S.clipFlipped
+        };
+
+        const posChanged = (!clippingDragBefore.position && afterState.position) ||
+                           (clippingDragBefore.position && !afterState.position) ||
+                           (clippingDragBefore.position && afterState.position && clippingDragBefore.position.distanceTo(afterState.position) > 0.0001);
+        const quatChanged = (!clippingDragBefore.quaternion && afterState.quaternion) ||
+                            (clippingDragBefore.quaternion && !afterState.quaternion) ||
+                            (clippingDragBefore.quaternion && afterState.quaternion && clippingDragBefore.quaternion.angleTo(afterState.quaternion) > 0.0001);
+
+        if (posChanged || quatChanged) {
+          History.push({
+            type: 'clipping',
+            before: clippingDragBefore,
+            after: afterState
+          });
+        }
+        clippingDragBefore = null;
+      }
+    }
   });
 
   S.clippingTransformControls.addEventListener('change', () => {
@@ -2214,7 +2252,13 @@ function bindUI() {
       S.clippingArcDrag = {
         axis: arcAxis,
         startAngle,
-        startQuat: S.clippingHelper.quaternion.clone()
+        startQuat: S.clippingHelper.quaternion.clone(),
+        beforeState: {
+          position: S.clippingPosition ? S.clippingPosition.clone() : null,
+          quaternion: S.clippingQuaternion ? S.clippingQuaternion.clone() : null,
+          clipAxis: S.clipAxis,
+          clipFlipped: S.clipFlipped
+        }
       };
       return;
     }
@@ -2356,6 +2400,7 @@ function bindUI() {
     }
 
     if (S.clippingArcDrag) {
+      const beforeState = S.clippingArcDrag.beforeState;
       S.clippingArcDrag = null;
       S.controls.enabled = true;
       S.renderer.domElement.style.cursor = '';
@@ -2366,6 +2411,26 @@ function bindUI() {
         S.clippingTransformControls.detach();
         S.clippingTransformControls.attach(S.clippingHelper);
         S.clippingTransformControls.getHelper().visible = true;
+      }
+
+      if (!History.suppress && beforeState) {
+        const afterState = {
+          position: S.clippingPosition ? S.clippingPosition.clone() : null,
+          quaternion: S.clippingQuaternion ? S.clippingQuaternion.clone() : null,
+          clipAxis: S.clipAxis,
+          clipFlipped: S.clipFlipped
+        };
+
+        const quatChanged = (!beforeState.quaternion && afterState.quaternion) ||
+                            (beforeState.quaternion && !afterState.quaternion) ||
+                            (beforeState.quaternion && afterState.quaternion && beforeState.quaternion.angleTo(afterState.quaternion) > 0.0001);
+        if (quatChanged) {
+          History.push({
+            type: 'clipping',
+            before: beforeState,
+            after: afterState
+          });
+        }
       }
       return;
     }
@@ -3102,6 +3167,15 @@ export function applyModeSettings(mode) {
 // ── Switch display mode and apply its visibility settings ──
 export function changeDisplayMode(mode) {
   if (S.currentMode === mode) return;
+  
+  if (!History.suppress) {
+    History.push({
+      type: 'displayMode',
+      before: S.currentMode,
+      after: mode
+    });
+  }
+
   S.currentMode = mode;
   
   // 1. Update dropdown active classes in UI
@@ -3129,6 +3203,91 @@ export function changeDisplayMode(mode) {
   // 3. Apply the rendering logic
   applyDisplayMode();
 }
+
+// ── Settings History Tracker ──────────────────────────────────────────────
+(function initSettingsHistory() {
+  const elements = [
+    { id: 'sl-env-intensity', type: 'range' },
+    { id: 'sl-measure-scale', type: 'range' },
+    { id: 'sl-annotation-scale', type: 'range' },
+    { id: 'sl-hdr-rotation', type: 'range' },
+    { id: 'sl-ambient-panel', type: 'range' },
+    { id: 'sl-ao-intensity', type: 'range' },
+    { id: 'sl-sun-intensity', type: 'range' },
+    { id: 'sl-sun-azimuth', type: 'range' },
+    { id: 'sl-sun-elevation', type: 'range' },
+    { id: 'sl-camera-fov', type: 'range' },
+    { id: 'sl-damping-panel', type: 'range' },
+    { id: 'sl-edge-angle', type: 'range' },
+    { id: 'bg-radial-spread', type: 'range' },
+    { id: 'cg-exposure', type: 'range' },
+    { id: 'cg-contrast', type: 'range' },
+    { id: 'cg-saturation', type: 'range' },
+    { id: 'cg-temperature', type: 'range' },
+    { id: 'env-preset-select', type: 'select' },
+    { id: 'bg-type-select', type: 'select' },
+    { id: 'bg-panel-c1', type: 'color' },
+    { id: 'bg-panel-c2', type: 'color' },
+    { id: 'bg-panel-c3', type: 'color' },
+    { id: 'bg-panel-c4', type: 'color' },
+    { id: 'chk-shadows-panel', type: 'checkbox' },
+    { id: 'chk-ground-panel', type: 'checkbox' },
+    { id: 'chk-sun-panel', type: 'checkbox' },
+    { id: 'chk-edges-panel', type: 'checkbox' },
+    { id: 'chk-annotations-panel', type: 'checkbox' }
+  ];
+
+  elements.forEach(item => {
+    const el = document.getElementById(item.id);
+    if (!el) return;
+
+    let beforeValue = null;
+
+    const captureStart = () => {
+      if (History.suppress) return;
+      beforeValue = (item.type === 'checkbox') ? el.checked : el.value;
+    };
+
+    if (item.type === 'range' || item.type === 'color') {
+      el.addEventListener('pointerdown', captureStart);
+      el.addEventListener('mousedown', captureStart);
+      el.addEventListener('touchstart', captureStart);
+
+      el.addEventListener('change', () => {
+        if (History.suppress) return;
+        const afterValue = (item.type === 'checkbox') ? el.checked : el.value;
+        if (beforeValue !== null && beforeValue !== afterValue) {
+          History.push({
+            type: 'setting',
+            elementId: item.id,
+            before: beforeValue,
+            after: afterValue
+          });
+        }
+        beforeValue = null;
+      });
+    } else {
+      el.addEventListener('focus', captureStart);
+      el.addEventListener('pointerdown', captureStart);
+      el.addEventListener('mousedown', captureStart);
+      el.addEventListener('touchstart', captureStart);
+
+      el.addEventListener('change', () => {
+        if (History.suppress) return;
+        const afterValue = (item.type === 'checkbox') ? el.checked : el.value;
+        if (beforeValue !== null && beforeValue !== afterValue) {
+          History.push({
+            type: 'setting',
+            elementId: item.id,
+            before: beforeValue,
+            after: afterValue
+          });
+        }
+        beforeValue = null;
+      });
+    }
+  });
+})();
 
 // ── Capacitor file-intent bridge ──────────────────────────────────────────
 // Uses our custom FileOpenerPlugin for reliable file:// delivery.
