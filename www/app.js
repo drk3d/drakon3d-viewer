@@ -2317,12 +2317,22 @@ function bindUI() {
   // ── Camera FOV ──
   const fovSlider = document.getElementById('sl-camera-fov');
   const fovValEl  = document.getElementById('sl-camera-fov-val');
+
+  function updateFovLabel() {
+    if (!fovSlider || !fovValEl) return;
+    const fov = parseInt(fovSlider.value);
+    const aspect = window.innerWidth / window.innerHeight;
+    const vFovRad = (fov * Math.PI) / 360;
+    const lens = 18 / (aspect * Math.tan(vFovRad));
+    fovValEl.textContent = `${fov}° (${Math.round(lens)}mm)`;
+  }
+
   if (fovSlider) {
     fovSlider.addEventListener('input', () => {
       const fov = parseInt(fovSlider.value);
-      if (fovValEl) fovValEl.textContent = fov + '°';
       S.perspCamera.fov = fov;
       S.perspCamera.updateProjectionMatrix();
+      updateFovLabel();
       updateSliderFill(fovSlider);
     });
     bindSliderDblClickInput(fovSlider, fovValEl, '°');
@@ -2685,6 +2695,17 @@ function onWindowResize() {
   }
   S.renderer.setSize(window.innerWidth, window.innerHeight);
   S.composer.setSize(window.innerWidth, window.innerHeight);
+  // Update Lens Length display in settings panel on window resize
+  try {
+    const fovSlider = document.getElementById('sl-camera-fov');
+    const fovValEl  = document.getElementById('sl-camera-fov-val');
+    if (fovSlider && fovValEl) {
+      const fov = parseInt(fovSlider.value);
+      const vFovRad = (fov * Math.PI) / 360;
+      const lens = 18 / (aspect * Math.tan(vFovRad));
+      fovValEl.textContent = `${fov}° (${Math.round(lens)}mm)`;
+    }
+  } catch (err) {}
 }
 
 // ── Theme ──────────────────────────────────────────────────────────────────
