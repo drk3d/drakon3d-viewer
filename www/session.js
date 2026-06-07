@@ -546,7 +546,7 @@ export async function loadSession(file) {
 
       // Restore Clipping Plane
       if (s.clippingEnabled !== undefined) {
-        setCheck('chk-clipping-enable', s.clippingEnabled);
+        S.clippingToggleOn = s.clippingEnabled;
         setSlider('clip-height', 'clip-height-val', s.clippingHeight ?? 0, 'float');
         
         const cp = document.getElementById('clipping-panel');
@@ -571,10 +571,18 @@ export async function loadSession(file) {
         }
         
         const { updateClippingPlane, setupClippingHelper } = await import('./tools.js');
+        const { t } = await import('./i18n.js');
+        
         updateClippingPlane();
-        // Mark as already-initialized so future toggle off/on preserves this
-        // restored position instead of re-running the default-position logic.
         S.clippingHasBeenInitialized = true;
+
+        const toggleBtn = document.getElementById('btn-clip-toggle');
+        if (toggleBtn) {
+          toggleBtn.classList.toggle('active', s.clippingEnabled);
+          toggleBtn.textContent = s.clippingEnabled ? t('clip.on') : t('clip.off');
+        }
+
+        S.clippingEnabled = s.clippingEnabled;
         if (s.clippingEnabled) {
           S.renderer.clippingPlanes = [S.clippingPlane];
           setupClippingHelper();
@@ -582,6 +590,9 @@ export async function loadSession(file) {
           document.getElementById('btn-tool-clipping')?.classList.add('active');
         } else {
           S.renderer.clippingPlanes = [];
+          if (window.deactivateClippingHelper) {
+            window.deactivateClippingHelper();
+          }
           document.getElementById('clipping-panel')?.classList.add('hidden');
           document.getElementById('btn-tool-clipping')?.classList.remove('active');
         }
@@ -794,7 +805,21 @@ export function resetSettingsToDefault() {
   setCheck('chk-ground-panel',    false);
   setCheck('chk-shadows-panel',   true);
   setCheck('chk-sun-panel',       false);
-  setCheck('chk-clipping-enable', false);
+
+  S.clippingToggleOn = false;
+  S.clippingHasBeenInitialized = false;
+  S.clippingEnabled = false;
+  S.clippingPosition = null;
+  S.clippingQuaternion = null;
+  if (S.renderer) S.renderer.clippingPlanes = [];
+  if (window.deactivateClippingHelper) window.deactivateClippingHelper();
+  document.getElementById('clipping-panel')?.classList.add('hidden');
+  document.getElementById('btn-tool-clipping')?.classList.remove('active');
+  const toggleBtn = document.getElementById('btn-clip-toggle');
+  if (toggleBtn) {
+    toggleBtn.classList.remove('active');
+    toggleBtn.textContent = 'Off';
+  }
 
   const resetSlider = (id, valElId, val, formatType = 'float') => {
     const el = document.getElementById(id);

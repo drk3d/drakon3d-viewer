@@ -1833,6 +1833,15 @@ export function postProcessModel(model, addEdgesFlag, colorsAreSRGBStoredAsLinea
 
 export function clearCurrentModel() {
   if (!S.currentModel) return;
+
+  S.clippingToggleOn = false;
+  S.clippingHasBeenInitialized = false;
+  S.clippingEnabled = false;
+  S.clippingPosition = null;
+  S.clippingQuaternion = null;
+  if (S.renderer) S.renderer.clippingPlanes = [];
+  if (window.deactivateClippingHelper) window.deactivateClippingHelper();
+
   // Clear selection outlines (dynamic import avoids circular at parse time)
   import('./selection.js').then(m => m.clearSelection()).catch(() => {});
   import('./history.js').then(m => m.History.clear()).catch(() => {});

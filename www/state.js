@@ -160,6 +160,9 @@ export const S = {
   clippingArcDrag: null,           // Active drag state: {axis, startAngle, startQuat}
   arcOverlayScene: null,           // Separate scene for arc handles — rendered without clipping planes
   clippingEnabled:           false,
+  clippingToggleOn:          false,
+  clippingPosition:          null, // THREE.Vector3 storing the last position of S.clippingHelper
+  clippingQuaternion:        null, // THREE.Quaternion storing the last quaternion of S.clippingHelper
   // True once the clipping plane has been first positioned for this model.
   // Used to skip the default-position computation on toggle off→on so the
   // user's manually-dragged transform is preserved.

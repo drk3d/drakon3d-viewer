@@ -5,6 +5,10 @@ import { t } from './i18n.js';
 // ── Tool deactivation ─────────────────────────────────────────────────────────
 
 export function deactivateAllTools() {
+  if (window.deactivateClippingHelper) {
+    window.deactivateClippingHelper();
+  }
+
   if (S.distanceToolState) {
     if (S.distanceToolState.spheres) {
       S.distanceToolState.spheres.forEach(o => {
@@ -80,6 +84,12 @@ export function deactivateAllTools() {
   document.getElementById('btn-tool-distance')?.classList.remove('active');
   document.getElementById('btn-tool-angle')?.classList.remove('active');
   syncMeasurementTabsUI();
+
+  if (S.clippingToggleOn) {
+    setupClippingHelper();
+  }
+
+  window.updateToolsDropdownActiveState?.();
 }
 
 // ── Measurements ──────────────────────────────────────────────────────────────
@@ -851,6 +861,14 @@ export function updateClippingPlane() {
   const center   = box.getCenter(new THREE.Vector3());
   const targetPt = center.clone().addScaledVector(normal, height);
   S.clippingPlane.constant = -normal.dot(targetPt);
+
+  // Update stored pose
+  if (!S.clippingPosition) S.clippingPosition = new THREE.Vector3();
+  S.clippingPosition.copy(targetPt);
+
+  if (!S.clippingQuaternion) S.clippingQuaternion = new THREE.Quaternion();
+  S.clippingQuaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
+
   updateClippingHelperPose();
 }
 
@@ -984,13 +1002,25 @@ export function buildClippingArcHandles(size) {
 
 export function updateClippingHelperPose() {
   if (!S.clippingHelper) return;
-  const normal = S.clippingPlane.normal.clone().normalize();
-  S.clippingHelper.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
+
+  if (S.clippingQuaternion) {
+    S.clippingHelper.quaternion.copy(S.clippingQuaternion);
+  } else {
+    const normal = S.clippingPlane.normal.clone().normalize();
+    S.clippingHelper.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
+  }
+
   if (!S.clippingBaseQuaternion) {
     S.clippingBaseQuaternion = S.clippingHelper.quaternion.clone();
   }
-  const d = -S.clippingPlane.constant;
-  S.clippingHelper.position.copy(normal.clone().multiplyScalar(d));
+
+  if (S.clippingPosition) {
+    S.clippingHelper.position.copy(S.clippingPosition);
+  } else {
+    const normal = S.clippingPlane.normal.clone().normalize();
+    const d = -S.clippingPlane.constant;
+    S.clippingHelper.position.copy(normal.clone().multiplyScalar(d));
+  }
 
   // Sync arc handles: they live in scene-space to avoid clipping, so copy world transform
   S.clippingHelper.updateMatrixWorld(true);
@@ -1189,3 +1219,5 @@ export function updateMeasurementScales() {
     });
   }
 }
+
+window.setupClippingHelper = setupClippingHelper;

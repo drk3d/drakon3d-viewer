@@ -477,6 +477,13 @@ function init() {
       if (S.clipFlipped) normal.negate();
       S.clippingPlane.normal.copy(normal);
       S.clippingPlane.constant = -normal.dot(S.clippingHelper.position);
+
+      if (!S.clippingPosition) S.clippingPosition = new THREE.Vector3();
+      S.clippingPosition.copy(S.clippingHelper.position);
+
+      if (!S.clippingQuaternion) S.clippingQuaternion = new THREE.Quaternion();
+      S.clippingQuaternion.copy(S.clippingHelper.quaternion);
+
       if (S.clippingArcHandles) {
         S.clippingArcHandles.forEach(h => {
           h.mesh.position.copy(S.clippingHelper.position);
@@ -1553,6 +1560,7 @@ function bindUI() {
       document.getElementById('canvas-container').style.cursor = '';
       document.getElementById('btn-tool-distance').classList.remove('active');
       renderMeasurementListUI();
+      updateToolsDropdownActiveState();
       return;
     }
     deactivateAllTools();
@@ -1560,6 +1568,7 @@ function bindUI() {
     document.getElementById('btn-tool-distance').classList.add('active');
     document.getElementById('canvas-container').style.cursor = 'crosshair';
     renderMeasurementListUI();
+    updateToolsDropdownActiveState();
   });
 
   document.getElementById('btn-tool-angle').addEventListener('click', (e) => {
@@ -1575,6 +1584,7 @@ function bindUI() {
     document.getElementById('btn-tool-angle').classList.add('active');
     document.getElementById('canvas-container').style.cursor = 'crosshair';
     renderMeasurementListUI();
+    updateToolsDropdownActiveState();
   });
 
   document.getElementById('btn-tool-clipping').addEventListener('click', (e) => {
@@ -1583,7 +1593,8 @@ function bindUI() {
     document.getElementById('clipping-panel').classList.remove('hidden');
     document.getElementById('btn-tool-clipping').classList.add('active');
     document.getElementById('tools-dropdown').classList.add('hidden');
-    setClippingActive(true);
+    // Always force turn On when opening the tool panel
+    setClippingToggle(true);
   });
 
   document.getElementById('btn-tool-find').addEventListener('click', (e) => {
@@ -1592,6 +1603,7 @@ function bindUI() {
     document.getElementById('find-panel').classList.remove('hidden');
     document.getElementById('btn-tool-find').classList.add('active');
     document.getElementById('tools-dropdown').classList.add('hidden');
+    updateToolsDropdownActiveState();
   });
 
   // Color Adjustment moved to Settings panel — no floating popup anymore
@@ -1615,12 +1627,17 @@ function bindUI() {
   };
   setupSafeClose('btn-close-clipping', () => {
     document.getElementById('clipping-panel').classList.add('hidden');
-    document.getElementById('btn-tool-clipping').classList.remove('active');
-    setClippingActive(false);
+    document.getElementById('btn-tool-clipping').classList.toggle('active', !!S.clippingToggleOn);
+    // Only deactivate helper if clipping is Off (keep visible if On)
+    if (!S.clippingToggleOn) {
+      deactivateClippingHelper();
+    }
+    updateToolsDropdownActiveState();
   });
   setupSafeClose('btn-close-find', () => {
     document.getElementById('find-panel').classList.add('hidden');
     document.getElementById('btn-tool-find').classList.remove('active');
+    updateToolsDropdownActiveState();
   });
   setupSafeClose('btn-close-measurements', () => {
     deactivateAllTools();
@@ -1653,6 +1670,7 @@ function bindUI() {
     S.distanceToolState = { points: [], spheres: [] };
     document.getElementById('canvas-container').style.cursor = 'crosshair';
     renderMeasurementListUI();
+    updateToolsDropdownActiveState();
   });
   document.getElementById('btn-measure-tab-angle')?.addEventListener('click', () => {
     if (S.angleToolState) return;
@@ -1660,6 +1678,7 @@ function bindUI() {
     S.angleToolState = { points: [], spheres: [] };
     document.getElementById('canvas-container').style.cursor = 'crosshair';
     renderMeasurementListUI();
+    updateToolsDropdownActiveState();
   });
   setupSafeClose('btn-close-props', () => {
     document.getElementById('object-properties').classList.add('hidden');
@@ -1753,32 +1772,79 @@ function bindUI() {
   });
 
   // ── 8. Clipping plane ──
+  function deactivateClippingHelper() {
+    if (S.clippingTransformControls) {
+      S.clippingTransformControls.detach();
+      S.clippingTransformControls.getHelper().visible = false;
+    }
+    // Clean up arc handles from overlay scene
+    S.clippingArcHandles.forEach(h => {
+      S.arcOverlayScene?.remove(h.mesh);
+      S.arcOverlayScene?.remove(h.hitMesh);
+      if (h.mesh.geometry) h.mesh.geometry.dispose();
+      if (h.mesh.material) h.mesh.material.dispose();
+      if (h.hitMesh.geometry) h.hitMesh.geometry.dispose();
+      if (h.hitMesh.material) h.hitMesh.material.dispose();
+    });
+    if (S.clippingHelper) {
+      S.arcOverlayScene?.remove(S.clippingHelper);
+      S.clippingHelper = null;
+    }
+    S.clippingArcHandles = [];
+    S.clippingArcDrag = null;
+  }
+  window.deactivateClippingHelper = deactivateClippingHelper;
+
+  function updateToolsDropdownActiveState() {
+    const isDistanceActive = S.distanceToolState !== null && S.distanceToolState !== undefined;
+    const isAngleActive = S.angleToolState !== null && S.angleToolState !== undefined;
+    const isFindActive = !document.getElementById('find-panel')?.classList.contains('hidden');
+    const isClippingActive = !!S.clippingToggleOn;
+
+    const anyActive = isDistanceActive || isAngleActive || isFindActive || isClippingActive;
+    document.getElementById('btn-tools-dropdown')?.classList.toggle('active', anyActive);
+    document.getElementById('btn-tool-clipping')?.classList.toggle('active', isClippingActive);
+  }
+  window.updateToolsDropdownActiveState = updateToolsDropdownActiveState;
+
+  function setClippingToggle(on) {
+    S.clippingToggleOn = on;
+    const toggleBtn = document.getElementById('btn-clip-toggle');
+    if (toggleBtn) {
+      toggleBtn.classList.toggle('active', on);
+      toggleBtn.textContent = on ? t('clip.on') : t('clip.off');
+    }
+
+    S.renderer.clippingPlanes = on ? [S.clippingPlane] : [];
+    S.clippingEnabled = on;
+
+    if (on) {
+      if (!S.clippingHasBeenInitialized) {
+        updateClippingPlane();
+        S.clippingHasBeenInitialized = true;
+      }
+      const panelVisible = !document.getElementById('clipping-panel').classList.contains('hidden');
+      if (panelVisible) {
+        setupClippingHelper();
+      }
+    } else {
+      deactivateClippingHelper();
+    }
+    updateToolsDropdownActiveState();
+  }
+  window.setClippingToggle = setClippingToggle;
+
   function setClippingActive(active) {
     S.clippingEnabled = active;
     S.renderer.clippingPlanes = active ? [S.clippingPlane] : [];
     if (active) {
-      updateClippingPlane();
+      if (!S.clippingHasBeenInitialized) {
+        updateClippingPlane();
+        S.clippingHasBeenInitialized = true;
+      }
       setupClippingHelper();
     } else {
-      if (S.clippingTransformControls) {
-        S.clippingTransformControls.detach();
-        S.clippingTransformControls.getHelper().visible = false;
-      }
-      // Clean up arc handles from overlay scene
-      S.clippingArcHandles.forEach(h => {
-        S.arcOverlayScene?.remove(h.mesh);
-        S.arcOverlayScene?.remove(h.hitMesh);
-        h.mesh.geometry.dispose();
-        h.mesh.material.dispose();
-        h.hitMesh.geometry.dispose();
-        h.hitMesh.material.dispose();
-      });
-      if (S.clippingHelper) {
-        S.arcOverlayScene?.remove(S.clippingHelper);
-        S.clippingHelper = null;
-      }
-      S.clippingArcHandles = [];
-      S.clippingArcDrag = null;
+      deactivateClippingHelper();
     }
   }
   window.setClippingActive = setClippingActive;
@@ -1879,7 +1945,17 @@ function bindUI() {
       S.clippingTransformControls.attach(S.clippingHelper);
       S.clippingTransformControls.getHelper().visible = true;
     }
+
+    // Save actual pose in state
+    if (!S.clippingPosition) S.clippingPosition = new THREE.Vector3();
+    S.clippingPosition.copy(S.clippingHelper.position);
+    if (!S.clippingQuaternion) S.clippingQuaternion = new THREE.Quaternion();
+    S.clippingQuaternion.copy(S.clippingHelper.quaternion);
   };
+
+  document.getElementById('btn-clip-toggle')?.addEventListener('click', () => {
+    setClippingToggle(!S.clippingToggleOn);
+  });
 
   document.querySelectorAll('.clip-axis-btn[data-axis]').forEach(btn => {
     btn.addEventListener('click', () => { S.clipAxis = btn.dataset.axis; applyClipAxisUI(); });
@@ -1893,19 +1969,28 @@ function bindUI() {
       S.clippingPlane.normal.negate();
       // Recalculate constant to keep the plane at the exact same position
       S.clippingPlane.constant = -S.clippingPlane.normal.dot(S.clippingHelper.position);
+
+      // Save pose!
+      if (!S.clippingPosition) S.clippingPosition = new THREE.Vector3();
+      S.clippingPosition.copy(S.clippingHelper.position);
+      if (!S.clippingQuaternion) S.clippingQuaternion = new THREE.Quaternion();
+      S.clippingQuaternion.copy(S.clippingHelper.quaternion);
     } else {
       applyClipAxisUI();
     }
   });
 
   document.getElementById('btn-clip-reset')?.addEventListener('click', () => {
-    // 1. Completely deactivate clipping to destroy all helpers and controls cleanly
-    setClippingActive(false);
+    // 1. Reset toggle state to true
+    setClippingToggle(true);
 
     // 2. Reset all state variables
     S.clipAxis = 'z';
     S.clipFlipped = false;
     S.clippingBaseQuaternion = null;
+    S.clippingHasBeenInitialized = false;
+    S.clippingPosition = null;
+    S.clippingQuaternion = null;
 
     // 3. Reset dataset rotations to Z-axis world default
     const cp = document.getElementById('clipping-panel');
