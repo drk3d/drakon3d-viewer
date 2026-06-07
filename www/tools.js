@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { S } from './state.js';
 import { t } from './i18n.js';
+import { History } from './history.js';
 
 // ── Tool deactivation ─────────────────────────────────────────────────────────
 
@@ -94,7 +95,27 @@ export function deactivateAllTools() {
 
 // ── Measurements ──────────────────────────────────────────────────────────────
 
+export function serializeMeasurements() {
+  return S.completedMeasurements.map(m => {
+    const saved = {
+      id:   m.id,
+      type: m.type || 'distance',
+      p1:   [m.p1.x, m.p1.y, m.p1.z],
+      p2:   [m.p2.x, m.p2.y, m.p2.z]
+    };
+    if (m.type === 'angle') {
+      saved.center = [m.center.x, m.center.y, m.center.z];
+      saved.angle = m.angle;
+    } else {
+      saved.dist = m.dist;
+    }
+    return saved;
+  });
+}
+
 export function clearMeasurements() {
+  const beforeState = serializeMeasurements();
+
   while (S.measurementGroup.children.length > 0) {
     const child = S.measurementGroup.children[0];
     if (child.geometry) child.geometry.dispose();
@@ -106,6 +127,14 @@ export function clearMeasurements() {
   }
   S.completedMeasurements = [];
   renderMeasurementListUI();
+
+  if (!History.suppress) {
+    History.push({
+      type: 'measurements',
+      before: beforeState,
+      after: []
+    });
+  }
 }
 
 export function cancelCurrentInProgressMeasurement() {
@@ -146,6 +175,8 @@ export function cancelCurrentInProgressMeasurement() {
 }
 
 export function deleteMeasurement(id) {
+  const beforeState = serializeMeasurements();
+
   const idx = S.completedMeasurements.findIndex(m => m.id === id);
   if (idx === -1) return;
   const m = S.completedMeasurements[idx];
@@ -159,6 +190,14 @@ export function deleteMeasurement(id) {
   });
   S.completedMeasurements.splice(idx, 1);
   renderMeasurementListUI();
+
+  if (!History.suppress) {
+    History.push({
+      type: 'measurements',
+      before: beforeState,
+      after: serializeMeasurements()
+    });
+  }
 }
 
 export function syncMeasurementTabsUI() {
@@ -715,6 +754,8 @@ export function onCanvasClick(event) {
       const billboard = makeMeasurementBillboard(`${dist.toFixed(2)} mm`, p1.clone().add(p2).multiplyScalar(0.5));
       S.measurementGroup.add(billboard);
 
+      const beforeState = serializeMeasurements();
+
       S.completedMeasurements.push({
         id: Date.now(),
         type: 'distance',
@@ -727,6 +768,14 @@ export function onCanvasClick(event) {
       S.distanceToolState.tempLine = null;
       S.distanceToolState.tempBillboard = null;
       renderMeasurementListUI();
+
+      if (!History.suppress) {
+        History.push({
+          type: 'measurements',
+          before: beforeState,
+          after: serializeMeasurements()
+        });
+      }
     }
   } else if (S.angleToolState) {
     // --- Angle Tool Logic ---
@@ -822,6 +871,8 @@ export function onCanvasClick(event) {
       if (arcLine) mObjects.push(arcLine);
       if (billboard) mObjects.push(billboard);
 
+      const beforeState = serializeMeasurements();
+
       S.completedMeasurements.push({
         id: Date.now(),
         type: 'angle',
@@ -838,6 +889,14 @@ export function onCanvasClick(event) {
       S.angleToolState.tempArc = null;
       S.angleToolState.tempBillboard = null;
       renderMeasurementListUI();
+
+      if (!History.suppress) {
+        History.push({
+          type: 'measurements',
+          before: beforeState,
+          after: serializeMeasurements()
+        });
+      }
     }
   }
 }

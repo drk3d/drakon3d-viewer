@@ -104,6 +104,11 @@ class HistoryManager {
         import('./app.js').then(app => {
           app.changeDisplayMode(mode);
         });
+      } else if (action.type === 'measurements') {
+        const state = (key === 'before') ? action.before : action.after;
+        import('./tools.js').then(tools => {
+          tools.reconstructMeasurements(state);
+        });
       } else if (action.targets) {
         const states = action[key];
         action.targets.forEach((obj, idx) => {
