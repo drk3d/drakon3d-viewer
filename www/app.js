@@ -904,10 +904,24 @@ function bindUI() {
     S.scene.background = origBackground;
     if (transparent) S.renderer.setClearColor(0x000000, 0);
 
-    const a = document.createElement('a');
-    a.href = dataURL;
-    a.download = (S.currentFileName || 'capture') + '.png';
-    a.click();
+    const fileName = (S.currentFileName || 'capture') + '.png';
+    if (window.Capacitor && window.Capacitor.isPluginAvailable('FileOpener')) {
+      window.Capacitor.Plugins.FileOpener.saveFile({
+        base64Data: dataURL,
+        fileName: fileName,
+        mimeType: 'image/png'
+      }).then(() => {
+        alert('Capture saved to Downloads folder!');
+      }).catch(err => {
+        console.error('[Capacitor Capture] Save failed:', err);
+        alert('Failed to save capture: ' + err);
+      });
+    } else {
+      const a = document.createElement('a');
+      a.href = dataURL;
+      a.download = fileName;
+      a.click();
+    }
     document.getElementById('capture-dialog').classList.add('hidden');
   });
 
@@ -2774,12 +2788,33 @@ function exportGLB() {
     (gltf) => {
       toHide.forEach(c => { c.visible = true; });
       const blob = new Blob([gltf], { type: 'application/octet-stream' });
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      a.href = url;
-      a.download = (S.currentFileName?.replace(/\.[^.]+$/, '') || 'model') + '.glb';
-      a.click();
-      URL.revokeObjectURL(url);
+      const fileName = (S.currentFileName?.replace(/\.[^.]+$/, '') || 'model') + '.glb';
+
+      if (window.Capacitor && window.Capacitor.isPluginAvailable('FileOpener')) {
+        const reader = new FileReader();
+        reader.readAsDataURL(blob);
+        reader.onloadend = async () => {
+          const base64Data = reader.result;
+          try {
+            await window.Capacitor.Plugins.FileOpener.saveFile({
+              base64Data: base64Data,
+              fileName: fileName,
+              mimeType: 'application/octet-stream'
+            });
+            alert('GLB saved to Downloads folder!');
+          } catch (err) {
+            console.error('[Capacitor GLB] Export failed:', err);
+            alert('Failed to save GLB: ' + err);
+          }
+        };
+      } else {
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
     },
     (err) => {
       toHide.forEach(c => { c.visible = true; });

@@ -1713,6 +1713,16 @@ export function postProcessModel(model, addEdgesFlag, colorsAreSRGBStoredAsLinea
         if (mat.emissive && colorsAreSRGBStoredAsLinear) {
           mat.emissive.convertSRGBToLinear();
         }
+        // Fix texture color spaces for 3DM loading path
+        if (colorsAreSRGBStoredAsLinear) {
+          const colorMaps = ['map', 'emissiveMap', 'sheenColorMap', 'specularColorMap'];
+          colorMaps.forEach(mapName => {
+            if (mat[mapName] && mat[mapName].colorSpace !== THREE.SRGBColorSpace) {
+              mat[mapName].colorSpace = THREE.SRGBColorSpace;
+              mat[mapName].needsUpdate = true;
+            }
+          });
+        }
       }
     }
     if (child.material?.color) child.userData.materialColor = child.material.color.clone();

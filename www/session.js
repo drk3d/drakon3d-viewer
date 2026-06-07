@@ -259,13 +259,34 @@ export async function saveSession(customFileName = null) {
           });
 
           const blob = new Blob([finalBuffer], { type: 'application/octet-stream' });
-          const a = document.createElement('a');
-          a.href = URL.createObjectURL(blob);
           let finalName = customFileName || S.currentFileName || 'scene';
           if (finalName.toLowerCase().endsWith('.rhv')) finalName = finalName.slice(0, -4);
-          a.download = finalName + '.rhv';
-          a.click();
-          URL.revokeObjectURL(a.href);
+          const fullFileName = finalName + '.rhv';
+
+          if (window.Capacitor && window.Capacitor.isPluginAvailable('FileOpener')) {
+            const reader = new FileReader();
+            reader.readAsDataURL(blob);
+            reader.onloadend = async () => {
+              const base64Data = reader.result;
+              try {
+                await window.Capacitor.Plugins.FileOpener.saveFile({
+                  base64Data: base64Data,
+                  fileName: fullFileName,
+                  mimeType: 'application/octet-stream'
+                });
+                alert('Session saved to Downloads folder!');
+              } catch (err) {
+                console.error('[Capacitor Save] Failed to save session:', err);
+                alert('Failed to save session: ' + err);
+              }
+            };
+          } else {
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = fullFileName;
+            a.click();
+            URL.revokeObjectURL(a.href);
+          }
 
           if (customFileName) {
             const { setFileName } = await import('./helpers.js');
