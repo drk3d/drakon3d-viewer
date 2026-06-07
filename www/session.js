@@ -103,6 +103,8 @@ export async function saveSession(customFileName = null) {
       clippingRotY:       parseFloat(document.getElementById('clipping-panel')?.dataset.rotY ?? 180),
       clippingMode:       document.querySelector('.clip-axis-btn[data-clip-mode].active')?.dataset.clipMode ?? 'translate',
       clippingAxis:       document.querySelector('.clip-axis-btn[data-axis].active')?.dataset.axis ?? 'z',
+      clippingPosition:   S.clippingPosition ? S.clippingPosition.toArray() : null,
+      clippingQuaternion: S.clippingQuaternion ? S.clippingQuaternion.toArray() : null,
 
       colorGrading: {
         exposure:    parseFloat(document.getElementById('cg-exposure')?.value    ?? 0),
@@ -568,6 +570,18 @@ export async function loadSession(file) {
           document.querySelectorAll('.clip-axis-btn[data-axis]').forEach(b => {
             b.classList.toggle('active', b.dataset.axis === s.clippingAxis);
           });
+        }
+
+        // Restore manual position and rotation
+        if (s.clippingPosition) {
+          S.clippingPosition = new THREE.Vector3().fromArray(s.clippingPosition);
+        } else {
+          S.clippingPosition = null;
+        }
+        if (s.clippingQuaternion) {
+          S.clippingQuaternion = new THREE.Quaternion().fromArray(s.clippingQuaternion);
+        } else {
+          S.clippingQuaternion = null;
         }
         
         const { updateClippingPlane, setupClippingHelper } = await import('./tools.js');

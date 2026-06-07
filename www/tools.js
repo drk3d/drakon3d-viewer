@@ -846,6 +846,16 @@ export function onCanvasClick(event) {
 
 export function updateClippingPlane() {
   if (!S.currentModel) return;
+
+  if (S.clippingPosition && S.clippingQuaternion) {
+    const normal = new THREE.Vector3(0, 0, 1).applyQuaternion(S.clippingQuaternion).normalize();
+    if (S.clipFlipped) normal.negate();
+    S.clippingPlane.normal.copy(normal);
+    S.clippingPlane.constant = -normal.dot(S.clippingPosition);
+    updateClippingHelperPose();
+    return;
+  }
+
   const height = parseFloat(document.getElementById('clip-height')?.value ?? 0);
   const cp     = document.getElementById('clipping-panel');
   const rotXDeg = parseFloat(cp?.dataset.rotX ?? document.getElementById('clip-rot-x')?.value ?? 0);
