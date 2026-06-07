@@ -75,7 +75,13 @@ export async function saveSession(customFileName = null) {
       sunIntensity:       parseFloat(document.getElementById('sl-sun-intensity')?.value ?? 1.8),
       ambientIntensity:   parseFloat(document.getElementById('sl-ambient-panel')?.value ?? 0.4),
       aoIntensity:        parseFloat(document.getElementById('sl-ao-intensity')?.value ?? 0.40),
-      cameraFov:          parseFloat(document.getElementById('sl-camera-fov')?.value ?? 45),
+      cameraLens:         parseFloat(document.getElementById('sl-camera-fov')?.value ?? 50),
+      cameraFov:          (() => {
+        const lens = parseFloat(document.getElementById('sl-camera-fov')?.value ?? 50);
+        const aspect = window.innerWidth / window.innerHeight;
+        const vFovRad = 2 * Math.atan(18 / (aspect * lens));
+        return (vFovRad * 180) / Math.PI;
+      })(),
       dampingFactor:      parseFloat(document.getElementById('sl-damping-panel')?.value ?? 0.5),
       envIntensity:       parseFloat(document.getElementById('sl-env-intensity')?.value ?? 1.00),
       measurementScale:   parseFloat(document.getElementById('sl-measure-scale')?.value ?? 1.0),
@@ -465,6 +471,7 @@ export async function loadSession(file) {
           if (valEl) {
             if (formatType === 'percent') valEl.textContent = Math.round(val * 100) + '%';
             else if (formatType === 'degree') valEl.textContent = Math.round(val) + '°';
+            else if (formatType === 'mm') valEl.textContent = Math.round(val) + 'mm';
             else if (formatType === 'xScale') valEl.textContent = parseFloat(val).toFixed(1) + 'x';
             else valEl.textContent = parseFloat(val).toFixed(2);
           }
@@ -495,7 +502,14 @@ export async function loadSession(file) {
       setSlider('sl-sun-intensity', 'sl-sun-intensity-val', s.sunIntensity ?? 1.8, 'float');
       setSlider('sl-sun-azimuth',   'sl-sun-azimuth-val', s.sunAzimuth,       'degree');
       setSlider('sl-sun-elevation', 'sl-sun-elevation-val', s.sunElevation,   'degree');
-      setSlider('sl-camera-fov',    'sl-camera-fov-val',  s.cameraFov,        'degree');
+      if (s.cameraLens !== undefined) {
+        setSlider('sl-camera-fov',    'sl-camera-fov-val',  s.cameraLens,       'mm');
+      } else if (s.cameraFov !== undefined) {
+        const aspect = window.innerWidth / window.innerHeight;
+        const vFovRad = (s.cameraFov * Math.PI) / 360;
+        const lens = 18 / (aspect * Math.tan(vFovRad));
+        setSlider('sl-camera-fov',    'sl-camera-fov-val',  Math.round(lens),   'mm');
+      }
       setSlider('sl-damping-panel', 'sl-damping-val',     s.dampingFactor,    'float');
 
       if (s.edgeThresholdAngle !== undefined) {
@@ -791,6 +805,7 @@ export function resetSettingsToDefault() {
       if (valEl) {
         if (formatType === 'percent') valEl.textContent = Math.round(val * 100) + '%';
         else if (formatType === 'degree') valEl.textContent = Math.round(val) + '°';
+        else if (formatType === 'mm') valEl.textContent = Math.round(val) + 'mm';
         else if (formatType === 'xScale') valEl.textContent = parseFloat(val).toFixed(1) + 'x';
         else valEl.textContent = parseFloat(val).toFixed(2);
       }
@@ -806,7 +821,7 @@ export function resetSettingsToDefault() {
   resetSlider('sl-sun-intensity', 'sl-sun-intensity-val', 1.8,  'float');
   resetSlider('sl-sun-azimuth',   'sl-sun-azimuth-val',   135,  'degree');
   resetSlider('sl-sun-elevation', 'sl-sun-elevation-val', 45,   'degree');
-  resetSlider('sl-camera-fov',    'sl-camera-fov-val',    45,   'degree');
+  resetSlider('sl-camera-fov',    'sl-camera-fov-val',    50,   'mm');
   resetSlider('sl-damping-panel', 'sl-damping-val',       0.5,  'float');
   resetSlider('bg-radial-spread', 'bg-radial-spread-val', 0.5,  'percent');
   resetSlider('sl-edge-angle',    'sl-edge-angle-val',    30,   'degree');

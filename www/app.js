@@ -2314,28 +2314,16 @@ function bindUI() {
     });
   }
 
-  // ── Camera FOV ──
+  // ── Camera Lens Length ──
   const fovSlider = document.getElementById('sl-camera-fov');
   const fovValEl  = document.getElementById('sl-camera-fov-val');
 
-  function updateFovLabel() {
-    if (!fovSlider || !fovValEl) return;
-    const fov = parseInt(fovSlider.value);
-    const aspect = window.innerWidth / window.innerHeight;
-    const vFovRad = (fov * Math.PI) / 360;
-    const lens = 18 / (aspect * Math.tan(vFovRad));
-    fovValEl.textContent = `${fov}° (${Math.round(lens)}mm)`;
-  }
-
   if (fovSlider) {
     fovSlider.addEventListener('input', () => {
-      const fov = parseInt(fovSlider.value);
-      S.perspCamera.fov = fov;
-      S.perspCamera.updateProjectionMatrix();
-      updateFovLabel();
+      updateLensCamera();
       updateSliderFill(fovSlider);
     });
-    bindSliderDblClickInput(fovSlider, fovValEl, '°');
+    bindSliderDblClickInput(fovSlider, fovValEl, 'mm');
   }
 
   // ── Language ──
@@ -2683,6 +2671,24 @@ function updateBottomBarLocalContrast() {
 }
 
 // ── Window resize ──────────────────────────────────────────────────────────
+export function updateLensCamera() {
+  const fovSlider = document.getElementById('sl-camera-fov');
+  const fovValEl  = document.getElementById('sl-camera-fov-val');
+  if (!fovSlider) return;
+  const lens = parseFloat(fovSlider.value);
+  if (fovValEl) fovValEl.textContent = Math.round(lens) + 'mm';
+  
+  const aspect = window.innerWidth / window.innerHeight;
+  const vFovRad = 2 * Math.atan(18 / (aspect * lens));
+  const fov = (vFovRad * 180) / Math.PI;
+  
+  if (S.perspCamera) {
+    S.perspCamera.fov = fov;
+    S.perspCamera.updateProjectionMatrix();
+  }
+}
+
+// ── Window resize ──────────────────────────────────────────────────────────
 function onWindowResize() {
   const aspect = window.innerWidth / window.innerHeight;
   S.perspCamera.aspect = aspect;
@@ -2695,16 +2701,9 @@ function onWindowResize() {
   }
   S.renderer.setSize(window.innerWidth, window.innerHeight);
   S.composer.setSize(window.innerWidth, window.innerHeight);
-  // Update Lens Length display in settings panel on window resize
+  // Recalculate camera FOV from constant Lens Length on window resize
   try {
-    const fovSlider = document.getElementById('sl-camera-fov');
-    const fovValEl  = document.getElementById('sl-camera-fov-val');
-    if (fovSlider && fovValEl) {
-      const fov = parseInt(fovSlider.value);
-      const vFovRad = (fov * Math.PI) / 360;
-      const lens = 18 / (aspect * Math.tan(vFovRad));
-      fovValEl.textContent = `${fov}° (${Math.round(lens)}mm)`;
-    }
+    updateLensCamera();
   } catch (err) {}
 }
 

@@ -174,7 +174,7 @@ export const TRANSLATIONS = {
     'camera.projection':     'Projection',
     'camera.proj_persp':     'Perspective',
     'camera.proj_ortho':     'Parallel',
-    'camera.fov':            'FOV',
+    'camera.fov':            'Lens Length',
     'camera.friction':       'Friction',
 
     'theme.label':           'Theme',
@@ -355,7 +355,7 @@ export const TRANSLATIONS = {
     'camera.projection':     '투영',
     'camera.proj_persp':     '투시',
     'camera.proj_ortho':     '평행',
-    'camera.fov':            '시야각',
+    'camera.fov':            '렌즈 길이',
     'camera.friction':       '마찰',
 
     'theme.label':           '테마',
@@ -515,7 +515,7 @@ export const TRANSLATIONS = {
     'capture.save':       'Enregistrer l\'image',
 
     'camera.title':       'Caméra',
-    'camera.fov':         'Champ de vision',
+    'camera.fov':         'Longueur focale',
     'camera.friction':    'Friction',
     'camera.projection':  'Projection',
     'camera.proj_persp':  'Perspective',
@@ -678,7 +678,7 @@ export const TRANSLATIONS = {
     'capture.save':       'Bild speichern',
 
     'camera.title':       'Kamera',
-    'camera.fov':         'Sichtfeld',
+    'camera.fov':         'Brennweite',
     'camera.friction':    'Reibung',
     'camera.projection':  'Projektion',
     'camera.proj_persp':  'Perspektive',
@@ -841,7 +841,7 @@ export const TRANSLATIONS = {
     'capture.save':       'Guardar imagen',
 
     'camera.title':       'Cámara',
-    'camera.fov':         'Campo de visión',
+    'camera.fov':         'Longitud focal',
     'camera.friction':    'Fricción',
     'camera.projection':  'Proyección',
     'camera.proj_persp':  'Perspectiva',
@@ -1004,7 +1004,7 @@ export const TRANSLATIONS = {
     'capture.save':       'Salva immagine',
 
     'camera.title':       'Fotocamera',
-    'camera.fov':         'Campo visivo',
+    'camera.fov':         'Lunghezza focale',
     'camera.friction':    'Attrito',
     'camera.projection':  'Proiezione',
     'camera.proj_persp':  'Prospettiva',
@@ -1167,7 +1167,7 @@ export const TRANSLATIONS = {
     'capture.save':       '画像を保存',
 
     'camera.title':       'カメラ',
-    'camera.fov':         '視野角',
+    'camera.fov':         'レンズの長さ',
     'camera.friction':    '摩擦',
     'camera.projection':  '投影',
     'camera.proj_persp':  'パースペクティブ',
@@ -1330,7 +1330,7 @@ export const TRANSLATIONS = {
     'capture.save':       '保存图像',
 
     'camera.title':       '摄像机',
-    'camera.fov':         '视野角',
+    'camera.fov':         '镜头长度',
     'camera.friction':    '摩擦力',
     'camera.projection':  '投影',
     'camera.proj_persp':  '透视',
@@ -1493,7 +1493,7 @@ export const TRANSLATIONS = {
     'capture.save':       '儲存圖像',
 
     'camera.title':       '攝影機',
-    'camera.fov':         '視野角',
+    'camera.fov':         '鏡頭長度',
     'camera.friction':    '摩擦力',
     'camera.projection':  '投影',
     'camera.proj_persp':  '透視',
@@ -1656,7 +1656,7 @@ export const TRANSLATIONS = {
     'capture.save':       'Salvar imagem',
 
     'camera.title':       'Câmera',
-    'camera.fov':         'Campo de visão',
+    'camera.fov':         'Comprimento focal',
     'camera.friction':    'Fricção',
     'camera.projection':  'Projeção',
     'camera.proj_persp':  'Perspectiva',
@@ -1819,7 +1819,7 @@ export const TRANSLATIONS = {
     'capture.save':       'Uložit obrázek',
 
     'camera.title':       'Kamera',
-    'camera.fov':         'Zorné pole',
+    'camera.fov':         'Ohnisková vzdialenosť',
     'camera.friction':    'Tření',
     'camera.projection':  'Projekce',
     'camera.proj_persp':  'Perspektiva',
@@ -1982,7 +1982,7 @@ export const TRANSLATIONS = {
     'capture.save':       'Zapisz obraz',
 
     'camera.title':       'Kamera',
-    'camera.fov':         'Pole widzenia',
+    'camera.fov':         'Ogniskowa',
     'camera.friction':    'Tarcie',
     'camera.projection':  'Rzut',
     'camera.proj_persp':  'Perspektywa',
