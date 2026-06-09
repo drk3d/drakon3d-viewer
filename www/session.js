@@ -49,6 +49,160 @@ export function getObjectKey(obj) {
 // and the only step actually saving bytes on the GLB binary right now.
 // Real geometry compression will require a proper bundled Draco WASM build.)
 
+// ── Texture re-encoding for GLB export ──────────────────────────────────────
+// GLTFExporter encodes images based on tex.image.src MIME prefix. rhino3dm's
+// 3DM loader hands us textures whose src says "data:image/png;base64,..." but
+// whose actual bytes are JPEG (/9j/...). Result: a small JPEG gets DECODED
+// then RE-ENCODED as a much larger PNG. For the Sample-Small-House model the
+// 7 baseColor textures balloon from ~1.4 MB (JPEG) to ~12 MB (PNG).
+//
+// Policy:
+//   • Normal maps          → PNG (lossless; JPEG would warp surface detail)
+//   • Has alpha             → WebP 80% lossy (small + alpha preserved)
+//   • Everything else       → JPEG 80% (best size/compatibility for opaque)
+//
+// We mutate tex.image temporarily for export and restore originals after.
+
+// Slots whose pixel data encodes per-pixel surface direction. JPEG would
+// distort the vector; PNG keeps them lossless.
+//   • normalMap, clearcoatNormalMap — explicit RGB normal vectors
+// bumpMap is INTENTIONALLY NOT in this set: it's a single-channel height/
+// intensity field that JPEG handles fine at high quality and the savings
+// are large (often 70-80% of total texture bytes).
+const NORMAL_MAP_SLOTS = new Set(['normalMap', 'clearcoatNormalMap']);
+// High-quality JPEG for height/bump (intensity field — tolerant of mild
+// compression but visible at low quality).
+const BUMP_MAP_SLOTS   = new Set(['bumpMap']);
+
+function loadImageFromDataUrl(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload  = () => resolve(img);
+    img.onerror = () => reject(new Error('Failed to load re-encoded texture'));
+    img.src = dataUrl;
+  });
+}
+
+function imageHasAlpha(canvas) {
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  // Sample alpha channel — early exit at first translucent pixel. For very
+  // large textures we stride to keep the scan ~1ms.
+  const total  = data.length / 4;
+  const stride = total > 65536 ? Math.ceil(total / 65536) : 1;
+  for (let i = 3; i < data.length; i += 4 * stride) {
+    if (data[i] < 255) return true;
+  }
+  return false;
+}
+
+/**
+ * Walk the model's materials and tag each texture with the preferred mime type.
+ * GLTFExporter reads texture.userData.mimeType when encoding the binary image.
+ *
+ *   • Normal/bump maps → image/png  (lossless; JPEG would distort surface)
+ *   • Has alpha channel → image/webp (lossy with alpha)
+ *   • Everything else  → image/jpeg (smallest for opaque colour data)
+ *
+ * Returns a Map<Texture, originalMimeType> that must be passed to
+ * restoreTextureMimeTypes() after export.
+ *
+ * NOTE: an older revision of this helper swapped tex.image with a re-encoded
+ * HTMLImageElement; that did NOTHING because the GLTFExporter draws the
+ * decoded bitmap to its own canvas and re-encodes via the userData.mimeType
+ * hint. Only this tag matters.
+ */
+function tagTextureMimeTypes(model) {
+  const seen   = new Map();      // tex.uuid → { tex, slot }
+  model.traverse(child => {
+    if (!child.isMesh || !child.material) return;
+    const mats = Array.isArray(child.material) ? child.material : [child.material];
+    for (const mat of mats) {
+      if (!mat) continue;
+      for (const slot of ['map', 'normalMap', 'roughnessMap', 'metalnessMap',
+                          'aoMap', 'emissiveMap', 'bumpMap', 'alphaMap',
+                          'clearcoatNormalMap']) {
+        const tex = mat[slot];
+        if (!tex?.image || seen.has(tex.uuid)) continue;
+        const img = tex.image;
+        if (!(img.width || img.naturalWidth) || !(img.height || img.naturalHeight)) continue;
+        seen.set(tex.uuid, { tex, slot });
+      }
+    }
+  });
+
+  const originals = new Map();  // tex → prior userData.mimeType (or undefined)
+  for (const { tex, slot } of seen.values()) {
+    try {
+      let mimeType;
+      if (NORMAL_MAP_SLOTS.has(slot)) {
+        // Direction-encoding maps must stay lossless.
+        mimeType = 'image/png';
+      } else if (BUMP_MAP_SLOTS.has(slot)) {
+        // Height/bump — JPEG fine. Quality is fixed by GLTFExporter (0.8) so
+        // we just pick JPEG; it'd be quality 0.9+ if we could pass it through.
+        mimeType = 'image/jpeg';
+      } else {
+        const img = tex.image;
+        const w = img.width || img.naturalWidth;
+        const h = img.height || img.naturalHeight;
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0);
+        mimeType = imageHasAlpha(canvas) ? 'image/webp' : 'image/jpeg';
+      }
+      originals.set(tex, tex.userData.mimeType);
+      tex.userData.mimeType = mimeType;
+    } catch (e) {
+      console.warn('[texture-tag] failed for one texture:', e);
+    }
+  }
+  return originals;
+}
+
+function restoreTextureMimeTypes(originals) {
+  for (const [tex, oldMime] of originals) {
+    if (oldMime === undefined) delete tex.userData.mimeType;
+    else                       tex.userData.mimeType = oldMime;
+  }
+}
+
+// Fields on Object3D.userData that get serialised into glTF node `extras` and
+// have proven to balloon the JSON chunk (Rhino raw doc dump on the root node,
+// cloned Three.js Material instances on every mesh). Stripped temporarily for
+// export — the live viewer keeps full userData.
+const ROOT_USERDATA_STRIP   = ['materials', 'layers', 'groups', 'settings',
+                                'warnings', 'objectType'];
+const MESH_USERDATA_STRIP   = ['originalMaterial', 'renderedMaterial',
+                                'shadedMaterial', 'materialColor'];
+
+function stripExportUserData(model) {
+  const restore = []; // { obj, key, value }
+  function stripFrom(obj, keys) {
+    if (!obj?.userData) return;
+    for (const k of keys) {
+      if (Object.prototype.hasOwnProperty.call(obj.userData, k)) {
+        restore.push({ obj, key: k, value: obj.userData[k] });
+        delete obj.userData[k];
+      }
+    }
+  }
+  stripFrom(model, ROOT_USERDATA_STRIP);
+  model.traverse(child => {
+    if (child === model) return;
+    stripFrom(child, MESH_USERDATA_STRIP);
+    // Some loaders also stash a copy on the root scene node — strip again
+    stripFrom(child, ROOT_USERDATA_STRIP);
+  });
+  return restore;
+}
+
+function restoreExportUserData(restore) {
+  for (const { obj, key, value } of restore) {
+    obj.userData[key] = value;
+  }
+}
+
 // ── Save session ─────────────────────────────────────────────────────────────
 
 export async function saveSession(customFileName = null) {
@@ -61,6 +215,10 @@ export async function saveSession(customFileName = null) {
   showLoading('Saving session file…');
 
   const toHide = [];
+  // Declared in outer scope so the outer catch (synchronous errors before
+  // GLTFExporter.parse fires) can also restore mutations.
+  let outerTextureMimeOriginals = new Map();
+  let outerUserDataRestore = [];
   try {
     const settings = {
       displayMode:        S.currentMode,
@@ -190,7 +348,26 @@ export async function saveSession(customFileName = null) {
       annParent.remove(annGroup);
     }
 
+    // Tag textures with target MIME type (PNG/JPEG/WebP). GLTFExporter
+    // honors texture.userData.mimeType when encoding the binary image.
+    try {
+      outerTextureMimeOriginals = tagTextureMimeTypes(S.currentModel);
+    } catch (e) {
+      console.warn('[Session Export] texture mime tagging failed, continuing:', e);
+    }
+    // Strip bulky userData (Rhino raw doc dump, cached Material clones) that
+    // would otherwise balloon the glTF JSON chunk. Restored after export so
+    // the live viewer keeps full state.
+    try {
+      outerUserDataRestore = stripExportUserData(S.currentModel);
+    } catch (e) {
+      console.warn('[Session Export] userData strip failed, continuing:', e);
+    }
+
     const restoreSessionState = () => {
+      // Restore mutations in reverse order of application.
+      restoreExportUserData(outerUserDataRestore);
+      restoreTextureMimeTypes(outerTextureMimeOriginals);
       // Restore annotations parent
       if (annGroup && annParent && !annGroup.parent) {
         annParent.add(annGroup);
@@ -318,6 +495,8 @@ export async function saveSession(customFileName = null) {
       { binary: true }
     );
   } catch (err) {
+    restoreExportUserData(outerUserDataRestore);
+    restoreTextureMimeTypes(outerTextureMimeOriginals);
     if (annGroup && annParent && !annGroup.parent) {
       annParent.add(annGroup);
     }
