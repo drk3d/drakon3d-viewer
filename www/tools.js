@@ -334,9 +334,9 @@ export function spawnAngleWidget() {
   const g   = new THREE.Group();
   g.name    = 'angle-widget-group';
   const geo = new THREE.SphereGeometry(radius, 16, 16);
-  const hCenter = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xef4444, depthTest: false, depthWrite: false }));
-  const hA      = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x10b981, depthTest: false, depthWrite: false }));
-  const hB      = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x3b82f6, depthTest: false, depthWrite: false }));
+  const hCenter = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xef4444, transparent: true, depthTest: false, depthWrite: false }));
+  const hA      = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x10b981, transparent: true, depthTest: false, depthWrite: false }));
+  const hB      = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x3b82f6, transparent: true, depthTest: false, depthWrite: false }));
 
   hCenter.position.copy(center);
   hA.position.set(center.x + size.x * 0.2, center.y, center.z);
@@ -351,7 +351,7 @@ export function spawnAngleWidget() {
   hB.scale.setScalar(scaleMult);
   g.add(hCenter, hA, hB);
 
-  const lineMat = new THREE.LineBasicMaterial({ color: 0xff6600, linewidth: 2, depthTest: false, depthWrite: false });
+  const lineMat = new THREE.LineBasicMaterial({ color: 0xff6600, linewidth: 2, transparent: true, depthTest: false, depthWrite: false });
   const lineGeo = new THREE.BufferGeometry().setFromPoints([
     hA.position, hCenter.position, hCenter.position, hB.position
   ]);
@@ -515,7 +515,7 @@ export function updateTempDistanceLine(event) {
     if (S.distanceToolState.tempLine)      S.measurementGroup.remove(S.distanceToolState.tempLine);
     if (S.distanceToolState.tempBillboard) S.measurementGroup.remove(S.distanceToolState.tempBillboard);
     const lineGeo = new THREE.BufferGeometry().setFromPoints([p1, p2]);
-    const lineMat = new THREE.LineBasicMaterial({ color: 0x10b981, linewidth: 2, depthTest: false, depthWrite: false });
+    const lineMat = new THREE.LineBasicMaterial({ color: 0x10b981, linewidth: 2, transparent: true, depthTest: false, depthWrite: false });
     const line    = new THREE.Line(lineGeo, lineMat);
     line.castShadow = false;
     line.receiveShadow = false;
@@ -592,7 +592,7 @@ export function updateTempAngleWidget(event) {
       if (S.angleToolState.tempBillboard) S.measurementGroup.remove(S.angleToolState.tempBillboard);
 
       const lineGeo = new THREE.BufferGeometry().setFromPoints([p1, p2]);
-      const lineMat = new THREE.LineBasicMaterial({ color: 0xef4444, linewidth: 2, depthTest: false, depthWrite: false });
+      const lineMat = new THREE.LineBasicMaterial({ color: 0xef4444, linewidth: 2, transparent: true, depthTest: false, depthWrite: false });
       const line = new THREE.Line(lineGeo, lineMat);
       line.castShadow = false; line.receiveShadow = false;
       S.angleToolState.tempLine = line;
@@ -608,7 +608,7 @@ export function updateTempAngleWidget(event) {
       if (S.angleToolState.tempBillboard) S.measurementGroup.remove(S.angleToolState.tempBillboard);
 
       const lineGeo = new THREE.BufferGeometry().setFromPoints([P1, C, C, P2]);
-      const lineMat = new THREE.LineBasicMaterial({ color: 0xffaa00, linewidth: 2, depthTest: false, depthWrite: false });
+      const lineMat = new THREE.LineBasicMaterial({ color: 0xffaa00, linewidth: 2, transparent: true, depthTest: false, depthWrite: false });
       const line = new THREE.LineSegments(lineGeo, lineMat);
       line.castShadow = false; line.receiveShadow = false;
       S.angleToolState.tempLine = line;
@@ -645,7 +645,7 @@ export function updateTempAngleWidget(event) {
             arcPoints.push(pt);
           }
           const arcGeo = new THREE.BufferGeometry().setFromPoints(arcPoints);
-          const arcMat = new THREE.LineBasicMaterial({ color: 0xff6600, linewidth: 2.5, depthTest: false, depthWrite: false });
+          const arcMat = new THREE.LineBasicMaterial({ color: 0xff6600, linewidth: 2.5, transparent: true, depthTest: false, depthWrite: false });
           const arcLine = new THREE.Line(arcGeo, arcMat);
           arcLine.castShadow = false; arcLine.receiveShadow = false;
           S.angleToolState.tempArc = arcLine;
@@ -727,7 +727,7 @@ export function onCanvasClick(event) {
   if (S.distanceToolState) {
     // --- Distance Tool Logic ---
     const sphereGeo = new THREE.SphereGeometry(size.length() * 0.003, 16, 16);
-    const sphere = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: 0x10b981, depthTest: false, depthWrite: false }));
+    const sphere = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: 0x10b981, transparent: true, depthTest: false, depthWrite: false }));
     sphere.castShadow = false; sphere.receiveShadow = false;
     sphere.position.copy(p);
     sphere.userData = { type: 'sphere' };
@@ -745,7 +745,7 @@ export function onCanvasClick(event) {
       if (S.distanceToolState.tempBillboard) S.measurementGroup.remove(S.distanceToolState.tempBillboard);
 
       const lineGeo = new THREE.BufferGeometry().setFromPoints([p1, p2]);
-      const lineMat = new THREE.LineBasicMaterial({ color: 0x10b981, linewidth: 2, depthTest: false, depthWrite: false });
+      const lineMat = new THREE.LineBasicMaterial({ color: 0x10b981, linewidth: 2, transparent: true, depthTest: false, depthWrite: false });
       const line = new THREE.Line(lineGeo, lineMat);
       line.castShadow = false; line.receiveShadow = false;
       S.measurementGroup.add(line);
@@ -786,7 +786,7 @@ export function onCanvasClick(event) {
     const stepColors = [0xef4444, 0x10b981, 0x3b82f6];
     const clickIdx = S.angleToolState.points.length;
     const sphereGeo = new THREE.SphereGeometry(size.length() * 0.003, 16, 16);
-    const sphere = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: stepColors[clickIdx], depthTest: false, depthWrite: false }));
+    const sphere = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: stepColors[clickIdx], transparent: true, depthTest: false, depthWrite: false }));
     sphere.castShadow = false; sphere.receiveShadow = false;
     sphere.position.copy(p);
     sphere.userData = { type: 'sphere' };
@@ -810,7 +810,7 @@ export function onCanvasClick(event) {
 
       // Create permanent lines
       const lineGeo = new THREE.BufferGeometry().setFromPoints([P1, C, C, P2]);
-      const lineMat = new THREE.LineBasicMaterial({ color: 0xffaa00, linewidth: 2, depthTest: false, depthWrite: false });
+      const lineMat = new THREE.LineBasicMaterial({ color: 0xffaa00, linewidth: 2, transparent: true, depthTest: false, depthWrite: false });
       const line = new THREE.LineSegments(lineGeo, lineMat);
       line.castShadow = false; line.receiveShadow = false;
       S.measurementGroup.add(line);
@@ -850,7 +850,7 @@ export function onCanvasClick(event) {
             arcPoints.push(pt);
           }
           const arcGeo = new THREE.BufferGeometry().setFromPoints(arcPoints);
-          const arcMat = new THREE.LineBasicMaterial({ color: 0xff6600, linewidth: 2.5, depthTest: false, depthWrite: false });
+          const arcMat = new THREE.LineBasicMaterial({ color: 0xff6600, linewidth: 2.5, transparent: true, depthTest: false, depthWrite: false });
           arcLine = new THREE.Line(arcGeo, arcMat);
           arcLine.castShadow = false; arcLine.receiveShadow = false;
           S.measurementGroup.add(arcLine);
@@ -1119,7 +1119,7 @@ export function reconstructMeasurements(measurements) {
       const stepColors = [0xef4444, 0x10b981, 0x3b82f6];
       const scaleMult = S.measurementScale !== undefined ? S.measurementScale : 1.0;
 
-      const sphereC = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: stepColors[0], depthTest: false, depthWrite: false }));
+      const sphereC = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: stepColors[0], transparent: true, depthTest: false, depthWrite: false }));
       sphereC.castShadow = false; sphereC.receiveShadow = false;
       sphereC.position.copy(C);
       sphereC.userData = { type: 'sphere' };
@@ -1141,7 +1141,7 @@ export function reconstructMeasurements(measurements) {
       S.measurementGroup.add(sphereP2);
 
       const lineGeo = new THREE.BufferGeometry().setFromPoints([P1, C, C, P2]);
-      const lineMat = new THREE.LineBasicMaterial({ color: 0xffaa00, linewidth: 2, depthTest: false, depthWrite: false });
+      const lineMat = new THREE.LineBasicMaterial({ color: 0xffaa00, linewidth: 2, transparent: true, depthTest: false, depthWrite: false });
       const line = new THREE.LineSegments(lineGeo, lineMat);
       line.castShadow = false; line.receiveShadow = false;
       S.measurementGroup.add(line);
@@ -1182,7 +1182,7 @@ export function reconstructMeasurements(measurements) {
             arcPoints.push(pt);
           }
           const arcGeo = new THREE.BufferGeometry().setFromPoints(arcPoints);
-          const arcMat = new THREE.LineBasicMaterial({ color: 0xff6600, linewidth: 2.5, depthTest: false, depthWrite: false });
+          const arcMat = new THREE.LineBasicMaterial({ color: 0xff6600, linewidth: 2.5, transparent: true, depthTest: false, depthWrite: false });
           arcLine = new THREE.Line(arcGeo, arcMat);
           arcLine.castShadow = false; arcLine.receiveShadow = false;
           S.measurementGroup.add(arcLine);
@@ -1218,7 +1218,7 @@ export function reconstructMeasurements(measurements) {
 
       const scaleMult = S.measurementScale !== undefined ? S.measurementScale : 1.0;
 
-      const sphere1 = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: 0x10b981, depthTest: false, depthWrite: false }));
+      const sphere1 = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: 0x10b981, transparent: true, depthTest: false, depthWrite: false }));
       sphere1.castShadow = false;
       sphere1.receiveShadow = false;
       sphere1.position.copy(p1);
@@ -1226,7 +1226,7 @@ export function reconstructMeasurements(measurements) {
       sphere1.scale.setScalar(scaleMult);
       S.measurementGroup.add(sphere1);
       
-      const sphere2 = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: 0x10b981, depthTest: false, depthWrite: false }));
+      const sphere2 = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: 0x10b981, transparent: true, depthTest: false, depthWrite: false }));
       sphere2.castShadow = false;
       sphere2.receiveShadow = false;
       sphere2.position.copy(p2);
@@ -1235,7 +1235,7 @@ export function reconstructMeasurements(measurements) {
       S.measurementGroup.add(sphere2);
 
       const lineGeo = new THREE.BufferGeometry().setFromPoints([p1, p2]);
-      const lineMat = new THREE.LineBasicMaterial({ color: 0x10b981, linewidth: 2, depthTest: false, depthWrite: false });
+      const lineMat = new THREE.LineBasicMaterial({ color: 0x10b981, linewidth: 2, transparent: true, depthTest: false, depthWrite: false });
       const line = new THREE.Line(lineGeo, lineMat);
       line.castShadow = false;
       line.receiveShadow = false;

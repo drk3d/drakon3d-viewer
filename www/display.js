@@ -675,14 +675,20 @@ export function recreateAllEdges(thresholdAngle) {
 
   S.scene.traverse(child => {
     if (child.isMesh && !['rhino-edges', 'rhino-outline', 'selection-outline', 'ground-plane'].includes(child.name)) {
-      // Skip if child is part of annotations
-      let isAnn = false;
+      // Skip if child is part of annotations OR the measurement group.
+      // Building EdgesGeometry on every measurement sphere on every slider
+      // change is wasteful and triggers a side effect in three.js where
+      // opaque depthTest:false meshes stop rendering after the subsequent
+      // applyDisplayMode() — see issue history.
+      let skip = false;
       let p = child.parent;
       while (p) {
-        if (p.name === 'annotations-group') { isAnn = true; break; }
+        if (p.name === 'annotations-group' || p === S.measurementGroup) {
+          skip = true; break;
+        }
         p = p.parent;
       }
-      if (isAnn) return;
+      if (skip) return;
 
       const oldEdges = child.getObjectByName('rhino-edges');
       if (oldEdges) {
