@@ -24,6 +24,9 @@ import { renderLayerUI, updateLayerVisibility } from './layers.js';
 import { createAnnotationSprites } from './annotations.js';
 import { saveSession, loadSession } from './session.js';
 import { handleFile, clearCurrentModel } from './loaders.js';
+import * as GoogleDrive from './cloud/google-drive.js';
+import * as OneDrive from './cloud/onedrive.js';
+import * as Dropbox from './cloud/dropbox.js';
 import { History } from './history.js';
 import {
   deactivateAllTools, clearMeasurements, renderMeasurementListUI,
@@ -903,6 +906,16 @@ function bindUI() {
 
   // ── 2. File tab actions ──
   document.getElementById('btn-open-panel').addEventListener('click', () => { fileInput.click(); });
+  const cloudLoaders = { rhinoLoader, gltfLoader };
+  document.getElementById('btn-open-gdrive')?.addEventListener('click', () => {
+    GoogleDrive.pickAndLoad(cloudLoaders);
+  });
+  document.getElementById('btn-open-onedrive')?.addEventListener('click', () => {
+    OneDrive.pickAndLoad(cloudLoaders);
+  });
+  document.getElementById('btn-open-dropbox')?.addEventListener('click', () => {
+    Dropbox.pickAndLoad(cloudLoaders);
+  });
   document.getElementById('btn-save-panel').addEventListener('click', () => { saveSession(); });
   document.getElementById('btn-save-as-panel')?.addEventListener('click', () => {
     if (!S.currentModel) {

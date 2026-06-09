@@ -2399,6 +2399,11 @@ body.light-theme .metadata-table td.meta-label {
 
 /* ── Layer Material Dialog ──────────────────────────────────────────────── */
 #layer-material-dialog .lmd-card {
+  position: fixed;
+  /* Default center; JS may overwrite with explicit pixel coords on drag */
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   background: var(--surface, #1e1f24);
   border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
   border-radius: 14px;
@@ -2410,12 +2415,21 @@ body.light-theme .metadata-table td.meta-label {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  /* Re-enable interaction (outer overlay has pointer-events:none for click-through) */
+  pointer-events: auto;
 }
 #layer-material-dialog .lmd-header {
   display: flex;
   align-items: center;
   gap: 10px;
+  cursor: grab;
+  user-select: none;
 }
+#layer-material-dialog .lmd-header:active { cursor: grabbing; }
+/* Buttons inside the header keep their normal pointer (no grab) */
+#layer-material-dialog .lmd-header button,
+#layer-material-dialog .lmd-header input,
+#layer-material-dialog .lmd-header .lmd-close { cursor: pointer; }
 #layer-material-dialog .lmd-sphere {
   width: 36px;
   height: 36px;
@@ -2856,5 +2870,136 @@ body.light-theme .color-circle {
   color: #ffffff !important;
 }
 
-
+/* ── Cloud File Browser Modal (used by OneDrive picker) ───────────────── */
+.cloud-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+}
+.cloud-modal {
+  width: min(560px, 92vw);
+  max-height: 80vh;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.cloud-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.cloud-modal-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+.cloud-modal-close {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: var(--r-sm);
+}
+.cloud-modal-close:hover { background: var(--surface-hi); color: var(--text); }
+.cloud-breadcrumb {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-2);
+}
+.cloud-crumb {
+  background: transparent;
+  border: none;
+  color: var(--text-2);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: inherit;
+}
+.cloud-crumb:hover { color: var(--primary); background: var(--surface-hi); }
+.cloud-crumb:last-child { color: var(--text); font-weight: 500; }
+.cloud-crumb-sep { color: var(--text-3); font-size: 13px; }
+.cloud-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 0;
+  min-height: 240px;
+}
+.cloud-list:focus { outline: none; }
+.cloud-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 18px;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 13px;
+  transition: background 0.12s;
+}
+.cloud-row:hover { background: var(--surface-hi); }
+.cloud-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  color: var(--text-2);
+}
+.cloud-row-folder .cloud-icon { color: var(--primary); }
+.cloud-row-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cloud-row-meta {
+  font-size: 11px;
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+.cloud-loading,
+.cloud-empty {
+  padding: 40px 18px;
+  text-align: center;
+  color: var(--text-2);
+  font-size: 13px;
+}
+.cloud-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border);
+}
+.cloud-btn {
+  border: 1px solid var(--border);
+  background: var(--surface-hi);
+  color: var(--text);
+  padding: 7px 16px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  font-size: 13px;
+  font-family: inherit;
+}
+.cloud-btn:hover { background: var(--surface); }
 

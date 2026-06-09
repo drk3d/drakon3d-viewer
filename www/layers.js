@@ -300,6 +300,48 @@ function openLayerMaterialDialog(layerIdx) {
     Coloris.wrap('#lmd-color-input');
   }
 
+  // ── Drag-to-move (header is the drag handle) ──────────────────────────
+  // Reset position to CSS-centered default on each open. After the user
+  // starts dragging, switch to explicit pixel coordinates.
+  const card = dialog.querySelector('.lmd-card');
+  const header = dialog.querySelector('.lmd-header');
+  if (card && header) {
+    card.style.left = '';
+    card.style.top = '';
+    card.style.transform = '';
+    let dragOffsetX = 0, dragOffsetY = 0;
+    const onPointerDown = (e) => {
+      // Don't start drag when clicking interactive elements inside header
+      if (e.target.closest('button, input, .clr-field, .lmd-sphere')) return;
+      const rect = card.getBoundingClientRect();
+      dragOffsetX = e.clientX - rect.left;
+      dragOffsetY = e.clientY - rect.top;
+      // Pin to explicit pixel coords (drops CSS transform centering)
+      card.style.left = rect.left + 'px';
+      card.style.top = rect.top + 'px';
+      card.style.transform = 'none';
+      try { header.setPointerCapture(e.pointerId); } catch (_) {}
+      header.addEventListener('pointermove', onPointerMove, { signal });
+      header.addEventListener('pointerup', onPointerUp, { signal, once: true });
+      e.preventDefault();
+    };
+    const onPointerMove = (e) => {
+      // Keep the dialog roughly on-screen (allow a 60px margin so the user
+      // can always grab the header back even if dragged near a viewport edge)
+      const maxLeft = window.innerWidth  - 60;
+      const maxTop  = window.innerHeight - 60;
+      const nextLeft = Math.min(Math.max(e.clientX - dragOffsetX, -card.offsetWidth + 60), maxLeft);
+      const nextTop  = Math.min(Math.max(e.clientY - dragOffsetY, 0), maxTop);
+      card.style.left = nextLeft + 'px';
+      card.style.top  = nextTop  + 'px';
+    };
+    const onPointerUp = (e) => {
+      try { header.releasePointerCapture(e.pointerId); } catch (_) {}
+      header.removeEventListener('pointermove', onPointerMove);
+    };
+    header.addEventListener('pointerdown', onPointerDown, { signal });
+  }
+
   // ── Populate fields ────────────────────────────────────────────────────
   const cm = layer.customMaterial || {};
   const shortLabel = layer.name.includes('::') ? layer.name.split('::').pop() : layer.name;
