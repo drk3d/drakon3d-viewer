@@ -75,6 +75,17 @@ export const S = {
   turntableSpeed:  1.0,
   turntableDir:    1,
 
+  // ── Walkthrough mode ─────────────────────────────────────────────────────
+  // WASD-to-move + drag-to-look first-person navigation. While active,
+  // OrbitControls is disabled and animate() integrates motion per-frame.
+  walkthroughActive: false,
+  walkthroughKeys:   null,   // Set<string> of pressed key codes ('KeyW' etc.)
+  walkthroughDrag:   null,   // { lastX, lastY } while pointer is down
+  walkthroughYaw:    0,      // radians, rotation around world up (+Z)
+  walkthroughPitch:  0,      // radians, clamped to ±~85°; roll stays 0
+  walkthroughSpeed:  1.0,    // model units per second; derived from bbox
+  walkthroughLastT:  0,      // performance.now() of previous frame (for dt)
+
   // ── Lighting / shadows / ground ──────────────────────────────────────────
   sunLight:         null,
   modelShadowDims:  null,

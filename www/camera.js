@@ -94,6 +94,69 @@ export function setViewPreset(preset) {
   }
 }
 
+// ── Walkthrough mode ──────────────────────────────────────────────────────
+//
+// First-person navigation: WASD/Arrow keys to move, mouse drag to look.
+// World-up is +Z (Rhino convention), so yaw rotates around Z and movement
+// happens on the XY plane. Pitch is clamped to keep roll = 0 ("upright head").
+//
+// The actual per-frame integration (key→velocity, drag→yaw/pitch) lives in
+// app.js animate(). This module just owns the enter/exit transition.
+
+export function setWalkthroughMode(enable) {
+  if (enable === S.walkthroughActive) return;
+
+  if (enable) {
+    // 1. Force perspective — parallel projection makes no sense for walking.
+    if (S.camera === S.orthoCamera) switchToPersp();
+
+    // 2. Derive initial yaw/pitch from current camera orientation so the
+    //    transition is seamless (no view jump).
+    const forward = new THREE.Vector3();
+    S.camera.getWorldDirection(forward);
+    S.walkthroughYaw   = Math.atan2(forward.y, forward.x);
+    const horiz        = Math.hypot(forward.x, forward.y);
+    S.walkthroughPitch = Math.atan2(forward.z, horiz);
+
+    // 3. Lock camera-up to world-up so roll can't accumulate.
+    S.camera.up.set(0, 0, 1);
+
+    // 4. Derive a reasonable walk speed from the model size. ~1/8 of the
+    //    diagonal per second feels close to human walking pace in a typical
+    //    room-scale model, and scales gracefully across units (mm/m/in).
+    if (S.currentModel) {
+      const box  = new THREE.Box3().setFromObject(S.currentModel);
+      const size = box.getSize(new THREE.Vector3());
+      const diag = size.length() || 100;
+      S.walkthroughSpeed = diag / 8;
+    } else {
+      S.walkthroughSpeed = 10;
+    }
+
+    // 5. Clean per-session input state and hand off control.
+    S.walkthroughKeys     = new Set();
+    S.walkthroughDrag     = null;
+    S.walkthroughLastT    = performance.now();
+    S.controls.enabled    = false;
+    S.walkthroughActive   = true;
+    window.dispatchEvent(new CustomEvent('walkthrough-changed', { detail: { active: true } }));
+  } else {
+    // Resume orbit at a target slightly in front of the camera so the user
+    // can immediately orbit around where they were looking.
+    const forward = new THREE.Vector3();
+    S.camera.getWorldDirection(forward);
+    const t = S.walkthroughSpeed > 0 ? S.walkthroughSpeed * 2 : 5;
+    S.controls.target.copy(S.camera.position).addScaledVector(forward, t);
+    S.camera.up.set(0, 0, 1);
+    S.controls.enabled  = true;
+    S.controls.update();
+    S.walkthroughActive = false;
+    S.walkthroughKeys   = null;
+    S.walkthroughDrag   = null;
+    window.dispatchEvent(new CustomEvent('walkthrough-changed', { detail: { active: false } }));
+  }
+}
+
 export function triggerCameraTransition(pos, target, up) {
   const endPos    = pos    instanceof THREE.Vector3 ? pos.clone()    : new THREE.Vector3().fromArray(pos);
   const endTarget = target instanceof THREE.Vector3 ? target.clone() : new THREE.Vector3().fromArray(target);

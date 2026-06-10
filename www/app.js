@@ -18,7 +18,7 @@ import { initI18n, setLang, applyI18n, t, currentLang } from './i18n.js';
 import { S } from './state.js';
 import { updateSliderFill, updateAllSliderFills, updateSelectIcon, showLoading, hideLoading, bindSliderDblClickInput } from './helpers.js';
 import { setupLights, updateSunLight, updateShadowCasting, addGroundPlane, removeGroundPlane } from './lighting.js';
-import { switchToOrtho, switchToPersp, setViewPreset, triggerCameraTransition, fitCameraToBox, fitCameraToObject, fitCameraToSelected, saveCustomView, renderNamedViewsUI } from './camera.js';
+import { switchToOrtho, switchToPersp, setViewPreset, setWalkthroughMode, triggerCameraTransition, fitCameraToBox, fitCameraToObject, fitCameraToSelected, saveCustomView, renderNamedViewsUI } from './camera.js';
 import { applySceneBackground, applyFileBackground, applyDisplayMode, applyLayerColorsToModel, recreateAllEdges } from './display.js';
 import { renderLayerUI, updateLayerVisibility } from './layers.js';
 import { createAnnotationSprites } from './annotations.js';
@@ -1422,10 +1422,60 @@ function bindUI() {
     });
   });
 
+  // Stash for restoring the trigger button's pre-walkthrough icon/label.
+  let savedTriggerSvgHtml = null;
+  let savedTriggerLabel   = null;
+  let savedTriggerTitle   = null;
+
+  function updateViewTriggerForWalkthrough(on, walkItem) {
+    const trigger = document.getElementById('btn-view-dropdown');
+    if (!trigger) return;
+    const triggerSvg   = trigger.querySelector('svg');
+    const triggerLabel = trigger.querySelector('span');
+    if (on) {
+      // Save current state once on enter so we can restore on exit.
+      if (!trigger.classList.contains('walkthrough-on')) {
+        savedTriggerSvgHtml = triggerSvg ? triggerSvg.outerHTML : null;
+        savedTriggerLabel   = triggerLabel ? triggerLabel.textContent : null;
+        savedTriggerTitle   = trigger.title;
+      }
+      const walkSvg = walkItem.querySelector('svg').cloneNode(true);
+      if (triggerSvg) trigger.replaceChild(walkSvg, triggerSvg);
+      if (triggerLabel) triggerLabel.textContent = walkItem.querySelector('span').textContent;
+      trigger.title = 'Walkthrough (active) — Esc to exit';
+      trigger.classList.add('walkthrough-on');
+    } else {
+      if (savedTriggerSvgHtml && triggerSvg) {
+        const tmp = document.createElement('div');
+        tmp.innerHTML = savedTriggerSvgHtml;
+        const newSvg = tmp.firstElementChild;
+        if (newSvg) trigger.replaceChild(newSvg, triggerSvg);
+      }
+      if (savedTriggerLabel != null && triggerLabel) triggerLabel.textContent = savedTriggerLabel;
+      if (savedTriggerTitle != null) trigger.title = savedTriggerTitle;
+      trigger.classList.remove('walkthrough-on');
+    }
+  }
+
   document.getElementById('view-dropdown').querySelectorAll('.dropdown-item').forEach(btn => {
     if (btn.dataset.view) {
       btn.addEventListener('click', () => {
-        setViewPreset(btn.dataset.view);
+        const view = btn.dataset.view;
+        const dropdown = document.getElementById('view-dropdown');
+
+        if (view === 'walkthrough') {
+          // Toggle walkthrough on/off; clicking the same item again exits.
+          // The 'walkthrough-changed' event listener handles the trigger
+          // button visual + dropdown active-class sync (one code path for
+          // all entry routes: click, Esc, programmatic).
+          setWalkthroughMode(!S.walkthroughActive);
+          return;
+        }
+
+        // Clicking any other preset while walking → exit walkthrough first.
+        if (S.walkthroughActive) setWalkthroughMode(false);
+
+        setViewPreset(view);
         const label = btn.querySelector('span').textContent.split(' ')[0];
         const triggerBtn = document.getElementById('btn-view-dropdown');
         triggerBtn.querySelector('span').textContent = label;
@@ -1439,6 +1489,33 @@ function bindUI() {
         }
       });
     }
+  });
+
+  // Hide the Walkthrough item on touch-primary devices (no keyboard / no
+  // mouse drag distinction). v1 ships desktop-only; mobile support is a
+  // separate UX problem (virtual joystick + swipe).
+  if (matchMedia('(hover: none)').matches) {
+    document.querySelectorAll('#view-dropdown .walkthrough-item').forEach(el => {
+      el.style.display = 'none';
+    });
+  }
+
+  // Whenever walkthrough exits via *non-dropdown* paths (Esc key, programmatic),
+  // the trigger button still needs its icon/label restored. We listen on a
+  // custom event dispatched from setWalkthroughMode().
+  window.addEventListener('walkthrough-changed', (e) => {
+    const trigger = document.getElementById('btn-view-dropdown');
+    if (!trigger) return;
+    const walkItem = document.querySelector('#view-dropdown .dropdown-item[data-view="walkthrough"]');
+    if (!walkItem) return;
+    if (e.detail.active) {
+      updateViewTriggerForWalkthrough(true, walkItem);
+    } else if (trigger.classList.contains('walkthrough-on')) {
+      updateViewTriggerForWalkthrough(false, walkItem);
+    }
+    document.querySelectorAll('#view-dropdown .dropdown-item').forEach(b => {
+      if (b.dataset.view === 'walkthrough') b.classList.toggle('active', e.detail.active);
+    });
   });
 
   // Named view dialog
@@ -2285,6 +2362,19 @@ function bindUI() {
     pointerDownTime = performance.now();
     pointerDownPos.set(e.clientX, e.clientY);
 
+    // Walkthrough takes priority — left = look, right = pan (strafe + vertical).
+    if (S.walkthroughActive && (e.button === 0 || e.button === 2)) {
+      e.preventDefault();
+      S.walkthroughDrag = {
+        lastX: e.clientX,
+        lastY: e.clientY,
+        mode:  e.button === 2 ? 'pan' : 'look',
+      };
+      S.renderer.domElement.setPointerCapture?.(e.pointerId);
+      S.renderer.domElement.style.cursor = e.button === 2 ? 'move' : 'grabbing';
+      return;
+    }
+
     // Move (Gumball) mode + pointerdown on a note pin → begin pin drag.
     // We intentionally skip this when other tools (distance/angle/note)
     // are active so they keep priority.
@@ -2348,6 +2438,35 @@ function bindUI() {
   });
 
   S.renderer.domElement.addEventListener('pointermove', (e) => {
+    // Walkthrough drag — left-button rotates view, right-button pans the
+    // camera in the camera-right / world-up plane.
+    if (S.walkthroughActive && S.walkthroughDrag) {
+      const dx = e.clientX - S.walkthroughDrag.lastX;
+      const dy = e.clientY - S.walkthroughDrag.lastY;
+      S.walkthroughDrag.lastX = e.clientX;
+      S.walkthroughDrag.lastY = e.clientY;
+      if (S.walkthroughDrag.mode === 'pan') {
+        // Pan scale: at 1 px ≈ 1/600 of the walk-speed scale → feels close
+        // to "drag the world a few cm per pixel" across all model sizes.
+        const panK = S.walkthroughSpeed / 600;
+        const cy = Math.cos(S.walkthroughYaw);
+        const sy = Math.sin(S.walkthroughYaw);
+        // Camera-right in the XY plane (yaw-only basis).
+        _walkRight.set(sy, -cy, 0);
+        _walkVel.set(0, 0, 0)
+          .addScaledVector(_walkRight,   -dx * panK)
+          .addScaledVector(_walkWorldUp,  dy * panK);
+        S.camera.position.add(_walkVel);
+      } else {
+        const sens = 0.005;  // rad/px; tuned for typical screens
+        S.walkthroughYaw   -= dx * sens;
+        const PITCH_MAX = Math.PI / 2 - 0.05;  // ~85° — keeps "up" well-defined
+        S.walkthroughPitch = Math.max(-PITCH_MAX, Math.min(PITCH_MAX,
+          S.walkthroughPitch - dy * sens));
+      }
+      return;
+    }
+
     // Note pin drag has priority — bypass orbit + other hover effects
     if (_notesUiPickMarker) {
       // We can't synchronously check isNoteDragging() because it's loaded
@@ -2456,6 +2575,14 @@ function bindUI() {
   });
 
   S.renderer.domElement.addEventListener('pointerup', (e) => {
+    // End walkthrough look-drag
+    if (S.walkthroughActive && S.walkthroughDrag) {
+      S.walkthroughDrag = null;
+      S.renderer.domElement.releasePointerCapture?.(e.pointerId);
+      S.renderer.domElement.style.cursor = '';
+      return;
+    }
+
     // End any in-flight note pin drag
     if (_notesUiPickMarker) {
       import('./notes-ui.js').then(m => {
@@ -2702,15 +2829,48 @@ function bindUI() {
   // ── Escape key & Right-click to cancel active measurements ──
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
+      // Esc also exits walkthrough — most natural "get me out" key.
+      // UI sync (dropdown + trigger button) handled by the
+      // 'walkthrough-changed' event listener.
+      if (S.walkthroughActive) setWalkthroughMode(false);
       cancelCurrentInProgressMeasurement();
       // Also close any open note bubble
       if (S.noteActiveId != null) {
         import('./notes-ui.js').then(m => m.hideBubble());
       }
     }
+
+    // Walkthrough movement keys — track pressed state. Ignore when a text
+    // input is focused so typing in dialogs (e.g. note text) isn't hijacked.
+    if (S.walkthroughActive && S.walkthroughKeys) {
+      const target = e.target;
+      const typing = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+      if (!typing && WALK_KEYS.has(e.code)) {
+        S.walkthroughKeys.add(e.code);
+        e.preventDefault();
+      }
+    }
+  });
+
+  window.addEventListener('keyup', (e) => {
+    if (S.walkthroughActive && S.walkthroughKeys && WALK_KEYS.has(e.code)) {
+      S.walkthroughKeys.delete(e.code);
+    }
+  });
+
+  // Stop motion if the window loses focus mid-walk (e.g. user alt-tabs)
+  // — otherwise the camera would keep drifting forever.
+  window.addEventListener('blur', () => {
+    if (S.walkthroughKeys) S.walkthroughKeys.clear();
+    S.walkthroughDrag = null;
   });
 
   window.addEventListener('contextmenu', (e) => {
+    // Suppress the browser menu while walking — right-button is reserved for pan.
+    if (S.walkthroughActive) {
+      e.preventDefault();
+      return;
+    }
     // Only intercept right-click if a measurement is actively in progress
     if ((S.distanceToolState && S.distanceToolState.points.length > 0) ||
         (S.angleToolState && S.angleToolState.points.length > 0)) {
@@ -2718,6 +2878,20 @@ function bindUI() {
       cancelCurrentInProgressMeasurement();
     }
   });
+
+  // Wheel = walk forward/back along the ground-projected forward. Wheel down
+  // (deltaY > 0) walks BACK, matching the convention that scrolling "away"
+  // pulls things farther in most viewers.
+  S.renderer.domElement.addEventListener('wheel', (e) => {
+    if (!S.walkthroughActive) return;
+    e.preventDefault();
+    const cy = Math.cos(S.walkthroughYaw);
+    const sy = Math.sin(S.walkthroughYaw);
+    _walkForward.set(cy, sy, 0);  // yaw-only forward, ignores pitch
+    // Step is ~1 walk-second of motion per typical wheel notch (deltaY ≈ 100).
+    const step = -(e.deltaY / 100) * S.walkthroughSpeed * 0.5;
+    S.camera.position.addScaledVector(_walkForward, step);
+  }, { passive: false });
 
   // ── Bottom Bar Group Popups ──
   document.querySelectorAll('.bottom-tool-group').forEach(grp => {
@@ -2766,6 +2940,70 @@ function bindUI() {
       History.redo();
     }
   });
+}
+
+// ── Walkthrough mode constants ─────────────────────────────────────────────
+//
+// Keys we capture during walkthrough. Arrow keys map to WASD; Q/E or
+// Space/Shift handle vertical movement so the user can dolly up/down without
+// pitching the head. Speed modifier is Shift — but Shift conflicts with the
+// up-binding choice, so we deliberately don't map Shift here.
+const WALK_KEYS = new Set([
+  'KeyW', 'KeyA', 'KeyS', 'KeyD',
+  'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+  'KeyQ', 'KeyE',
+  'Space',
+]);
+
+// Reusable scratch vectors — allocating per-frame would churn GC.
+const _walkForward = new THREE.Vector3();
+const _walkRight   = new THREE.Vector3();
+const _walkVel     = new THREE.Vector3();
+const _walkWorldUp = new THREE.Vector3(0, 0, 1);
+
+function applyWalkthroughFrame(now) {
+  const dt = Math.min(0.1, Math.max(0, (now - S.walkthroughLastT) / 1000));
+  S.walkthroughLastT = now;
+  if (dt <= 0) return;
+
+  // 1. Update orientation from yaw/pitch. Build the look direction in the
+  //    Z-up frame: yaw rotates around +Z, pitch tilts the look vector up/down.
+  const cp = Math.cos(S.walkthroughPitch);
+  const sp = Math.sin(S.walkthroughPitch);
+  const cy = Math.cos(S.walkthroughYaw);
+  const sy = Math.sin(S.walkthroughYaw);
+  _walkForward.set(cp * cy, cp * sy, sp);
+
+  S.camera.up.copy(_walkWorldUp);
+  const lookAt = _walkVel.copy(S.camera.position).add(_walkForward);
+  S.camera.lookAt(lookAt);
+
+  // 2. Apply movement. W/S walks along the XY-projected forward (so looking
+  //    up doesn't make you fly forward). Q/E (and Space) move along world Z.
+  const keys = S.walkthroughKeys;
+  if (!keys || keys.size === 0) return;
+
+  // Forward direction projected onto the ground plane.
+  _walkForward.z = 0;
+  if (_walkForward.lengthSq() < 1e-6) _walkForward.set(cy, sy, 0);
+  _walkForward.normalize();
+  _walkRight.crossVectors(_walkForward, _walkWorldUp).negate().normalize();
+
+  let fwd = 0, side = 0, up = 0;
+  if (keys.has('KeyW') || keys.has('ArrowUp'))    fwd  += 1;
+  if (keys.has('KeyS') || keys.has('ArrowDown'))  fwd  -= 1;
+  if (keys.has('KeyD') || keys.has('ArrowRight')) side += 1;
+  if (keys.has('KeyA') || keys.has('ArrowLeft'))  side -= 1;
+  if (keys.has('KeyE') || keys.has('Space'))      up   += 1;
+  if (keys.has('KeyQ'))                            up   -= 1;
+  if (fwd === 0 && side === 0 && up === 0) return;
+
+  const step = S.walkthroughSpeed * dt;
+  _walkVel.set(0, 0, 0)
+    .addScaledVector(_walkForward, fwd  * step)
+    .addScaledVector(_walkRight,   side * step)
+    .addScaledVector(_walkWorldUp, up   * step);
+  S.camera.position.add(_walkVel);
 }
 
 // ── Core render loop ───────────────────────────────────────────────────────
@@ -2874,7 +3112,14 @@ function animate() {
       if (S.pendingOrthoSwitch) { S.pendingOrthoSwitch = false; switchToOrtho(); }
     }
   }
-  S.controls.update();
+  if (S.walkthroughActive) {
+    applyWalkthroughFrame(performance.now());
+    // Skip S.controls.update() — OrbitControls.update() always re-orients
+    // the camera to look at its target, which would clobber our yaw/pitch
+    // from the mouse drag. `.enabled = false` only blocks input, not update.
+  } else {
+    S.controls.update();
+  }
   S.composer.render();
 
   // Render arc overlay scene on top — no clipping planes active
