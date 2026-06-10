@@ -39,6 +39,15 @@ import {
 } from './tools.js';
 import { onPointerDown, clearSelection, updatePropertiesPanel, addSelectionOutline, setupGumballHelper, clearGumballHelper, ensureOriginalTransform } from './selection.js';
 
+// Notes UI is loaded lazily so the rest of the app boots even if the user
+// never opens a note. The animate loop reads the populated reference.
+let _notesUiUpdateBubble = null;
+let _notesUiPickMarker   = null;
+import('./notes-ui.js').then(m => {
+  _notesUiUpdateBubble = m.updateBubblePosition;
+  _notesUiPickMarker   = m.pickNoteMarker;
+});
+
 // ── Color Grading Shader ───────────────────────────────────────────────────
 const ColorGradingShader = {
   uniforms: {
@@ -1194,6 +1203,32 @@ function bindUI() {
     }
   });
 
+  // Measurements visibility — toggles all completed-measurement objects, plus
+  // any in-flight tool ghost. Pin markers are handled separately by the
+  // Notes toggle so the two overlays can be turned on/off independently.
+  document.getElementById('chk-measurements-panel')?.addEventListener('change', e => {
+    const show = e.target.checked;
+    S.measurementsVisible = show;
+    if (S.measurementGroup) {
+      S.measurementGroup.children.forEach(child => {
+        const isNoteMarker = child.userData?.type === 'note-marker';
+        if (!isNoteMarker) child.visible = show;
+      });
+    }
+  });
+
+  document.getElementById('chk-notes-panel')?.addEventListener('change', e => {
+    const show = e.target.checked;
+    S.notesVisible = show;
+    for (const n of S.notes) {
+      if (n.marker) n.marker.visible = show;
+    }
+    // Auto-close bubble when hiding
+    if (!show && S.noteActiveId != null) {
+      import('./notes-ui.js').then(m => m.hideBubble());
+    }
+  });
+
   const safeBindCheck = (id, targetId) => {
     const original = document.getElementById(id);
     const panelChk = document.getElementById(targetId);
@@ -1638,6 +1673,20 @@ function bindUI() {
     updateToolsDropdownActiveState();
   });
 
+  document.getElementById('btn-tool-note')?.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    document.getElementById('tools-dropdown').classList.add('hidden');
+    const { activateNoteTool, deactivateNoteTool } = await import('./notes.js');
+    if (S.noteToolState) {
+      deactivateNoteTool();
+      updateToolsDropdownActiveState();
+      return;
+    }
+    deactivateAllTools();
+    activateNoteTool();
+    updateToolsDropdownActiveState();
+  });
+
   document.getElementById('btn-tool-clipping').addEventListener('click', (e) => {
     e.stopPropagation();
     deactivateAllTools();
@@ -1709,6 +1758,7 @@ function bindUI() {
       // imported Rhino annotations (dimensions/text/dots), which keep their own scale.
       S.measurementScale = v;
       updateMeasurementScales();
+      import('./notes.js').then(m => m.refreshAllNoteScales?.());
     });
     updateSliderFill(slMeasureScale);
     bindSliderDblClickInput(slMeasureScale, slMeasureScaleVal);
@@ -1851,10 +1901,12 @@ function bindUI() {
     const isAngleActive = S.angleToolState !== null && S.angleToolState !== undefined;
     const isFindActive = !document.getElementById('find-panel')?.classList.contains('hidden');
     const isClippingActive = !!S.clippingToggleOn;
+    const isNoteActive = S.noteToolState !== null && S.noteToolState !== undefined;
 
-    const anyActive = isDistanceActive || isAngleActive || isFindActive || isClippingActive;
+    const anyActive = isDistanceActive || isAngleActive || isFindActive || isClippingActive || isNoteActive;
     document.getElementById('btn-tools-dropdown')?.classList.toggle('active', anyActive);
     document.getElementById('btn-tool-clipping')?.classList.toggle('active', isClippingActive);
+    document.getElementById('btn-tool-note')?.classList.toggle('active', isNoteActive);
   }
   window.updateToolsDropdownActiveState = updateToolsDropdownActiveState;
 
@@ -2229,6 +2281,18 @@ function bindUI() {
     pointerDownTime = performance.now();
     pointerDownPos.set(e.clientX, e.clientY);
 
+    // Move (Gumball) mode + pointerdown on a note pin → begin pin drag.
+    // We intentionally skip this when other tools (distance/angle/note)
+    // are active so they keep priority.
+    if (S.gumballActive && !S.distanceToolState && !S.angleToolState && !S.noteToolState && _notesUiPickMarker) {
+      const noteHit = _notesUiPickMarker(e.clientX, e.clientY);
+      if (noteHit) {
+        e.preventDefault();
+        import('./notes-ui.js').then(m => m.beginNoteDrag(noteHit.id));
+        return;
+      }
+    }
+
     // Check Gumball arc handles first
     const gumballArcAxis = hitTestGumballArcHandles(e.clientX, e.clientY);
     if (gumballArcAxis) {
@@ -2280,6 +2344,17 @@ function bindUI() {
   });
 
   S.renderer.domElement.addEventListener('pointermove', (e) => {
+    // Note pin drag has priority — bypass orbit + other hover effects
+    if (_notesUiPickMarker) {
+      // We can't synchronously check isNoteDragging() because it's loaded
+      // lazily. Instead, the dynamic import below resolves to a cached
+      // module so the check is effectively synchronous after the first
+      // load (which happened at app boot).
+      import('./notes-ui.js').then(m => {
+        if (m.isNoteDragging()) m.updateNoteDrag(e.clientX, e.clientY);
+      });
+    }
+
     // Update cursor when hovering over arc handles
     if (!S.clippingArcDrag && !S.gumballArcDrag) {
       const axis = hitTestArcHandles(e.clientX, e.clientY);
@@ -2377,6 +2452,13 @@ function bindUI() {
   });
 
   S.renderer.domElement.addEventListener('pointerup', (e) => {
+    // End any in-flight note pin drag
+    if (_notesUiPickMarker) {
+      import('./notes-ui.js').then(m => {
+        if (m.isNoteDragging()) m.endNoteDrag();
+      });
+    }
+
     if (S.gumballArcDrag) {
       console.log('[Gumball] Arc drag pointerup. Creating before/after states.');
       const beforeState = S.selectedObjects.map((obj, i) => ({
@@ -2459,9 +2541,30 @@ function bindUI() {
         settingsRightPanel?.classList.contains('panel-open');
       if (anyPanelOpen) { closeAllPanels(); return; }
       document.querySelectorAll('.dropdown-menu:not(.hidden)').forEach(m => m.classList.add('hidden'));
-      if (S.distanceToolState || S.angleToolState) {
+      if (S.distanceToolState || S.angleToolState || S.noteToolState) {
         onCanvasClick(e);
       } else {
+        // Pin marker click? Behavior depends on Move (Gumball) mode.
+        if (_notesUiPickMarker) {
+          const noteHit = _notesUiPickMarker(e.clientX, e.clientY);
+          if (noteHit) {
+            if (S.gumballActive) {
+              // In Move mode: don't show bubble — let pointerdown have
+              // already started a drag in the pointerdown listener above.
+              // (We arrive here on the short-click path; pointermove won't
+              //  have moved enough to trigger drag, so re-enable controls
+              //  and skip selection.)
+              return;
+            }
+            import('./notes-ui.js').then(m => m.showBubbleForNote(noteHit.id));
+            return;
+          }
+        }
+        // Empty-space click while a bubble is visible → dismiss it.
+        if (S.noteActiveId != null) {
+          import('./notes-ui.js').then(m => m.hideBubble());
+          return;
+        }
         onPointerDown(e);
       }
     }
@@ -2596,6 +2699,10 @@ function bindUI() {
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       cancelCurrentInProgressMeasurement();
+      // Also close any open note bubble
+      if (S.noteActiveId != null) {
+        import('./notes-ui.js').then(m => m.hideBubble());
+      }
     }
   });
 
@@ -2668,6 +2775,11 @@ function animate() {
         child.layers.set(1);
       }
     });
+  }
+
+  // Note bubble follows its anchor marker each frame.
+  if (S.notes && S.notes.length && S.noteActiveId != null && _notesUiUpdateBubble) {
+    _notesUiUpdateBubble();
   }
 
   if (S.clippingTransformControls) {

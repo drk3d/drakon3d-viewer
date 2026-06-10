@@ -78,6 +78,13 @@ export function deactivateAllTools() {
     }
   }
 
+  // Note tool: just clears its "place next click" flag — existing markers stay.
+  if (S.noteToolState) {
+    S.noteToolState = null;
+    document.body.style.cursor = '';
+    document.getElementById('btn-tool-note')?.classList.remove('active');
+  }
+
   // Clipping plane is INTENTIONALLY left alone here — it's a toggle that
   // coexists with other tools. To turn it off, click its toolbar button again.
   document.getElementById('find-panel')?.classList.add('hidden');
@@ -712,7 +719,7 @@ export function updateAngleGhost(event) {
 // ── Core Canvas Click router ──────────────────────────────────────────────────
 
 export function onCanvasClick(event) {
-  if (!S.distanceToolState && !S.angleToolState) return;
+  if (!S.distanceToolState && !S.angleToolState && !S.noteToolState) return;
   S.mouse.x = (event.clientX / window.innerWidth)  * 2 - 1;
   S.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
   S.raycaster.setFromCamera(S.mouse, S.camera);
@@ -722,6 +729,16 @@ export function onCanvasClick(event) {
   if (!hit) return;
 
   const p = snapToVertex(hit);
+
+  // Note tool: hand off to notes.js for the placement + text dialog.
+  // Single-click placement (no two-click chain like distance/angle).
+  if (S.noteToolState) {
+    import('./notes.js').then(({ promptAndCreateNote }) => {
+      promptAndCreateNote(p);
+    });
+    return;
+  }
+
   const size = new THREE.Box3().setFromObject(S.currentModel).getSize(new THREE.Vector3());
 
   if (S.distanceToolState) {

@@ -152,6 +152,12 @@ export const S = {
   annotationScale:       1.0,   // scale for imported Rhino annotations (dims/text/dots)
   measurementScale:      1.0,   // scale for the Distance/Angle measurement tool only
 
+  // ── Note tool ────────────────────────────────────────────────────────────
+  noteToolState: null,  // truthy when the Note tool is active
+  notes:         [],    // [{ id, position:[x,y,z], text, color, createdAt, marker:<Sprite> }]
+  noteActiveId:  null,  // currently shown bubble's note id (or null)
+  noteDefaultColor: '#fbbf24',
+
   // ── Clipping ─────────────────────────────────────────────────────────────
   clippingPlane:             null,
   clippingHelper:            null,

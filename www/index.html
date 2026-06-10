@@ -202,6 +202,13 @@
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2 14L7 2l7 7"/><path d="M7 6a4.5 4.5 0 012 5"/></svg>
               <span data-i18n="tools.angle">Angle</span>
             </button>
+            <button class="dropdown-item" data-tool="note" id="btn-tool-note">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 1.5C5.2 1.5 3 3.6 3 6.2c0 3 5 7.3 5 7.3s5-4.3 5-7.3c0-2.6-2.2-4.7-5-4.7z"/>
+                <circle cx="8" cy="6" r="1.6"/>
+              </svg>
+              <span data-i18n="tools.note">Note</span>
+            </button>
             <button class="dropdown-item" data-tool="clipping" id="btn-tool-clipping">
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="4" cy="4" r="2.2"/><circle cx="4" cy="12" r="2.2"/><line x1="6" y1="4.5" x2="14" y2="8"/><line x1="6" y1="11.5" x2="14" y2="8"/></svg>
               <span data-i18n="tools.clipping">Clipping Plane</span>
@@ -296,6 +303,12 @@
           <div class="sub-card-title" data-i18n="file.info">File Info</div>
           <div id="file-info-content" class="info-content-text"><span data-i18n="file.no_model">No model loaded.</span></div>
         </div>
+        <div id="notes-section" class="panel-sub-card">
+          <div class="sub-card-title" data-i18n="note.list_title">Notes</div>
+          <div id="notes-list" class="notes-list">
+            <div class="notes-empty" data-i18n="note.empty">No notes yet</div>
+          </div>
+        </div>
       </div>
       
     </div>
@@ -330,7 +343,7 @@
   <aside id="settings-right-panel" class="right-panel">
     <div class="right-panel-header">
       <h2 data-i18n="panel.settings">Settings</h2>
-      <span id="app-version-tag" class="app-version-tag">byRhinoView v0.9.6</span>
+      <span id="app-version-tag" class="app-version-tag">byRhinoView v0.9.7</span>
       <button id="btn-close-settings-panel" class="icon-btn sm" title="Close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
           <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -410,13 +423,10 @@
       <div class="setting-group-card">
         <div class="sub-card-title" data-i18n="vis.title">Visibility</div>
         <div class="toggles-grid">
+          <!-- Row 1: model rendering toggles -->
           <label class="setting-item-panel">
             <span data-i18n="vis.edges">Edges</span>
             <input type="checkbox" id="chk-edges-panel" checked>
-          </label>
-          <label class="setting-item-panel">
-            <span data-i18n="vis.annotations">Annotations</span>
-            <input type="checkbox" id="chk-annotations-panel" checked>
           </label>
           <label class="setting-item-panel">
             <span data-i18n="vis.ground">Ground</span>
@@ -425,6 +435,19 @@
           <label class="setting-item-panel">
             <span data-i18n="vis.shadows">Shadows</span>
             <input type="checkbox" id="chk-shadows-panel" checked>
+          </label>
+          <!-- Row 2: overlay toggles -->
+          <label class="setting-item-panel">
+            <span data-i18n="vis.annotations">Annotations</span>
+            <input type="checkbox" id="chk-annotations-panel" checked>
+          </label>
+          <label class="setting-item-panel">
+            <span data-i18n="vis.measurements">Measurements</span>
+            <input type="checkbox" id="chk-measurements-panel" checked>
+          </label>
+          <label class="setting-item-panel">
+            <span data-i18n="vis.notes">Notes</span>
+            <input type="checkbox" id="chk-notes-panel" checked>
           </label>
         </div>
         <div class="sliders-grid" style="margin-top:10px; border-top:1px solid var(--border); padding-top:10px;">
@@ -617,6 +640,15 @@
       <div id="find-results-container" style="max-height:180px; overflow-y:auto; font-size:0.76rem; border-top:1px solid var(--border); padding-top:8px; display:flex; flex-direction:column; gap:4px;">
         <span class="dropdown-empty-msg" style="padding:10px 0;" data-i18n="find.enter_name">Enter object name...</span>
       </div>
+    </div>
+  </div>
+
+  <!-- ── Note bubble (positioned via JS each frame) ── -->
+  <div id="note-bubble" class="note-bubble">
+    <div id="note-bubble-text" class="note-bubble-text"></div>
+    <div class="note-bubble-actions">
+      <button class="note-bubble-btn" id="note-bubble-edit" data-i18n="note.edit">Edit</button>
+      <button class="note-bubble-btn danger" id="note-bubble-delete" data-i18n="note.delete">Delete</button>
     </div>
   </div>
 

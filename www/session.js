@@ -295,6 +295,14 @@ export async function saveSession(customFileName = null) {
       return saved;
     });
 
+    const notes = (S.notes || []).map(n => ({
+      id: n.id,
+      position: n.position,           // already [x,y,z]
+      text: n.text,
+      color: n.color,
+      createdAt: n.createdAt,
+    }));
+
     const data = {
       version:             3, // version 3 includes unified geometry and annotations
       displayMode:         S.currentMode,
@@ -307,6 +315,7 @@ export async function saveSession(customFileName = null) {
       parsedLayers:        S.parsedLayers || [],
       parsedAnnotations:   S.parsedAnnotations || [],
       completedMeasurements: measurements,
+      notes,
       customHdrData:       S.customHdrData || null,
       customHdrName:       S.customHdrName || null
     };
@@ -569,6 +578,12 @@ export async function loadSession(file) {
       // can resolve the correct layer colors for shadedMaterial and other color checks.
       if (data.parsedLayers) {
         S.parsedLayers = data.parsedLayers;
+      }
+      // Restore modelUnit early too — showModelInfo() runs inside
+      // loadGeometryFromGLB and reads S.modelUnit to populate the File Info
+      // panel. Without this it would show "Unknown" on every reload.
+      if (data.settings?.modelUnit) {
+        S.modelUnit = data.settings.modelUnit;
       }
 
       const glbStart = 12 + jsonLength;
@@ -869,6 +884,29 @@ export async function loadSession(file) {
     if (data.completedMeasurements) {
       const { reconstructMeasurements } = await import('./tools.js');
       reconstructMeasurements(data.completedMeasurements);
+    }
+
+    // 7.5. Restore notes (pin markers placed by the user)
+    if (data.notes && data.notes.length) {
+      const notes = await import('./notes.js');
+      const ui    = await import('./notes-ui.js');
+      // Clear any stale notes first (defensive — session usually starts blank)
+      notes.clearAllNotes();
+      for (const n of data.notes) {
+        const pos = new THREE.Vector3(n.position[0], n.position[1], n.position[2]);
+        const created = notes.createNote(pos, n.text, n.color);
+        // Preserve original id + createdAt instead of the new ones createNote
+        // generated so list ordering and bubble-active references survive.
+        created.id        = n.id;
+        created.createdAt = n.createdAt || created.createdAt;
+      }
+      ui.renderNoteListUI();
+    } else {
+      // Still call the UI render so the empty-state row shows up cleanly.
+      try {
+        const ui = await import('./notes-ui.js');
+        ui.renderNoteListUI();
+      } catch (_) {}
     }
 
     // 8. Restore camera state

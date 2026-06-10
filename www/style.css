@@ -1575,8 +1575,8 @@ body.dark-theme .footer-logo.light-only {
 /* ── Sky-Blue Visibility Toggles ── */
 .toggles-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 2px 24px;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 2px 14px;
 }
 .setting-item-panel {
   display: flex;
@@ -3002,4 +3002,182 @@ body.light-theme .color-circle {
   font-family: inherit;
 }
 .cloud-btn:hover { background: var(--surface); }
+
+/* ── Note tool: input dialog + bubble + file-panel list ─────────────────── */
+.note-dialog-overlay {
+  position: fixed; inset: 0; z-index: 10001;
+  background: rgba(0,0,0,0.45);
+  backdrop-filter: blur(3px);
+  display: flex; align-items: center; justify-content: center;
+  font-family: inherit;
+}
+.note-dialog {
+  width: min(420px, 92vw);
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+  display: flex; flex-direction: column;
+}
+.note-dialog-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.note-dialog-title { font-size: 14px; font-weight: 600; color: var(--text); }
+.note-dialog-close {
+  width: 26px; height: 26px;
+  border: none; background: transparent;
+  color: var(--text-2); font-size: 20px; line-height: 1; cursor: pointer;
+  border-radius: 4px;
+}
+.note-dialog-close:hover { background: var(--surface-hi); color: var(--text); }
+.note-dialog-body { padding: 14px 16px; }
+.note-dialog-label {
+  display: block;
+  font-size: 11px; color: var(--text-2);
+  margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.note-color-swatches { display: flex; gap: 6px; }
+.note-color-swatch {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.1s, border-color 0.1s;
+}
+.note-color-swatch:hover { transform: scale(1.12); }
+.note-color-swatch.selected {
+  border-color: var(--text);
+  transform: scale(1.12);
+}
+.note-dialog-text {
+  width: 100%;
+  background: var(--surface-hi);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 13px;
+  resize: vertical;
+  box-sizing: border-box;
+  min-height: 80px;
+}
+.note-dialog-text:focus { outline: none; border-color: var(--primary); }
+.note-dialog-footer {
+  display: flex; justify-content: flex-end; gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+}
+.note-btn {
+  border: 1px solid var(--border);
+  background: var(--surface-hi);
+  color: var(--text);
+  padding: 7px 16px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  font-size: 13px;
+  font-family: inherit;
+}
+.note-btn:hover { background: var(--surface); }
+.note-btn-save {
+  background: var(--primary);
+  color: #ffffff;
+  border-color: var(--primary);
+}
+.note-btn-save:hover { background: var(--primary-hi); }
+
+/* Floating bubble that appears next to a clicked pin marker */
+.note-bubble {
+  position: fixed;
+  z-index: 9000;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--note-accent, #fbbf24);
+  border-radius: var(--r-sm);
+  box-shadow: 0 12px 32px rgba(0,0,0,0.4);
+  padding: 10px 14px 10px 12px;
+  min-width: 200px;
+  max-width: 320px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--text);
+  pointer-events: auto;
+  display: none;
+}
+.note-bubble.visible { display: block; }
+.note-bubble-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+.note-bubble-actions {
+  display: flex; justify-content: flex-end; gap: 6px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+.note-bubble-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-2);
+  cursor: pointer;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: inherit;
+}
+.note-bubble-btn:hover { background: var(--surface-hi); color: var(--text); }
+.note-bubble-btn.danger:hover { color: #ef4444; }
+
+/* File-panel notes list */
+#notes-section { margin-top: 12px; }
+.notes-list { display: flex; flex-direction: column; gap: 4px; max-height: 240px; overflow-y: auto; }
+.notes-empty {
+  font-size: 12px; color: var(--text-3);
+  padding: 8px 10px; font-style: italic;
+}
+.note-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  background: transparent;
+  transition: background 0.12s;
+}
+.note-row:hover { background: var(--surface-hi); }
+.note-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid rgba(0,0,0,0.2);
+}
+.note-row-text {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.note-row-actions {
+  display: flex; gap: 2px;
+  opacity: 0.65;
+  transition: opacity 0.12s;
+}
+.note-row:hover .note-row-actions { opacity: 1; }
+.note-row-btn {
+  width: 22px; height: 22px;
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  border-radius: 4px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.note-row-btn:hover { background: var(--surface); color: var(--text); }
+.note-row-btn.danger:hover { color: #ef4444; }
+
 
