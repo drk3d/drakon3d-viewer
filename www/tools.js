@@ -324,8 +324,8 @@ function makeMeasurementBillboard(text, position) {
     ? new THREE.Box3().setFromObject(S.currentModel).getSize(new THREE.Vector3()).length()
     : 100;
   const scaleMult = S.measurementScale !== undefined ? S.measurementScale : 1.0;
-  sprite.scale.set(modelSize * 0.08 * scaleMult, modelSize * 0.026 * scaleMult, 1);
-  sprite.userData = { type: 'billboard', baseScaleX: modelSize * 0.08, baseScaleY: modelSize * 0.026 };
+  sprite.scale.set(modelSize * 0.06 * scaleMult, modelSize * 0.0195 * scaleMult, 1);
+  sprite.userData = { type: 'billboard', baseScaleX: modelSize * 0.06, baseScaleY: modelSize * 0.0195 };
   return sprite;
 }
 
