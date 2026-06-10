@@ -1129,10 +1129,13 @@ function bindUI() {
       reader.readAsDataURL(file);
 
       const url = URL.createObjectURL(file);
-      const rgbeLoader = new RGBELoader();
+      const isExr = /\.exr$/i.test(file.name);
+      const loaderPromise = isExr
+        ? import('three/addons/loaders/EXRLoader.js').then(m => new m.EXRLoader())
+        : Promise.resolve(new RGBELoader());
       const pmrem = new THREE.PMREMGenerator(S.renderer);
       pmrem.compileEquirectangularShader();
-      rgbeLoader.load(url, texture => {
+      loaderPromise.then(loader => loader.load(url, texture => {
         URL.revokeObjectURL(url);
         const envTexture = pmrem.fromEquirectangular(texture).texture;
         texture.dispose();
@@ -1151,7 +1154,8 @@ function bindUI() {
         if (document.getElementById('bg-type-select')?.value === 'hdr') applySceneBackground();
         document.querySelectorAll('.env-preset-btn').forEach(b => b.classList.remove('active'));
         document.querySelector('.env-preset-btn[data-preset="hdr-custom"]')?.classList.add('active');
-      }, undefined, err => console.error('[HDR] load error', err));
+      }, undefined, err => console.error('[HDR] load error', err)))
+      .catch(err => console.error('[HDR] loader import error', err));
     });
   }
 

@@ -605,17 +605,20 @@ export async function loadSession(file) {
       S.customHdrName = data.customHdrName || 'Custom HDR';
       
       try {
-        const { RGBELoader } = await import('three/addons/loaders/RGBELoader.js');
+        const isExr = /\.exr$/i.test(S.customHdrName || '');
+        const Loader = isExr
+          ? (await import('three/addons/loaders/EXRLoader.js')).EXRLoader
+          : (await import('three/addons/loaders/RGBELoader.js')).RGBELoader;
         const res = await fetch("data:application/octet-stream;base64," + data.customHdrData);
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
-        
+
         await new Promise((resolve, reject) => {
-          const rgbeLoader = new RGBELoader();
+          const loader = new Loader();
           const pmrem = new THREE.PMREMGenerator(S.renderer);
           pmrem.compileEquirectangularShader();
-          
-          rgbeLoader.load(url, texture => {
+
+          loader.load(url, texture => {
             URL.revokeObjectURL(url);
             const envTexture = pmrem.fromEquirectangular(texture).texture;
             texture.dispose();
