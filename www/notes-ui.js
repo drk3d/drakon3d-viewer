@@ -223,8 +223,11 @@ export function renderNoteListUI() {
     });
     row.querySelector('[data-action="delete"]').addEventListener('click', (e) => {
       e.stopPropagation();
+      // deleteNote() itself clears S.noteActiveId, so capture the
+      // pre-delete state before we lose it.
+      const wasActive = S.noteActiveId === n.id;
       deleteNote(n.id);
-      if (S.noteActiveId === n.id) hideBubble();
+      if (wasActive) hideBubble();
       renderNoteListUI();
     });
 
