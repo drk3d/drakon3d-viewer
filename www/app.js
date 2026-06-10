@@ -2894,48 +2894,86 @@ function animate() {
   }
 }
 
+// Hysteresis band + EMA smoothing prevent flicker on noisy backgrounds
+// (e.g. grass HDR) where a single-pixel sample crosses the threshold every
+// frame as the camera rotates. Constants live on S so they persist across calls.
+const BAR_LUM_ENTER_DARK  = 0.42;  // switch to dark icons when luminance drops below
+const BAR_LUM_ENTER_LIGHT = 0.48;  // switch to light icons when luminance rises above
+const BAR_LUM_EMA_ALPHA   = 0.25;  // higher = more responsive, lower = more stable
+
 function updateBottomBarLocalContrast() {
   const bottomBar = document.getElementById('bottom-view-tools-bar');
   if (!bottomBar || !S.renderer) return;
   try {
     const gl = S.renderer.getContext();
     if (!gl) return;
-    const width  = S.renderer.domElement.width;
-    const height = S.renderer.domElement.height;
-    // Sample a pixel at the horizontal center, ~44px from the bottom in screen coords.
-    const x = Math.round(width / 2);
-    // WebGL coordinate Y=0 starts at the bottom
-    const y = Math.round(44 * window.devicePixelRatio);
-    if (x < 0 || x >= width || y < 0 || y >= height) return;
+    const canvasW = S.renderer.domElement.width;
+    const canvasH = S.renderer.domElement.height;
+    const dpr = window.devicePixelRatio || 1;
 
-    const pixel = new Uint8Array(4);
-    gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
-    let r = pixel[0], g = pixel[1], b = pixel[2], a = pixel[3];
+    // Sample the actual rectangle behind the bar so the average reflects what
+    // shows through the blur — not an arbitrary point that may miss the bar.
+    const rect = bottomBar.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
 
-    // With alpha:true the canvas can be transparent over the page bg —
-    // composite onto body's actual bg color so the luminance reflects what
-    // the user actually sees through the bar's blur.
-    if (a < 255) {
-      const bodyBg = window.getComputedStyle(document.body).backgroundColor;
-      const m = bodyBg.match(/\d+/g);
-      if (m && m.length >= 3) {
-        const bgR = parseInt(m[0]), bgG = parseInt(m[1]), bgB = parseInt(m[2]);
-        const af = a / 255;
-        r = Math.round(r * af + bgR * (1 - af));
-        g = Math.round(g * af + bgG * (1 - af));
-        b = Math.round(b * af + bgB * (1 - af));
-      }
+    // CSS px → device px. WebGL Y is bottom-up, CSS Y is top-down.
+    const sx = Math.round(rect.left * dpr);
+    const sw = Math.round(rect.width * dpr);
+    const sh = Math.round(rect.height * dpr);
+    const sy = Math.round(canvasH - (rect.bottom * dpr));
+    if (sw <= 0 || sh <= 0 || sx < 0 || sy < 0 ||
+        sx + sw > canvasW || sy + sh > canvasH) return;
+
+    const buf = new Uint8Array(sw * sh * 4);
+    gl.readPixels(sx, sy, sw, sh, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+
+    // Body bg for alpha composite — read once per call.
+    let bgR = 255, bgG = 255, bgB = 255;
+    const bodyBg = window.getComputedStyle(document.body).backgroundColor;
+    const m = bodyBg.match(/\d+/g);
+    if (m && m.length >= 3) {
+      bgR = parseInt(m[0]); bgG = parseInt(m[1]); bgB = parseInt(m[2]);
     }
 
-    // ITU-R BT.709 relative luminance
-    const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+    // Stride keeps work bounded for large bars on high-DPI displays.
+    // For a ~300×40 CSS bar at 2x DPR that's 600×80=48k px; stride 4 → ~3k samples.
+    const stride = Math.max(1, Math.round(Math.sqrt((sw * sh) / 2000)));
+    let sumR = 0, sumG = 0, sumB = 0, count = 0;
+    for (let yy = 0; yy < sh; yy += stride) {
+      for (let xx = 0; xx < sw; xx += stride) {
+        const i = (yy * sw + xx) * 4;
+        const a = buf[i + 3];
+        if (a === 255) {
+          sumR += buf[i]; sumG += buf[i + 1]; sumB += buf[i + 2];
+        } else {
+          const af = a / 255;
+          sumR += buf[i]     * af + bgR * (1 - af);
+          sumG += buf[i + 1] * af + bgG * (1 - af);
+          sumB += buf[i + 2] * af + bgB * (1 - af);
+        }
+        count++;
+      }
+    }
+    if (count === 0) return;
+    const r = sumR / count, g = sumG / count, b = sumB / count;
 
-    // luminance < 0.45 → background is dark → use light icons (local-dark)
-    // else → background is light → use dark icons (local-light)
-    // Only mutate classList when the decision changes — keeps DevTools quiet
-    // and avoids unnecessary style recalcs during the animate loop.
-    const wantClass   = luminance < 0.45 ? 'local-dark'  : 'local-light';
-    const removeClass = luminance < 0.45 ? 'local-light' : 'local-dark';
+    // ITU-R BT.709 relative luminance, then temporal EMA for extra stability.
+    const lumRaw = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+    S.barLumEma = S.barLumEma == null
+      ? lumRaw
+      : S.barLumEma * (1 - BAR_LUM_EMA_ALPHA) + lumRaw * BAR_LUM_EMA_ALPHA;
+    const lum = S.barLumEma;
+
+    // Hysteresis: only flip when luminance crosses the outer edge of the
+    // deadband. Between thresholds the previous decision persists.
+    const isDark = bottomBar.classList.contains('local-dark');
+    let wantDark;
+    if (isDark)                    wantDark = lum < BAR_LUM_ENTER_LIGHT;
+    else if (bottomBar.classList.contains('local-light')) wantDark = lum < BAR_LUM_ENTER_DARK;
+    else                           wantDark = lum < 0.45;  // first-call default
+
+    const wantClass   = wantDark ? 'local-dark'  : 'local-light';
+    const removeClass = wantDark ? 'local-light' : 'local-dark';
     if (!bottomBar.classList.contains(wantClass)) {
       bottomBar.classList.add(wantClass);
       bottomBar.classList.remove(removeClass);
