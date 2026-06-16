@@ -744,6 +744,16 @@ export function updateLayerVisibility() {
   const annVisible = document.getElementById('chk-annotations-panel')?.checked ?? true;
 
   const updateChild = (child) => {
+    // iRefObject groups: gate the whole instance on the InstanceReference's
+    // own layer. Block-content children below still get their own layerIndex
+    // visibility — Three.js will hide an object when either it or any
+    // ancestor is invisible, so both layers work as gates simultaneously.
+    if (typeof child.userData?.instanceLayerIndex === 'number') {
+      const instLayer = S.parsedLayers.find(l => l.index === child.userData.instanceLayerIndex);
+      child.visible = instLayer ? instLayer.visible : true;
+      return;
+    }
+
     let layerIdx = null;
     let isAnnotation = false;
 

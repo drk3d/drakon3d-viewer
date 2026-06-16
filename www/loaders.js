@@ -640,6 +640,7 @@ export async function preprocess3dm(file, skipLayerParse) {
   S.parsedAnnotations = [];
   S.parsed3dmFileInfo = null;
   S._objLayerById = new Map();
+  S._instanceLayerByPos = new Map();
   let fileData = file;
 
   // Wait up to 6 s for the rhino3dm WASM to finish initializing.
@@ -1085,10 +1086,16 @@ export async function preprocess3dm(file, skipLayerParse) {
     const cleanDoc = new S.rhinoInstance.File3dm();
 
     try {
+      // Copy layers using the Layer-object overload so parentLayerId, color,
+      // visibility, and other properties survive the rebuild. The old call
+      // `add(l.name, l.color)` silently dropped everything except the first
+      // layer, collapsing the hierarchy and forcing all block-content
+      // geometry onto layer 0 (Default) — which rendered as flat gray
+      // because layer 0's color is black.
       const srcLayers = doc.layers();
       for (let i = 0; i < srcLayers.count; i++) {
         const l = srcLayers.get(i);
-        try { cleanDoc.layers().add(l.name, l.color); } catch {}
+        try { cleanDoc.layers().add(l); } catch (le) { console.warn('[pre] layer add err:', le); }
         l.delete();
       }
     } catch (e) { console.warn('[pre] layer copy err:', e); }
@@ -1126,6 +1133,66 @@ export async function preprocess3dm(file, skipLayerParse) {
       }
     } catch (e) { console.warn('[pre] bitmaps copy err:', e); }
 
+    // Build a map of idefId → its member object IDs once. We need this for
+    // recursive flattening below, where one block's flatten may need to look
+    // up another block's members.
+    const idefMembersMap = new Map();
+    try {
+      const tmpDefs = doc.instanceDefinitions();
+      for (let i = 0; i < tmpDefs.count; i++) {
+        const tmpIdef = tmpDefs.get(i);
+        if (tmpIdef) {
+          const tmpIds = tmpIdef.getObjectIds() || [];
+          idefMembersMap.set(String(tmpIdef.id).toLowerCase(), Array.from(tmpIds));
+          tmpIdef.delete();
+        }
+      }
+    } catch (e) { console.warn('[pre] idef members map err:', e); }
+
+    // Recursively flatten an instance definition: nested InstanceReference
+    // members are expanded into transformed clones of the referenced block's
+    // contents. Three.js's Rhino3dmLoader treats nesting as flat — a nested
+    // iRef is placed at the scene root with only its LOCAL xform, which makes
+    // it appear at the wrong world position. Flattening every block to direct
+    // geometry sidesteps that limitation.
+    const flattenIdef = (idefId, depth = 0) => {
+      const geomArr = [];
+      const attrArr = [];
+      if (depth > 30) {
+        console.warn('[pre] flatten depth limit reached at', idefId);
+        return { geomArr, attrArr };
+      }
+      const memberIds = idefMembersMap.get(String(idefId).toLowerCase()) || [];
+      for (const memberId of memberIds) {
+        const modelObj = doc.objects().findId(memberId);
+        if (!modelObj) continue;
+        const g = modelObj.geometry();
+        const a = modelObj.attributes();
+        try {
+          if (g && g.constructor.name === 'InstanceReference') {
+            const childIdefId = g.parentIdefId;
+            const xform = g.xform;
+            if (childIdefId && xform) {
+              const sub = flattenIdef(childIdefId, depth + 1);
+              for (let k = 0; k < sub.geomArr.length; k++) {
+                try { sub.geomArr[k].transform(xform); } catch (te) { console.warn('[pre] flatten transform err:', te.message); }
+                geomArr.push(sub.geomArr[k]);
+                attrArr.push(sub.attrArr[k]);
+              }
+            }
+          } else if (g && a) {
+            const clone = (typeof g.duplicate === 'function') ? g.duplicate() : null;
+            if (clone) { geomArr.push(clone); attrArr.push(a); a !== null && (modelObj._keepAttr = true); }
+          }
+        } catch (e) { console.warn('[pre] flatten member err:', e.message); }
+        try { if (g) g.delete(); } catch {}
+        // attr is either pushed to attrArr (keep alive) or unused (free it)
+        if (!modelObj._keepAttr) { try { if (a) a.delete(); } catch {} }
+        try { modelObj.delete(); } catch {}
+      }
+      return { geomArr, attrArr };
+    };
+
     const idefIdMap = new Map();
     try {
       const srcDefinitions = doc.instanceDefinitions();
@@ -1152,27 +1219,7 @@ export async function preprocess3dm(file, skipLayerParse) {
               }
             } catch {}
 
-            const geometryArray = [];
-            const attributesArray = [];
-            try {
-              const objectIds = idef.getObjectIds();
-              if (objectIds) {
-                objectIds.forEach(id => {
-                  const objInDoc = doc.objects().findId(id);
-                  if (objInDoc) {
-                    const geom = objInDoc.geometry();
-                    const attr = objInDoc.attributes();
-                    if (geom) {
-                      geometryArray.push(geom);
-                      attributesArray.push(attr || null);
-                    }
-                    try { objInDoc.delete(); } catch {}
-                  }
-                });
-              }
-            } catch (errIds) {
-              console.warn('[pre] idef getObjectIds err:', errIds);
-            }
+            const { geomArr: geometryArray, attrArr: attributesArray } = flattenIdef(oldId);
 
             try {
               const cleanIdx = cleanDoc.instanceDefinitions().add(name, description, url, urlTag, basePoint, geometryArray, attributesArray);
@@ -1214,7 +1261,7 @@ export async function preprocess3dm(file, skipLayerParse) {
 
     const objects = doc.objects();
     const count   = objects.count;
-    let hasSubD = false, hasAnnotation = false;
+    let hasSubD = false, hasAnnotation = false, hasLayoutObject = false;
 
     for (let i = 0; i < count; i++) {
       let modelObj = null, geom = null, attr = null;
@@ -1224,6 +1271,23 @@ export async function preprocess3dm(file, skipLayerParse) {
         geom = modelObj.geometry();
         attr = modelObj.attributes();
         if (!geom) continue;
+
+        // Skip objects that live on a Layout page (PageSpace) — the viewer
+        // only shows the model-space scene. ActiveSpace: None=0, ModelSpace=1, PageSpace=2.
+        const spaceVal = readEnumValue(attr?.activeSpace);
+        if (spaceVal === 2) {
+          hasLayoutObject = true;
+          continue;
+        }
+
+        // Skip objects that belong to a block (instance) definition. They live
+        // in doc.objects() but are NOT meant to render as standalone geometry —
+        // only via InstanceReference. They've already been copied into
+        // cleanDoc.instanceDefinitions() in the loop above.
+        if (attr?.isInstanceDefinitionObject === true) {
+          hasLayoutObject = true; // force cleanDoc rebuild
+          continue;
+        }
 
         // Store original layerIndex by object UUID — cleanDoc.add() loses this mapping
         try {
@@ -1546,6 +1610,23 @@ export async function preprocess3dm(file, skipLayerParse) {
 
         } else if (isInstanceReference) {
           try {
+            // Record the instance's xform translation → layer index so we can
+            // tag the rendered iRefObject group after 3DMLoader builds it. The
+            // group itself carries no Rhino attributes, so without this map we
+            // can't gate its visibility on the InstanceReference's own layer
+            // (e.g. hiding "1층" should hide every instance placed there).
+            try {
+              const xf = geom.xform;
+              if (xf && attr) {
+                const tx = xf.m03, ty = xf.m13, tz = xf.m23;
+                if (Number.isFinite(tx) && Number.isFinite(ty) && Number.isFinite(tz)) {
+                  const key = `${tx.toFixed(4)},${ty.toFixed(4)},${tz.toFixed(4)}`;
+                  S._instanceLayerByPos = S._instanceLayerByPos || new Map();
+                  S._instanceLayerByPos.set(key, attr.layerIndex ?? 0);
+                }
+              }
+            } catch {}
+
             const oldParentId = geom.parentIdefId;
             const newParentId = idefIdMap.get(oldParentId);
             if (newParentId) {
@@ -1576,7 +1657,7 @@ export async function preprocess3dm(file, skipLayerParse) {
       }
     }
 
-    if (hasSubD || hasAnnotation) {
+    if (hasSubD || hasAnnotation || hasLayoutObject) {
       try {
         const newBytes = cleanDoc.toByteArray();
         fileData = new Blob([newBytes], { type: 'application/octet-stream' });
@@ -1623,6 +1704,26 @@ export function postProcessModel(model, addEdgesFlag, colorsAreSRGBStoredAsLinea
         }
       } catch {}
       attrs.layerIndex = realLayerIndex;
+    }
+
+    // ── Tag iRefObject groups with the InstanceReference's own layer index
+    // (3DMLoader leaves the group bare — no userData — so without this
+    // updateLayerVisibility can't gate the whole instance on its own layer,
+    // and turning off e.g. "1층" wouldn't hide instances placed there).
+    if (!child.isMesh && !child.isLine && S._instanceLayerByPos && child.children && child.children.length > 0) {
+      let hasIdefMember = false;
+      for (const c of child.children) {
+        if (c.userData?.attributes?.isInstanceDefinitionObject === true) {
+          hasIdefMember = true;
+          break;
+        }
+      }
+      if (hasIdefMember) {
+        const p = child.position;
+        const key = `${p.x.toFixed(4)},${p.y.toFixed(4)},${p.z.toFixed(4)}`;
+        const li = S._instanceLayerByPos.get(key);
+        if (typeof li === 'number') child.userData.instanceLayerIndex = li;
+      }
     }
 
     // ── Clean up curve spikes / failed [0,0,0] evaluation chords ──────────────
@@ -1991,6 +2092,7 @@ export async function handleFile(file, rhinoLoader, gltfLoader) {
         setToolbarModelState(true);
         postProcessModel(S.currentModel, extractEdges);
         applyLayerColorsToModel(S.currentModel);
+        updateLayerVisibility();
         fitCameraToObject(S.currentModel, false);
         const box = new THREE.Box3().setFromObject(S.currentModel);
         setupModelShadowFrustum(box);
