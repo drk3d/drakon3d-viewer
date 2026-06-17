@@ -10,6 +10,7 @@ import { renderNamedViewsUI } from './camera.js';
 import { resetSettingsToDefault } from './session.js';
 import { showLoading, hideLoading, setProgress, setFileName, showModelInfo } from './helpers.js';
 import { setToolbarModelState, changeDisplayMode } from './app.js';
+import { destroyClippingCap } from './clip-cap.js';
 
 // ── 3dm render-settings helpers ──────────────────────────────────────────────
 
@@ -1963,6 +1964,7 @@ export function clearCurrentModel() {
   S.clippingQuaternion = null;
   if (S.renderer) S.renderer.clippingPlanes = [];
   if (window.deactivateClippingHelper) window.deactivateClippingHelper();
+  destroyClippingCap();
 
   // Clear selection outlines (dynamic import avoids circular at parse time)
   import('./selection.js').then(m => m.clearSelection()).catch(() => {});

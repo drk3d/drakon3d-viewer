@@ -187,6 +187,10 @@ export const S = {
   clippingBaseQuaternion:    null,
   clipAxis:                  'z',
   clipFlipped:               false,
+  clippingCapEnabled:        false,
+  clippingCapColor:          '#000000',
+  capStencilScene:           null,
+  capMesh:                   null,
 
   // ── Gumball ──────────────────────────────────────────────────────────────
   gumballActive:             false,

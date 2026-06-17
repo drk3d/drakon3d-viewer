@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { S } from './state.js';
 import { t } from './i18n.js';
 import { History } from './history.js';
+import { updateClippingCapPose } from './clip-cap.js';
 
 // Three.js Raycaster does NOT skip objects with `visible=false`, so a hidden
 // layer or hidden-object still snaps. Walk up to S.currentModel and reject if
@@ -951,6 +952,7 @@ export function updateClippingPlane() {
     S.clippingPlane.normal.copy(normal);
     S.clippingPlane.constant = -normal.dot(S.clippingPosition);
     updateClippingHelperPose();
+    if (S.clippingCapEnabled && S.capMesh) updateClippingCapPose();
     return;
   }
 
@@ -978,6 +980,7 @@ export function updateClippingPlane() {
   S.clippingQuaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
 
   updateClippingHelperPose();
+  if (S.clippingCapEnabled && S.capMesh) updateClippingCapPose();
 }
 
 export function setupClippingHelper() {

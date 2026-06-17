@@ -38,6 +38,7 @@ import {
   cancelCurrentInProgressMeasurement, updateMeasurementScales
 } from './tools.js';
 import { onPointerDown, clearSelection, updatePropertiesPanel, addSelectionOutline, setupGumballHelper, clearGumballHelper, ensureOriginalTransform } from './selection.js';
+import { buildClippingCap, destroyClippingCap, setClippingCapEnabled, setClippingCapColor, updateClippingCapPose } from './clip-cap.js';
 
 // Notes UI is loaded lazily so the rest of the app boots even if the user
 // never opens a note. The animate loop reads the populated reference.
@@ -181,7 +182,7 @@ function init() {
 
   S.camera = S.perspCamera;
 
-  S.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  S.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, stencil: true });
   S.renderer.setPixelRatio(window.devicePixelRatio);
   S.renderer.setSize(window.innerWidth, window.innerHeight);
   S.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -2011,8 +2012,10 @@ function bindUI() {
       if (panelVisible) {
         setupClippingHelper();
       }
+      if (S.clippingCapEnabled) buildClippingCap();
     } else {
       deactivateClippingHelper();
+      destroyClippingCap();
     }
     updateToolsDropdownActiveState();
   }
@@ -2027,8 +2030,10 @@ function bindUI() {
         S.clippingHasBeenInitialized = true;
       }
       setupClippingHelper();
+      if (S.clippingCapEnabled) buildClippingCap();
     } else {
       deactivateClippingHelper();
+      destroyClippingCap();
     }
   }
   window.setClippingActive = setClippingActive;
@@ -2197,6 +2202,28 @@ function bindUI() {
     document.querySelectorAll('.clip-axis-btn').forEach(b => {
       b.classList.toggle('active', b.dataset.axis === 'z');
     });
+  });
+
+  // ── Cap fill toggle ──
+  document.getElementById('btn-clip-cap-toggle')?.addEventListener('click', () => {
+    const on = !S.clippingCapEnabled;
+    setClippingCapEnabled(on);
+    const btn = document.getElementById('btn-clip-cap-toggle');
+    if (btn) { btn.classList.toggle('active', on); btn.textContent = on ? t('clip.on') : t('clip.off'); }
+  });
+
+  // ── Cap fill color ──
+  document.getElementById('clip-cap-color')?.addEventListener('input', e => {
+    const hex = e.target.value;
+    if (/^#[0-9a-fA-F]{6}$/.test(hex)) {
+      setClippingCapColor(hex);
+      e.target.style.background = hex;
+    }
+  });
+  // Coloris picks up 'coloris:pick' on the element
+  document.getElementById('clip-cap-color')?.addEventListener('coloris:pick', e => {
+    setClippingCapColor(e.detail.color);
+    e.target.style.background = e.detail.color;
   });
 
   // ── 9. Object search (live) ──
@@ -3122,11 +3149,18 @@ function animate() {
   }
   S.composer.render();
 
-  // Render arc overlay scene on top — no clipping planes active
+  // Render arc overlay scene on top — no clipping planes active.
+  // If cap fill is on, clearStencil() before this render so stencil twins (renderOrder 0)
+  // write their values before the cap plane (renderOrder 1) reads them, all in one pass.
   if ((S.clippingEnabled || S.gumballActive) && S.arcOverlayScene && S.arcOverlayScene.children.length > 0) {
     const savedPlanes = S.renderer.clippingPlanes;
     S.renderer.clippingPlanes = [];           // disable clipping for overlay
     S.renderer.autoClear = false;             // don't clear what composer already drew
+    if (S.clippingEnabled && S.clippingCapEnabled && S.capMesh) {
+      updateClippingCapPose();                // keep cap glued to the clip plane (any move path)
+      S.renderer.clearStencil();              // fresh stencil for cap fill this frame
+      S.renderer.clearDepth();                // fresh depth for the cap's depth pre-pass
+    }
     S.renderer.render(S.arcOverlayScene, S.camera);
     S.renderer.autoClear = true;              // restore
     S.renderer.clippingPlanes = savedPlanes;  // restore clipping for next frame
