@@ -1299,6 +1299,27 @@ export async function preprocess3dm(file, skipLayerParse) {
           }
         } catch {}
 
+        // Extract user text (Attribute User Text) by object UUID for the
+        // properties panel. THREE.js Rhino3dmLoader may include userStrings in
+        // userData.attributes, but we pre-cache here as a reliable fallback.
+        try {
+          const id = attr?.id;
+          if (id && typeof attr?.getUserStrings === 'function') {
+            const raw = attr.getUserStrings();
+            let pairs = null;
+            if (Array.isArray(raw) && raw.length > 0) {
+              pairs = raw.map(e => ({ key: String(e.key ?? e[0] ?? ''), value: String(e.value ?? e[1] ?? '') }));
+            } else if (raw && typeof raw === 'object') {
+              const entries = Object.entries(raw);
+              if (entries.length > 0) pairs = entries.map(([k, v]) => ({ key: k, value: String(v) }));
+            }
+            if (pairs && pairs.length > 0) {
+              S._objUserTextById = S._objUserTextById || new Map();
+              S._objUserTextById.set(id, pairs);
+            }
+          }
+        } catch {}
+
         const geomName = geom.constructor.name;
 
         const geomNameLc = geomName.toLowerCase();

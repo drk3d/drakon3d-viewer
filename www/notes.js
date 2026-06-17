@@ -15,22 +15,44 @@ import * as THREE from 'three';
 import { S } from './state.js';
 import { t } from './i18n.js';
 
-const PIN_SVG = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 80'>
-  <path d='M32 4 C18 4 8 14 8 28 c0 18 24 46 24 46 s24 -28 24 -46 c0 -14 -10 -24 -24 -24 z'
-        fill='%23COLOR' stroke='%23000' stroke-width='3' stroke-linejoin='round'/>
-  <circle cx='32' cy='28' r='7' fill='white' stroke='%23000' stroke-width='2.5'/>
-</svg>`;
+// Inline SVG template — explicit width/height (Chromium refuses to upload
+// viewBox-only SVG <img> elements as WebGL textures, which Firefox accepts).
+// Kept on one line so the data: URI has no raw newlines either.
+const PIN_SVG_TEMPLATE = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="80" viewBox="0 0 64 80"><path d="M32 4 C18 4 8 14 8 28 c0 18 24 46 24 46 s24 -28 24 -46 c0 -14 -10 -24 -24 -24 z" fill="__COLOR__" stroke="#000" stroke-width="3" stroke-linejoin="round"/><circle cx="32" cy="28" r="7" fill="white" stroke="#000" stroke-width="2.5"/></svg>`;
 
-// Cache textures per color so we don't re-encode the SVG every time.
+// Rasterise the SVG once per colour through an offscreen canvas, then wrap
+// the canvas in a CanvasTexture. CanvasTexture has stable cross-browser
+// upload semantics — TextureLoader on an SVG <img> works in Firefox but
+// frequently lands as a blank texture in Chromium (Chrome/Edge/Android
+// WebView), making the pin invisible even though the sprite exists.
 const _textureCache = new Map();
+const PIN_PX_W = 128;                          // pin texture resolution
+const PIN_PX_H = Math.round(PIN_PX_W * 80 / 64);
 function pinTexture(hexColor) {
   const key = hexColor.toLowerCase();
   if (_textureCache.has(key)) return _textureCache.get(key);
-  // Replace the literal placeholder "%23COLOR" with the URL-encoded color.
-  // encodeURIComponent('#ef4444') = '%23ef4444', which the SVG parses as '#ef4444'.
-  const url = PIN_SVG.replace('%23COLOR', encodeURIComponent(hexColor));
-  const tex = new THREE.TextureLoader().load(url);
+
+  const canvas = document.createElement('canvas');
+  canvas.width  = PIN_PX_W;
+  canvas.height = PIN_PX_H;
+  const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
+  tex.minFilter  = THREE.LinearMipmapLinearFilter;
+  tex.magFilter  = THREE.LinearFilter;
+  tex.generateMipmaps = true;
+
+  const svg = PIN_SVG_TEMPLATE.replace('__COLOR__', hexColor);
+  const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+
+  const img = new Image();
+  img.onload = () => {
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    tex.needsUpdate = true;
+  };
+  img.src = url;
+
   _textureCache.set(key, tex);
   return tex;
 }

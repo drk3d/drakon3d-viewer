@@ -3,6 +3,29 @@ import { S } from './state.js';
 import { t } from './i18n.js';
 import { History } from './history.js';
 
+// Three.js Raycaster does NOT skip objects with `visible=false`, so a hidden
+// layer or hidden-object still snaps. Walk up to S.currentModel and reject if
+// any ancestor (or the object itself) is invisible.
+function _isHitVisible(obj) {
+  let node = obj;
+  while (node && node !== S.currentModel) {
+    if (node.visible === false) return false;
+    node = node.parent;
+  }
+  return true;
+}
+
+// Common filter for surface-pick raycasts: must be a mesh, must not be a
+// helper (ground/edges/outlines), and must be fully visible up the tree.
+const _OVERLAY_NAMES = new Set(['ground-plane', 'rhino-edges', 'rhino-outline', 'selection-outline']);
+function _pickSurfaceHit(intersects) {
+  return intersects.find(i =>
+    i.object.isMesh &&
+    !_OVERLAY_NAMES.has(i.object.name) &&
+    _isHitVisible(i.object)
+  );
+}
+
 // ── Tool deactivation ─────────────────────────────────────────────────────────
 
 export function deactivateAllTools() {
@@ -123,8 +146,13 @@ export function serializeMeasurements() {
 export function clearMeasurements() {
   const beforeState = serializeMeasurements();
 
-  while (S.measurementGroup.children.length > 0) {
-    const child = S.measurementGroup.children[0];
+  // Iterate over a snapshot — note-marker sprites share this group and must be
+  // preserved, otherwise placing a measurement then clearing it (or undo/redo
+  // round-tripping through reconstructMeasurements) wipes the user's pins.
+  const toRemove = S.measurementGroup.children.filter(
+    c => c.userData?.type !== 'note-marker'
+  );
+  for (const child of toRemove) {
     if (child.geometry) child.geometry.dispose();
     if (child.material) {
       if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
@@ -414,8 +442,7 @@ export function handleWidgetPointerMove(event) {
 
   if (role !== 'center' && S.currentModel) {
     const modelHits = S.raycaster.intersectObject(S.currentModel, true);
-    const modelHit  = modelHits.find(i => i.object.isMesh
-      && !['ground-plane', 'rhino-edges', 'rhino-outline', 'selection-outline'].includes(i.object.name));
+    const modelHit  = _pickSurfaceHit(modelHits);
     if (modelHit) {
       let snapPt = modelHit.point.clone();
       const snapEnabled = document.getElementById('chk-measure-snap')?.checked ?? true;
@@ -514,8 +541,7 @@ export function updateTempDistanceLine(event) {
   S.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
   S.raycaster.setFromCamera(S.mouse, S.camera);
   const intersects = S.raycaster.intersectObject(S.currentModel, true);
-  const hit = intersects.find(i => i.object.isMesh &&
-    !['ground-plane', 'rhino-edges', 'rhino-outline', 'selection-outline'].includes(i.object.name));
+  const hit = _pickSurfaceHit(intersects);
   if (hit) {
     const p1 = S.distanceToolState.points[0];
     const p2 = snapToVertex(hit);
@@ -547,8 +573,7 @@ export function updateDistanceGhost(event) {
   S.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
   S.raycaster.setFromCamera(S.mouse, S.camera);
   const intersects = S.raycaster.intersectObject(S.currentModel, true);
-  const hit = intersects.find(i => i.object.isMesh &&
-    !['ground-plane', 'rhino-edges', 'rhino-outline', 'selection-outline'].includes(i.object.name));
+  const hit = _pickSurfaceHit(intersects);
   if (hit) {
     const p = snapToVertex(hit);
     if (!S.distanceGhostSphere) {
@@ -580,8 +605,7 @@ export function updateTempAngleWidget(event) {
   S.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
   S.raycaster.setFromCamera(S.mouse, S.camera);
   const intersects = S.raycaster.intersectObject(S.currentModel, true);
-  const hit = intersects.find(i => i.object.isMesh &&
-    !['ground-plane', 'rhino-edges', 'rhino-outline', 'selection-outline'].includes(i.object.name));
+  const hit = _pickSurfaceHit(intersects);
 
   const clickIdx = S.angleToolState.points.length;
   if (clickIdx === 0) return;
@@ -687,8 +711,7 @@ export function updateAngleGhost(event) {
   S.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
   S.raycaster.setFromCamera(S.mouse, S.camera);
   const intersects = S.raycaster.intersectObject(S.currentModel, true);
-  const hit = intersects.find(i => i.object.isMesh &&
-    !['ground-plane', 'rhino-edges', 'rhino-outline', 'selection-outline'].includes(i.object.name));
+  const hit = _pickSurfaceHit(intersects);
   if (hit) {
     const p = snapToVertex(hit);
     if (!S.distanceGhostSphere) {
@@ -724,8 +747,7 @@ export function onCanvasClick(event) {
   S.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
   S.raycaster.setFromCamera(S.mouse, S.camera);
   const intersects = S.raycaster.intersectObject(S.currentModel, true);
-  const hit = intersects.find(i => i.object.isMesh &&
-    !['ground-plane', 'rhino-edges', 'rhino-outline', 'selection-outline'].includes(i.object.name));
+  const hit = _pickSurfaceHit(intersects);
   if (!hit) return;
 
   const p = snapToVertex(hit);

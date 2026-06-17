@@ -78,18 +78,18 @@ input[type="file"] { display: none; }
 /* ── Top Bar ── */
 #top-bar {
   position: fixed;
-  top: 0; left: 0; right: 0;
+  /* Sit BELOW the system status bar so the bar's background doesn't fill the
+     inset area as a flat strip. The canvas (z-index:1) shows through above,
+     which looks natural on edge-to-edge Android 15+ and iOS notch devices. */
+  top: env(safe-area-inset-top);
+  left: env(safe-area-inset-left);
+  right: env(safe-area-inset-right);
   z-index: 10;
   background: var(--surface);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
   border-bottom: 1px solid var(--border);
   overflow: visible;  /* must be visible so dropdown menus appear below */
-  /* iOS PWA full-screen: avoid notch / status-bar overlap. Evaluates to 0
-     on desktop and non-PWA contexts, so layout is unchanged elsewhere. */
-  padding-top: env(safe-area-inset-top);
-  padding-left: env(safe-area-inset-left);
-  padding-right: env(safe-area-inset-right);
 }
 
 #top-bar-main {
@@ -472,9 +472,34 @@ body.dark-theme .dark-only {
   flex-shrink: 0;
 }
 .prop-drag-handle:active { cursor: grabbing; }
-.prop-drag-handle h3 { font-size: 0.76rem; font-weight: 600; color: var(--text); }
+.prop-drag-handle h3 { font-size: 0.76rem; font-weight: 600; color: var(--text); flex: 1; }
 
-#prop-content {
+/* ── Properties panel tab switcher ── */
+.prop-tabs {
+  display: flex;
+  gap: 2px;
+  margin-right: 6px;
+}
+.prop-tab {
+  background: none;
+  border: none;
+  color: var(--text-3);
+  cursor: pointer;
+  padding: 3px 5px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  transition: background 0.15s, color 0.15s;
+  line-height: 0;
+}
+.prop-tab.active {
+  color: var(--text);
+  background: rgba(255,255,255,0.12);
+}
+.prop-tab:hover:not(.active) { background: rgba(255,255,255,0.07); color: var(--text-2); }
+
+/* ── Properties tab content (grid layout) ── */
+.prop-grid {
   display: grid;
   grid-template-columns: 56px 1fr;
   row-gap: 5px;
@@ -484,6 +509,54 @@ body.dark-theme .dark-only {
 }
 .prop-label { color: var(--text-2); font-weight: 500; }
 .prop-value { color: var(--text); word-break: break-all; }
+
+/* ── User Text tab content ── */
+.prop-usertext {
+  padding: 10px;
+  font-size: 0.71rem;
+}
+.prop-usertext-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.prop-usertext-table th {
+  text-align: left;
+  padding: 3px 6px;
+  color: var(--text-2);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.68rem;
+}
+.prop-usertext-table td {
+  padding: 4px 6px;
+  color: var(--text);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  word-break: break-all;
+  vertical-align: top;
+}
+.prop-usertext-table td:first-child {
+  color: var(--text-2);
+  font-weight: 500;
+  min-width: 60px;
+  max-width: 100px;
+  width: 38%;
+}
+.prop-usertext-table tr:last-child td { border-bottom: none; }
+.ut-sortable {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  transition: color 0.15s;
+}
+.ut-sortable:hover { color: var(--text); }
+.ut-sort-active { color: var(--text); }
+.ut-sort-idle { opacity: 0.35; font-size: 0.62rem; }
+.prop-usertext-empty {
+  color: var(--text-3);
+  font-size: 0.7rem;
+  text-align: center;
+  padding: 20px 0;
+}
 
 /* ── Measurement List Panel ── */
 .measure-list-panel {

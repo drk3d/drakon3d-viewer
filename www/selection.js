@@ -211,6 +211,52 @@ export function clearSelection() {
 
 // ── Properties panel ──────────────────────────────────────────────────────────
 
+let _activePropTab = 'props'; // 'props' | 'usertext'
+let _utSortCol = null;        // null | 'key' | 'value'
+let _utSortDir = 'asc';       // 'asc' | 'desc'
+
+function _switchPropTab(tab) {
+  _activePropTab = tab;
+  document.getElementById('prop-tab-props')?.classList.toggle('active', tab === 'props');
+  document.getElementById('prop-tab-usertext')?.classList.toggle('active', tab === 'usertext');
+  updatePropertiesPanel();
+}
+
+function _bindPropTabs() {
+  document.getElementById('prop-tab-props')?.addEventListener('click', () => _switchPropTab('props'));
+  document.getElementById('prop-tab-usertext')?.addEventListener('click', () => _switchPropTab('usertext'));
+}
+_bindPropTabs();
+
+function _getUserText(obj) {
+  // Normalise whatever getUserStrings() returns into [{key, value}] pairs.
+  // rhino3dm returns an array of [key, value] string-arrays;
+  // Three.js stores the result directly so elements can be [k,v] arrays
+  // or {key,value} objects depending on the version.
+  function _normalise(raw) {
+    if (!raw || typeof raw !== 'object') return [];
+    if (Array.isArray(raw)) {
+      return raw
+        .map(e => Array.isArray(e)
+          ? { key: String(e[0] ?? ''), value: String(e[1] ?? '') }
+          : { key: String(e.key ?? e[0] ?? ''), value: String(e.value ?? e[1] ?? '') })
+        .filter(p => p.key);
+    }
+    // Plain object {key: value}
+    return Object.entries(raw).map(([k, v]) => ({ key: k, value: String(v) }));
+  }
+
+  // Try THREE.js-parsed attributes first (populated by Rhino3dmLoader)
+  const ut = obj.userData.attributes?.userStrings;
+  const pairs = _normalise(ut);
+  if (pairs.length > 0) return pairs;
+
+  // Fallback: per-object data extracted during 3DM preprocess
+  const id = obj.userData.attributes?.id;
+  if (id && S._objUserTextById?.has(id)) return S._objUserTextById.get(id);
+  return [];
+}
+
 export function updatePropertiesPanel() {
   const panel = document.getElementById('object-properties');
   if (!S.selectedObjects.length) { panel.classList.add('hidden'); return; }
@@ -308,6 +354,57 @@ export function updatePropertiesPanel() {
   const swatchLabel = hexSame ? '' : '<span style="font-size:0.65rem;color:var(--text-3);margin-left:4px;">Various</span>';
 
   // ── HTML Construction ────────────────────────────────────────────────
+  // ── User Text tab (early return) ─────────────────────────────────────
+  if (_activePropTab === 'usertext') {
+    const _esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+    let pairs = _getUserText(S.selectedObjects[0]);
+
+    // Apply sort
+    if (_utSortCol && pairs.length > 1) {
+      const col = _utSortCol;
+      const dir = _utSortDir === 'asc' ? 1 : -1;
+      pairs = [...pairs].sort((a, b) => dir * a[col].localeCompare(b[col], undefined, { sensitivity: 'base', numeric: true }));
+    }
+
+    // Column header with sort indicator
+    const _thHtml = (col, label) => {
+      const active = _utSortCol === col;
+      const arrow = active ? (_utSortDir === 'asc' ? ' ▲' : ' ▼') : ' <span class="ut-sort-idle">⇅</span>';
+      return `<th class="ut-sortable${active ? ' ut-sort-active' : ''}" data-col="${col}">${label}${arrow}</th>`;
+    };
+
+    let rows = pairs.length
+      ? pairs.map(p => `<tr><td>${_esc(p.key)}</td><td>${_esc(p.value)}</td></tr>`).join('')
+      : `<tr><td colspan="2" class="prop-usertext-empty">No user text</td></tr>`;
+
+    let utHtml = `<div class="prop-usertext"><table class="prop-usertext-table">
+      <thead><tr>${_thHtml('key','Key')}${_thHtml('value','Value')}</tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+    if (isMulti) {
+      utHtml = `<div style="text-align:center;padding:6px 0 4px;font-size:0.78rem;font-weight:600;color:var(--text-1);">${S.selectedObjects.length} objects selected</div>` + utHtml;
+    }
+    document.getElementById('prop-content').innerHTML = utHtml;
+
+    // Bind sort header clicks
+    document.querySelectorAll('#prop-content .ut-sortable').forEach(th => {
+      th.addEventListener('click', () => {
+        const col = th.dataset.col;
+        if (_utSortCol === col) {
+          _utSortDir = _utSortDir === 'asc' ? 'desc' : 'asc';
+        } else {
+          _utSortCol = col;
+          _utSortDir = 'asc';
+        }
+        updatePropertiesPanel();
+      });
+    });
+
+    panel.classList.remove('hidden');
+    return;
+  }
+
   let htmlContent = '';
   if (isMulti) {
     htmlContent += `
@@ -507,7 +604,7 @@ export function updatePropertiesPanel() {
       </div>`;
   }
 
-  document.getElementById('prop-content').innerHTML = htmlContent;
+  document.getElementById('prop-content').innerHTML = `<div class="prop-grid">${htmlContent}</div>`;
 
   // ── Bind Multi / Single Selection Listeners ──────────────────────────
   
