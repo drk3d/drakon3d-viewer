@@ -2007,6 +2007,7 @@ export function clearCurrentModel() {
   S.parsedAnnotations    = [];
   S.parsed3dmFileInfo    = null;
   S.rhinoBackgroundColor = null;
+  S.currentFileHandle    = null;
   resetFileRenderSettings();
 
   const bgSelReset = document.getElementById('bg-type-select');
@@ -2026,8 +2027,12 @@ export function clearCurrentModel() {
 
 // ── Main file dispatch ────────────────────────────────────────────────────────
 
-export async function handleFile(file, rhinoLoader, gltfLoader) {
+export async function handleFile(file, rhinoLoader, gltfLoader, fileHandle = null) {
   if (!file) return;
+
+  // Record (or clear) the writable file handle for this open. Only FSA opens
+  // (showOpenFilePicker / drag-drop getAsFileSystemHandle) pass one.
+  S.currentFileHandle = fileHandle || null;
 
   const fileName = file.name.toLowerCase();
   const supportedExtensions = ['.3dm', '.glb', '.gltf', '.stl', '.3mf', '.stp', '.step', '.iges', '.igs', '.rhv'];

@@ -20,6 +20,65 @@ export function hideLoading() {
   document.getElementById('loading')?.classList.add('hidden');
 }
 
+// ── Save to disk (folder picker on desktop Chromium, download elsewhere) ──────
+// Acquire the sink SYNCHRONOUSLY inside the click handler — showSaveFilePicker
+// requires an active user gesture, so call beginSave() *before* any slow blob
+// production (GLB export, gzip). Then write the produced Blob via the returned
+// sink. On Firefox/Safari/mobile (no File System Access API) it falls back to a
+// classic <a download> to the browser's default location.
+//
+//   const sink = await beginSave({ suggestedName: 'model.glb', types: [...] });
+//   if (!sink) return;                 // user cancelled the picker
+//   const blob = await buildBlob();    // heavy work is fine here
+//   await sink(blob);
+//
+// Ensure we hold read-write permission for a FileSystemFileHandle, prompting
+// the user once if needed. Must be called within a user gesture when a prompt
+// is required. Returns true if writable.
+export async function ensureWritePermission(handle) {
+  try {
+    const opts = { mode: 'readwrite' };
+    if ((await handle.queryPermission?.(opts)) === 'granted') return true;
+    if ((await handle.requestPermission?.(opts)) === 'granted') return true;
+  } catch (e) {
+    console.warn('[ensureWritePermission] failed:', e);
+  }
+  return false;
+}
+
+// Write a Blob to an open FileSystemFileHandle (overwrites its contents).
+export async function writeBlobToHandle(handle, blob) {
+  const writable = await handle.createWritable();
+  await writable.write(blob);
+  await writable.close();
+}
+
+// Returns an async (blob) => void sink, or null if the user cancelled.
+export async function beginSave({ suggestedName, types } = {}) {
+  if (typeof window.showSaveFilePicker === 'function') {
+    try {
+      const handle = await window.showSaveFilePicker({ suggestedName, types });
+      return async (blob) => {
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+      };
+    } catch (err) {
+      if (err && err.name === 'AbortError') return null; // user cancelled
+      console.warn('[beginSave] showSaveFilePicker failed, falling back to download:', err);
+    }
+  }
+  // Fallback: classic download to the browser's default location.
+  return async (blob) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = suggestedName || 'download';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+}
+
 // ── File name display ────────────────────────────────────────────────────────
 
 export function setFileName(name) {

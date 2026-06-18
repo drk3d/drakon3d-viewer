@@ -141,6 +141,11 @@ export const S = {
   // ── File / session ───────────────────────────────────────────────────────
   currentFileName: '',
   currentFileNameWithExt: '',
+  // FileSystemFileHandle of the currently-open file (only when opened via the
+  // File System Access API — showOpenFilePicker or drag-drop getAsFileSystemHandle
+  // on desktop Chromium). null for <input>/sample/cloud opens. Used by Save to
+  // overwrite an opened .rhv in place, or to open the save dialog in its folder.
+  currentFileHandle: null,
   modelUnit: 'Unknown',
 
   // ── Background ───────────────────────────────────────────────────────────

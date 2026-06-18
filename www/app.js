@@ -16,7 +16,7 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { initI18n, setLang, applyI18n, t, currentLang } from './i18n.js';
 
 import { S } from './state.js';
-import { updateSliderFill, updateAllSliderFills, updateSelectIcon, showLoading, hideLoading, bindSliderDblClickInput } from './helpers.js';
+import { updateSliderFill, updateAllSliderFills, updateSelectIcon, showLoading, hideLoading, bindSliderDblClickInput, beginSave } from './helpers.js';
 import { setupLights, updateSunLight, updateShadowCasting, addGroundPlane, removeGroundPlane } from './lighting.js';
 import { switchToOrtho, switchToPersp, setViewPreset, setWalkthroughMode, triggerCameraTransition, fitCameraToBox, fitCameraToObject, fitCameraToSelected, saveCustomView, renderNamedViewsUI } from './camera.js';
 import { applySceneBackground, applyFileBackground, applyDisplayMode, applyLayerColorsToModel, recreateAllEdges } from './display.js';
@@ -942,7 +942,29 @@ function bindUI() {
   });
 
   // ── 2. File tab actions ──
-  document.getElementById('btn-open-panel').addEventListener('click', () => { fileInput.click(); });
+  document.getElementById('btn-open-panel').addEventListener('click', async () => {
+    // Desktop Chromium: open via the File System Access API so we keep a
+    // writable handle (lets Save overwrite the file in place). Elsewhere use
+    // the classic file input.
+    if (typeof window.showOpenFilePicker === 'function') {
+      let handle;
+      try {
+        [handle] = await window.showOpenFilePicker({
+          multiple: false,
+          types: [{ description: '3D / CAD Models', accept: { 'application/octet-stream':
+            ['.3dm', '.glb', '.gltf', '.stp', '.step', '.iges', '.igs', '.stl', '.3mf', '.rhv'] } }],
+        });
+      } catch (err) {
+        if (err?.name !== 'AbortError') console.error('[Open] picker failed:', err);
+        return;
+      }
+      const file = await handle.getFile();
+      if (file.name.toLowerCase().endsWith('.rhv')) await loadSession(file, handle);
+      else handleFile(file, rhinoLoader, gltfLoader, handle);
+    } else {
+      fileInput.click();
+    }
+  });
   const cloudLoaders = { rhinoLoader, gltfLoader };
   document.getElementById('btn-open-gdrive')?.addEventListener('click', () => {
     GoogleDrive.pickAndLoad(cloudLoaders);
@@ -963,7 +985,14 @@ function bindUI() {
       alert('No model loaded to save.');
       return;
     }
-    openSaveAsDialog();
+    // Desktop Chromium: the native save dialog handles name + location in one
+    // step, so skip the in-app filename prompt. Elsewhere fall back to the
+    // in-app name dialog (a plain download has no OS picker).
+    if (typeof window.showSaveFilePicker === 'function') {
+      saveSession(null, true);
+    } else {
+      openSaveAsDialog();
+    }
   });
   document.getElementById('btn-close-panel').addEventListener('click', () => { clearCurrentModel(); });
   document.getElementById('btn-capture-panel').addEventListener('click', () => {
@@ -981,7 +1010,7 @@ function bindUI() {
     document.getElementById('capture-w').value = Math.round(window.innerWidth * scale);
     document.getElementById('capture-h').value = Math.round(window.innerHeight * scale);
   });
-  document.getElementById('btn-capture-confirm')?.addEventListener('click', () => {
+  document.getElementById('btn-capture-confirm')?.addEventListener('click', async () => {
     const transparent = document.getElementById('capture-transparent').checked;
     const w = parseInt(document.getElementById('capture-w').value) || window.innerWidth;
     const h = parseInt(document.getElementById('capture-h').value) || window.innerHeight;
@@ -1016,10 +1045,15 @@ function bindUI() {
         alert('Failed to save capture: ' + err);
       });
     } else {
-      const a = document.createElement('a');
-      a.href = dataURL;
-      a.download = fileName;
-      a.click();
+      // Desktop Chromium: prompt for save location; otherwise download.
+      const sink = await beginSave({
+        suggestedName: fileName,
+        types: [{ description: 'PNG Image', accept: { 'image/png': ['.png'] } }],
+      });
+      if (sink) {
+        const blob = await (await fetch(dataURL)).blob();
+        await sink(blob);
+      }
     }
     document.getElementById('capture-dialog').classList.add('hidden');
   });
@@ -1598,7 +1632,7 @@ function bindUI() {
   function confirmSaveAs() {
     const name = saveAsInput?.value.trim();
     if (name) {
-      saveSession(name);
+      saveSession(name, true);
       closeSaveAsDialog();
     } else {
       alert('Please enter a valid file name.');
@@ -2800,12 +2834,20 @@ function bindUI() {
   window.addEventListener('dragover',  e => { e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'; });
   window.addEventListener('drop', async e => {
     e.preventDefault();
+    // Capture a writable handle synchronously — DataTransfer is neutered after
+    // any await. Only desktop Chromium exposes getAsFileSystemHandle.
+    const item0 = e.dataTransfer.items?.[0];
+    const handlePromise = item0?.getAsFileSystemHandle ? item0.getAsFileSystemHandle() : null;
+    const resolveDropHandle = async () => {
+      try { const h = await handlePromise; return (h && h.kind === 'file') ? h : null; }
+      catch { return null; }
+    };
     const files = e.dataTransfer.files;
     if (files?.length > 0) {
       const f = files[0];
       const name = f.name.toLowerCase();
       if (name.endsWith('.rhv')) {
-        loadSession(f);
+        loadSession(f, await resolveDropHandle());
       } else if (name.endsWith('.hdr')) {
         const { showLoading, hideLoading } = await import('./helpers.js');
         showLoading('Loading custom HDR background…');
@@ -2879,7 +2921,7 @@ function bindUI() {
           hideLoading();
         }
       } else {
-        handleFile(f, rhinoLoader, gltfLoader);
+        handleFile(f, rhinoLoader, gltfLoader, await resolveDropHandle());
       }
     }
   });
@@ -3417,8 +3459,22 @@ function initThemeSync() {
 }
 
 
-function exportGLB() {
+async function exportGLB() {
   if (!S.currentModel) { alert('No model loaded.'); return; }
+
+  const isCapacitor = window.Capacitor && window.Capacitor.isPluginAvailable('FileOpener');
+  const glbFileName = (S.currentFileName?.replace(/\.[^.]+$/, '') || 'model') + '.glb';
+
+  // Pick the save location first, while the click gesture is still active.
+  let sink = null;
+  if (!isCapacitor) {
+    sink = await beginSave({
+      suggestedName: glbFileName,
+      types: [{ description: 'glTF Binary', accept: { 'model/gltf-binary': ['.glb'] } }],
+    });
+    if (!sink) return; // user cancelled
+  }
+
   applyDisplayMode();
 
   const toHide = [];
@@ -3432,12 +3488,11 @@ function exportGLB() {
   const exporter = new GLTFExporter();
   exporter.parse(
     S.currentModel,
-    (gltf) => {
+    async (gltf) => {
       toHide.forEach(c => { c.visible = true; });
       const blob = new Blob([gltf], { type: 'application/octet-stream' });
-      const fileName = (S.currentFileName?.replace(/\.[^.]+$/, '') || 'model') + '.glb';
 
-      if (window.Capacitor && window.Capacitor.isPluginAvailable('FileOpener')) {
+      if (isCapacitor) {
         const reader = new FileReader();
         reader.readAsDataURL(blob);
         reader.onloadend = async () => {
@@ -3445,7 +3500,7 @@ function exportGLB() {
           try {
             await window.Capacitor.Plugins.FileOpener.saveFile({
               base64Data: base64Data,
-              fileName: fileName,
+              fileName: glbFileName,
               mimeType: 'application/octet-stream'
             });
             alert('GLB saved to Downloads folder!');
@@ -3455,12 +3510,7 @@ function exportGLB() {
           }
         };
       } else {
-        const url  = URL.createObjectURL(blob);
-        const a    = document.createElement('a');
-        a.href = url;
-        a.download = fileName;
-        a.click();
-        URL.revokeObjectURL(url);
+        await sink(blob);
       }
     },
     (err) => {

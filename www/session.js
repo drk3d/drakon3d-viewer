@@ -484,19 +484,59 @@ async function buildSessionBuffer(customFileName = null) {
 }
 
 // ── Save session (.rhv) ───────────────────────────────────────────────────────
-export async function saveSession(customFileName = null) {
+// Plain Save (pickLocation=false):
+//   • opened a .rhv (with a writable handle) → overwrite that file in place
+//   • opened another format (.3dm, …)        → native save dialog, opened in
+//     the source file's folder with the same base name + .rhv
+// Save As (pickLocation=true): always the native save dialog (in the source
+// folder when known). Desktop Chromium only; elsewhere falls back to download.
+export async function saveSession(customFileName = null, pickLocation = false) {
   if (!S.currentModel) {
     alert('No model loaded to save.');
     return;
   }
-  const { showLoading, hideLoading } = await import('./helpers.js');
+  const { showLoading, hideLoading, ensureWritePermission, writeBlobToHandle } = await import('./helpers.js');
+
+  const isCapacitor = window.Capacitor && window.Capacitor.isPluginAvailable('FileOpener');
+  const hasFSA = typeof window.showSaveFilePicker === 'function';
+  let baseName = customFileName || S.currentFileName || 'scene';
+  if (baseName.toLowerCase().endsWith('.rhv')) baseName = baseName.slice(0, -4);
+
+  // Decide the write target FIRST, while the click gesture is still active
+  // (showSaveFilePicker and requestPermission both require it).
+  let writeHandle = null;   // FileSystemFileHandle to create/overwrite
+  let useDownload = false;
+  if (!isCapacitor) {
+    const openedRhv = (!pickLocation && S.currentFileHandle && /\.rhv$/i.test(S.currentFileHandle.name || ''))
+      ? S.currentFileHandle : null;
+    if (openedRhv && await ensureWritePermission(openedRhv)) {
+      writeHandle = openedRhv;                       // overwrite the opened .rhv
+    } else if (hasFSA) {
+      try {
+        const opts = {
+          suggestedName: baseName + '.rhv',
+          types: [{ description: 'byRhinoView Session', accept: { 'application/octet-stream': ['.rhv'] } }],
+        };
+        if (S.currentFileHandle) opts.startIn = S.currentFileHandle; // same folder
+        writeHandle = await window.showSaveFilePicker(opts);
+      } catch (err) {
+        if (err?.name === 'AbortError') return;       // user cancelled
+        console.warn('[Save] showSaveFilePicker failed, downloading instead:', err);
+        useDownload = true;
+      }
+    } else {
+      useDownload = true;
+    }
+  }
+
   showLoading('Saving session file…');
   try {
     const { finalBuffer, finalName } = await buildSessionBuffer(customFileName);
     const blob = new Blob([finalBuffer], { type: 'application/octet-stream' });
     const fullFileName = finalName + '.rhv';
+    const { setFileName } = await import('./helpers.js');
 
-    if (window.Capacitor && window.Capacitor.isPluginAvailable('FileOpener')) {
+    if (isCapacitor) {
       const reader = new FileReader();
       reader.readAsDataURL(blob);
       reader.onloadend = async () => {
@@ -512,18 +552,19 @@ export async function saveSession(customFileName = null) {
           alert('Failed to save session: ' + err);
         }
       };
+    } else if (writeHandle) {
+      await writeBlobToHandle(writeHandle, blob);
+      S.currentFileHandle = writeHandle;            // remember for the next Save
+      setFileName(writeHandle.name || fullFileName); // reflect the saved name
     } else {
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = fullFileName;
       a.click();
       URL.revokeObjectURL(a.href);
+      if (customFileName) setFileName(finalName + '.rhv');
     }
 
-    if (customFileName) {
-      const { setFileName } = await import('./helpers.js');
-      setFileName(finalName + '.rhv');
-    }
     hideLoading();
   } catch (err) {
     console.error('[Session Export] error:', err);
@@ -542,7 +583,22 @@ export async function exportPackage(customFileName = null) {
     alert('No model loaded to export.');
     return;
   }
-  const { showLoading, hideLoading } = await import('./helpers.js');
+  const { showLoading, hideLoading, beginSave } = await import('./helpers.js');
+
+  const isCapacitor = window.Capacitor && window.Capacitor.isPluginAvailable('FileOpener');
+  let baseName = customFileName || S.currentFileName || 'scene';
+  if (baseName.toLowerCase().endsWith('.rhv')) baseName = baseName.slice(0, -4);
+
+  // Acquire the save location first, while the click gesture is still active.
+  let sink = null;
+  if (!isCapacitor) {
+    sink = await beginSave({
+      suggestedName: baseName + '.html',
+      types: [{ description: 'HTML', accept: { 'text/html': ['.html'] } }],
+    });
+    if (!sink) return; // user cancelled
+  }
+
   showLoading('Exporting HTML package…');
   try {
     // Fetch the offline shell first so we fail fast if it's missing.
@@ -571,7 +627,7 @@ export async function exportPackage(customFileName = null) {
     const blob = new Blob([shell], { type: 'text/html' });
     const fullFileName = finalName + '.html';
 
-    if (window.Capacitor && window.Capacitor.isPluginAvailable('FileOpener')) {
+    if (isCapacitor) {
       const reader = new FileReader();
       reader.readAsDataURL(blob);
       reader.onloadend = async () => {
@@ -588,11 +644,7 @@ export async function exportPackage(customFileName = null) {
         }
       };
     } else {
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = fullFileName;
-      a.click();
-      URL.revokeObjectURL(a.href);
+      await sink(blob);
     }
     hideLoading();
   } catch (err) {
@@ -616,7 +668,11 @@ function arrayBufferToBase64(buffer) {
 
 // ── Load session ─────────────────────────────────────────────────────────────
 
-export async function loadSession(file) {
+export async function loadSession(file, fileHandle = null) {
+  // Record (or clear) the writable handle for this open — only FSA opens pass
+  // one. Lets a plain Save overwrite the opened .rhv in place.
+  S.currentFileHandle = fileHandle || null;
+
   const { showLoading, hideLoading } = await import('./helpers.js');
   showLoading('Loading session file…');
 
