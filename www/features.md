@@ -49,6 +49,9 @@ Customize how your models are displayed using professional viewport modes:
 * **Angle Measurement (각도 측정):** Measures precise angles between three custom points with dynamic vertex snapping.
 * **Measurement History List (측정 기록 내역):** Tracks and displays all measurements in a beautiful overlay table with custom units and dynamic deletion/clear-all options.
 * **Clipping Plane (클리핑 단면):** 3-Axis (X, Y, Z) sectioning tools. Slide the section plane in real time, **Flip** the clipping direction, and reset instantly to examine internal components.
+* **Section Cap Fill (단면 채움):** Fills the cut cross-section of closed solids at the clipping plane with a solid color, so sectioned models read as filled surfaces rather than hollow shells.
+* **3D Notes (3D 노트):** Pin color-coded notes to specific points on the model to capture review comments, then edit, delete, and manage them from the notes list.
+* **Object Properties (개체 속성):** Inspect a selected object's name, layer, color, and material, and review Rhino's **Attribute User Text** in a dedicated tab.
 * **Find Object (개체 검색):** Real-time search of objects or mesh parts by name. Double-click to highlight, zoom-fit, or isolate selected elements.
 
 ---
@@ -83,13 +86,15 @@ Customize how your models are displayed using professional viewport modes:
 ---
 
 ### 7. 💾 Smart Session Management / 스마트 세션 및 내보내기
-* **`.rhv` Session Packages:** Instead of raw files, save your entire design session into a single `.rhv` zip archive. This bundle captures:
+* **`.rhv` Session Packages:** Instead of raw files, save your entire design session into a single `.rhv` package. This bundle captures:
   1. The 3D model geometry.
   2. Active camera angle and projection.
   3. Custom background gradient colors or active HDR.
   4. Layer visibility toggles.
   5. Placed measurement annotations and markers.
   6. Lighting intensities and color grading options.
+* **Save & Save As (데스크톱 저장):** On desktop Chromium, **Save** overwrites the opened `.rhv` in place—or opens a native save dialog in the source file's folder when another format was loaded. **Save As** always opens the native dialog so you choose folder + name in one step. (Other browsers and mobile fall back to a download.)
+* **Export Package (HTML) (HTML 패키지 내보내기):** Export the viewer **together with** the loaded model as a single self-contained, offline `.html` file—open it with a double-click in any browser, with no server, plugin, or internet required. Perfect for sending models to clients for review.
 * **Capture Screenshot (고해상도 캡처):** Capture high-resolution image snapshots directly from the 3D viewport canvas.
 * **GLB Export:** Export the parsed mesh structure directly to standard `.glb` format for alternate VR/AR pipelines.
 * **Bilingual UI (12 Languages):** Adaptation for English, Korean, French, German, Spanish, Italian, Japanese, Simplified Chinese, Traditional Chinese, Portuguese, Czech, and Polish matching Rhino 3D's standard UI languages.
