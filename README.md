@@ -10,7 +10,8 @@ A premium, lightweight, zero-install 3D Rhino & CAD Web Viewer designed for seam
 
 * **High-Fidelity CAD Formats:** Support for `.3dm` (Rhino 3D versions 5–8), `.glb`, `.stl`, `.3mf`, and `.stp`/`.step`/`.igs` file drops.
 * **Premium Shading Modes:** Interactive shaded, wireframe, technical sketch, rendered, and beautiful **Arctic (Ambient Occlusion style)** modes.
-* **Smart Session Management:** Save your entire viewing session—including camera perspectives, custom colors, layer visibilities, measurements, and lights—into a single `.rhinoview` package.
+* **Smart Session Management:** Save your entire viewing session—including camera perspectives, custom colors, layer visibilities, measurements, and lights—into a single `.rhv` package.
+* **Export Package (HTML):** Export the viewer **and** the current model as one self-contained, offline `.html` file. Double-click to open in any browser—no server, plugin, or internet required. Ideal for sending models to clients for review.
 * **Named Views:** Save custom camera viewpoints and animate transitions seamlessly.
 * **Analysis Tools:** In-app distance/angle measurement utilities with smart vertex snapping, and real-time interactive clipping plane sections.
 * **12-Language Support (i18n):** Automatically adapts to 12 languages matching Rhino 3D (en, ko, fr, de, es, it, ja, zh-CN, zh-TW, pt-BR, cs, pl).
@@ -30,14 +31,23 @@ byRhinoView/
 │   ├── loaders.js           # 3D Model Parsers (.3dm, .glb, .stl, .stp, etc.)
 │   ├── tools.js             # Distance, Angle, Clipping Plane, & Search Tools
 │   ├── selection.js         # Object Selection & Gumball Helpers
-│   ├── session.js           # Session Package (.rhinoview) Importer/Exporter
+│   ├── session.js           # Session/Package Importer & Exporter (.rhv + HTML)
 │   ├── i18n.js              # 12-Language Translation Catalog
+│   ├── viewer-shell.html    # Prebuilt self-contained offline shell (generated)
 │   ├── README.md            # Web Viewer Sub-README
 │   ├── features.md          # Full Feature Documentation
 │   └── privacy.md           # Bilingual Privacy Policy
+├── build/
+│   └── build-shell.mjs      # esbuild bundler → www/viewer-shell.html
 ├── LICENSE                  # MIT License
 └── package.json             # NPM Configuration & Scripts
 ```
+
+> [!IMPORTANT]
+> `www/viewer-shell.html` is a **build artifact** consumed at runtime by the
+> Export Package feature. Re-run `npm run build:shell` whenever the viewer
+> source (`www/*.js`, `style.css`) changes, so exported packages embed the
+> latest viewer.
 
 > [!NOTE]
 > Local development and build configurations for mobile platforms (Android/iOS) are ignored via `.gitignore` to maintain a lightweight, clean web-viewer-only repository layout for open-source distribution.
@@ -70,6 +80,13 @@ To start the local development server (served via `http-server` on port 8080):
 npm run dev
 ```
 Open your browser and navigate to `http://localhost:8080` to interact with the viewer.
+
+### 3. (Optional) Build the Offline Export Shell
+The **Export Package (HTML)** feature relies on a prebuilt, fully-inlined viewer
+shell. Regenerate it after changing any viewer source:
+```bash
+npm run build:shell   # bundles the viewer → www/viewer-shell.html
+```
 
 ---
 

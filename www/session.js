@@ -205,20 +205,20 @@ function restoreExportUserData(restore) {
 
 // ── Save session ─────────────────────────────────────────────────────────────
 
-export async function saveSession(customFileName = null) {
-  if (!S.currentModel) {
-    alert('No model loaded to save.');
-    return;
-  }
-
-  const { showLoading, hideLoading } = await import('./helpers.js');
-  showLoading('Saving session file…');
-
+// Gathers all viewer state, exports the model to GLB, and wraps it in the
+// gzip'd RV3D container. Resolves with { finalBuffer, finalName }. All temporary
+// scene mutations (hidden outlines, swapped materials, stripped userData) are
+// restored before resolving and on every error path. Shared by saveSession()
+// (writes a .rhv) and exportPackage() (embeds into a self-contained .html).
+async function buildSessionBuffer(customFileName = null) {
   const toHide = [];
   // Declared in outer scope so the outer catch (synchronous errors before
   // GLTFExporter.parse fires) can also restore mutations.
   let outerTextureMimeOriginals = new Map();
   let outerUserDataRestore = [];
+  let annGroup = null;
+  let annParent = null;
+  const activeMaterials = new Map();
   try {
     const settings = {
       displayMode:        S.currentMode,
@@ -320,8 +320,6 @@ export async function saveSession(customFileName = null) {
       customHdrName:       S.customHdrName || null
     };
 
-    const activeMaterials = new Map();
-
     // Temporarily hide UI outlines and apply Rendered/Custom PBR materials during GLB export
     S.currentModel.traverse(child => {
       if (['rhino-outline', 'selection-outline', 'rhino-edges', 'ground-plane'].includes(child.name)) {
@@ -351,8 +349,8 @@ export async function saveSession(customFileName = null) {
     });
 
     // Exclude annotations group from GLB export so they aren't baked as static outline-prone meshes
-    const annGroup = S.annotationGroup;
-    const annParent = annGroup?.parent;
+    annGroup = S.annotationGroup;
+    annParent = annGroup?.parent;
     if (annGroup && annParent) {
       annParent.remove(annGroup);
     }
@@ -391,118 +389,85 @@ export async function saveSession(customFileName = null) {
 
     const { GLTFExporter } = await import('three/addons/exporters/GLTFExporter.js');
     const exporter = new GLTFExporter();
-    exporter.parse(
-      S.currentModel,
-      async (glbBuffer) => {
-        try {
-          restoreSessionState();
+    return await new Promise((resolve, reject) => {
+      exporter.parse(
+        S.currentModel,
+        async (glbBuffer) => {
+          try {
+            restoreSessionState();
 
-          // Serialize metadata to UTF-8
-          const jsonStr = JSON.stringify(data);
-          const jsonBytes = new TextEncoder().encode(jsonStr);
+            // Serialize metadata to UTF-8
+            const jsonStr = JSON.stringify(data);
+            const jsonBytes = new TextEncoder().encode(jsonStr);
 
-          // Binary Package Layout:
-          // 1. Magic Bytes (4 bytes): "RV3D"
-          // 2. Version (4 bytes): 1 (uint32)
-          // 3. JSON Length (4 bytes): json length (uint32)
-          // 4. JSON UTF-8 Payload (jsonBytes.byteLength bytes)
-          // 5. GLB Binary Payload (glbBuffer.byteLength bytes)
-          const totalLength = 4 + 4 + 4 + jsonBytes.byteLength + glbBuffer.byteLength;
-          const combinedBuffer = new ArrayBuffer(totalLength);
-          const view = new DataView(combinedBuffer);
-          const uint8 = new Uint8Array(combinedBuffer);
+            // Binary Package Layout:
+            // 1. Magic Bytes (4 bytes): "RV3D"
+            // 2. Version (4 bytes): 1 (uint32)
+            // 3. JSON Length (4 bytes): json length (uint32)
+            // 4. JSON UTF-8 Payload (jsonBytes.byteLength bytes)
+            // 5. GLB Binary Payload (glbBuffer.byteLength bytes)
+            const totalLength = 4 + 4 + 4 + jsonBytes.byteLength + glbBuffer.byteLength;
+            const combinedBuffer = new ArrayBuffer(totalLength);
+            const view = new DataView(combinedBuffer);
+            const uint8 = new Uint8Array(combinedBuffer);
 
-          // Magic "RV3D" (0x52, 0x56, 0x33, 0x44)
-          view.setUint8(0, 0x52);
-          view.setUint8(1, 0x56);
-          view.setUint8(2, 0x33);
-          view.setUint8(3, 0x44);
+            // Magic "RV3D" (0x52, 0x56, 0x33, 0x44)
+            view.setUint8(0, 0x52);
+            view.setUint8(1, 0x56);
+            view.setUint8(2, 0x33);
+            view.setUint8(3, 0x44);
 
-          // Version = 1
-          view.setUint32(4, 1, true);
+            // Version = 1
+            view.setUint32(4, 1, true);
 
-          // JSON Length
-          view.setUint32(8, jsonBytes.byteLength, true);
+            // JSON Length
+            view.setUint32(8, jsonBytes.byteLength, true);
 
-          // Copy JSON payload
-          uint8.set(jsonBytes, 12);
+            // Copy JSON payload
+            uint8.set(jsonBytes, 12);
 
-          // Copy GLB binary payload (no extra compression — see comment block
-          // above compressGlbWithDraco/Meshopt discussion in this file).
-          uint8.set(new Uint8Array(glbBuffer), 12 + jsonBytes.byteLength);
+            // Copy GLB binary payload (no extra compression — see comment block
+            // above compressGlbWithDraco/Meshopt discussion in this file).
+            uint8.set(new Uint8Array(glbBuffer), 12 + jsonBytes.byteLength);
 
-          // Gzip the whole RV3D container. Loaders auto-detect compression via
-          // the gzip magic (0x1f 0x8b).
-          let finalBuffer = combinedBuffer;
-          if (typeof CompressionStream === 'function') {
-            try {
-              const cs = new CompressionStream('gzip');
-              const writer = cs.writable.getWriter();
-              writer.write(new Uint8Array(combinedBuffer));
-              writer.close();
-              finalBuffer = await new Response(cs.readable).arrayBuffer();
-            } catch (gzipErr) {
-              console.warn('[Session Export] gzip failed, saving uncompressed:', gzipErr);
-              finalBuffer = combinedBuffer;
-            }
-          }
-
-          console.log('[Session Export] sizes (bytes):', {
-            raw_glb: glbBuffer.byteLength,
-            after_gzip: finalBuffer.byteLength,
-          });
-
-          const blob = new Blob([finalBuffer], { type: 'application/octet-stream' });
-          let finalName = customFileName || S.currentFileName || 'scene';
-          if (finalName.toLowerCase().endsWith('.rhv')) finalName = finalName.slice(0, -4);
-          const fullFileName = finalName + '.rhv';
-
-          if (window.Capacitor && window.Capacitor.isPluginAvailable('FileOpener')) {
-            const reader = new FileReader();
-            reader.readAsDataURL(blob);
-            reader.onloadend = async () => {
-              const base64Data = reader.result;
+            // Gzip the whole RV3D container. Loaders auto-detect compression via
+            // the gzip magic (0x1f 0x8b).
+            let finalBuffer = combinedBuffer;
+            if (typeof CompressionStream === 'function') {
               try {
-                await window.Capacitor.Plugins.FileOpener.saveFile({
-                  base64Data: base64Data,
-                  fileName: fullFileName,
-                  mimeType: 'application/octet-stream'
-                });
-                alert('Session saved to Downloads folder!');
-              } catch (err) {
-                console.error('[Capacitor Save] Failed to save session:', err);
-                alert('Failed to save session: ' + err);
+                const cs = new CompressionStream('gzip');
+                const writer = cs.writable.getWriter();
+                writer.write(new Uint8Array(combinedBuffer));
+                writer.close();
+                finalBuffer = await new Response(cs.readable).arrayBuffer();
+              } catch (gzipErr) {
+                console.warn('[Session Export] gzip failed, saving uncompressed:', gzipErr);
+                finalBuffer = combinedBuffer;
               }
-            };
-          } else {
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = fullFileName;
-            a.click();
-            URL.revokeObjectURL(a.href);
-          }
+            }
 
-          if (customFileName) {
-            const { setFileName } = await import('./helpers.js');
-            setFileName(finalName + '.rhv');
-          }
+            console.log('[Session Export] sizes (bytes):', {
+              raw_glb: glbBuffer.byteLength,
+              after_gzip: finalBuffer.byteLength,
+            });
 
-          hideLoading();
-        } catch (callbackErr) {
+            let finalName = customFileName || S.currentFileName || 'scene';
+            if (finalName.toLowerCase().endsWith('.rhv')) finalName = finalName.slice(0, -4);
+
+            resolve({ finalBuffer, finalName });
+          } catch (callbackErr) {
+            console.error('[Session Export] Callback error:', callbackErr);
+            reject(callbackErr);
+          }
+        },
+        (err) => {
           restoreSessionState();
-          console.error('[Session Export] Callback error:', callbackErr);
-          alert('Failed to save session file: ' + callbackErr.message);
-          hideLoading();
-        }
-      },
-      (err) => {
-        restoreSessionState();
-        console.error('[Session Export] GLB export failed:', err);
-        alert('Failed to pack geometry into session file.');
-        hideLoading();
-      },
-      { binary: true }
-    );
+          console.error('[Session Export] GLB export failed:', err);
+          reject(err);
+        },
+        { binary: true }
+      );
+    });
   } catch (err) {
     restoreExportUserData(outerUserDataRestore);
     restoreTextureMimeTypes(outerTextureMimeOriginals);
@@ -514,9 +479,139 @@ export async function saveSession(customFileName = null) {
     });
     toHide.forEach(c => { c.visible = true; });
     console.error('[Session Export] error:', err);
-    alert('Failed to save session file: ' + err.message);
+    throw err;
+  }
+}
+
+// ── Save session (.rhv) ───────────────────────────────────────────────────────
+export async function saveSession(customFileName = null) {
+  if (!S.currentModel) {
+    alert('No model loaded to save.');
+    return;
+  }
+  const { showLoading, hideLoading } = await import('./helpers.js');
+  showLoading('Saving session file…');
+  try {
+    const { finalBuffer, finalName } = await buildSessionBuffer(customFileName);
+    const blob = new Blob([finalBuffer], { type: 'application/octet-stream' });
+    const fullFileName = finalName + '.rhv';
+
+    if (window.Capacitor && window.Capacitor.isPluginAvailable('FileOpener')) {
+      const reader = new FileReader();
+      reader.readAsDataURL(blob);
+      reader.onloadend = async () => {
+        try {
+          await window.Capacitor.Plugins.FileOpener.saveFile({
+            base64Data: reader.result,
+            fileName: fullFileName,
+            mimeType: 'application/octet-stream'
+          });
+          alert('Session saved to Downloads folder!');
+        } catch (err) {
+          console.error('[Capacitor Save] Failed to save session:', err);
+          alert('Failed to save session: ' + err);
+        }
+      };
+    } else {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = fullFileName;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    if (customFileName) {
+      const { setFileName } = await import('./helpers.js');
+      setFileName(finalName + '.rhv');
+    }
+    hideLoading();
+  } catch (err) {
+    console.error('[Session Export] error:', err);
+    alert('Failed to save session file: ' + (err?.message || err));
     hideLoading();
   }
+}
+
+// ── Export self-contained HTML package ────────────────────────────────────────
+// Embeds the gzip'd RV3D session buffer (base64) into the prebuilt offline
+// viewer shell (viewer-shell.html, produced by build/build-shell.mjs). The
+// result is one double-clickable .html with the model inside — no server, no
+// internet, no install. Bootstrap in app.js auto-loads window.__RHV_PACKAGE__.
+export async function exportPackage(customFileName = null) {
+  if (!S.currentModel) {
+    alert('No model loaded to export.');
+    return;
+  }
+  const { showLoading, hideLoading } = await import('./helpers.js');
+  showLoading('Exporting HTML package…');
+  try {
+    // Fetch the offline shell first so we fail fast if it's missing.
+    const shellResp = await fetch('./viewer-shell.html', { cache: 'no-store' });
+    if (!shellResp.ok) {
+      throw new Error('viewer-shell.html not found. Run `node build/build-shell.mjs` to generate it.');
+    }
+    let shell = await shellResp.text();
+
+    const { finalBuffer, finalName } = await buildSessionBuffer(customFileName);
+    const b64 = arrayBufferToBase64(finalBuffer);
+
+    const inject =
+      `window.__RHV_PACKAGE__=${JSON.stringify(b64)};` +
+      `window.__RHV_PACKAGE_NAME__=${JSON.stringify(finalName + '.rhv')};`;
+
+    // Function replacements: a string replacement would interpret "$&"/"$'"/…
+    // patterns, and the base64 payload / file name could contain them.
+    if (shell.includes('/*__RHV_PACKAGE__*/')) {
+      shell = shell.replace('/*__RHV_PACKAGE__*/', () => inject);
+    } else {
+      // Fallback for shells without the placeholder: inject before the bundle.
+      shell = shell.replace('<script type="module" id="app-bundle">', () => `<script>${inject}</script>\n<script type="module" id="app-bundle">`);
+    }
+
+    const blob = new Blob([shell], { type: 'text/html' });
+    const fullFileName = finalName + '.html';
+
+    if (window.Capacitor && window.Capacitor.isPluginAvailable('FileOpener')) {
+      const reader = new FileReader();
+      reader.readAsDataURL(blob);
+      reader.onloadend = async () => {
+        try {
+          await window.Capacitor.Plugins.FileOpener.saveFile({
+            base64Data: reader.result,
+            fileName: fullFileName,
+            mimeType: 'text/html'
+          });
+          alert('HTML package saved to Downloads folder!');
+        } catch (err) {
+          console.error('[Capacitor Save] Failed to save package:', err);
+          alert('Failed to save package: ' + err);
+        }
+      };
+    } else {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = fullFileName;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+    hideLoading();
+  } catch (err) {
+    console.error('[Export Package] error:', err);
+    alert('Failed to export HTML package: ' + (err?.message || err));
+    hideLoading();
+  }
+}
+
+// Base64-encode an ArrayBuffer in chunks (avoids call-stack overflow on large
+// buffers passed to String.fromCharCode).
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
 }
 
 // ── Load session ─────────────────────────────────────────────────────────────

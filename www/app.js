@@ -22,7 +22,7 @@ import { switchToOrtho, switchToPersp, setViewPreset, setWalkthroughMode, trigge
 import { applySceneBackground, applyFileBackground, applyDisplayMode, applyLayerColorsToModel, recreateAllEdges } from './display.js';
 import { renderLayerUI, updateLayerVisibility } from './layers.js';
 import { createAnnotationSprites } from './annotations.js';
-import { saveSession, loadSession } from './session.js';
+import { saveSession, loadSession, exportPackage } from './session.js';
 import { handleFile, clearCurrentModel } from './loaders.js';
 import * as GoogleDrive from './cloud/google-drive.js';
 import * as OneDrive from './cloud/onedrive.js';
@@ -122,6 +122,33 @@ document.getElementById('loading')?.classList.remove('hidden');
 initThemeSync();
 init();
 animate();
+
+// ── Auto-load embedded model (self-contained Export Package HTML) ────────────
+// When this page was produced by "Export Package", the model travels inline as
+// a base64 gzip'd .rhv in window.__RHV_PACKAGE__. Decode it into a File and feed
+// it straight through the normal session loader — no fetch, no server needed.
+if (typeof window.__RHV_PACKAGE__ === 'string' && window.__RHV_PACKAGE__.length) {
+  // This is a delivered review artifact, not an authoring session — hide the
+  // save/export actions that don't make sense here (and Export Package can't
+  // work standalone, since it fetches the viewer shell that only exists on the
+  // dev server).
+  ['btn-save-panel', 'btn-save-as-panel', 'btn-save-glb', 'btn-export-package']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+
+  (async () => {
+    try {
+      const name = window.__RHV_PACKAGE_NAME__ || 'model.rhv';
+      const binary = atob(window.__RHV_PACKAGE__);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const file = new File([bytes], name, { type: 'application/octet-stream' });
+      await loadSession(file);
+    } catch (e) {
+      console.error('[App] Failed to load embedded package:', e);
+      document.getElementById('loading')?.classList.add('hidden');
+    }
+  })();
+}
 
 // ── init ───────────────────────────────────────────────────────────────────
 
@@ -927,6 +954,10 @@ function bindUI() {
     Dropbox.pickAndLoad(cloudLoaders);
   });
   document.getElementById('btn-save-panel').addEventListener('click', () => { saveSession(); });
+  document.getElementById('btn-export-package')?.addEventListener('click', () => {
+    if (!S.currentModel) { alert('No model loaded to export.'); return; }
+    exportPackage();
+  });
   document.getElementById('btn-save-as-panel')?.addEventListener('click', () => {
     if (!S.currentModel) {
       alert('No model loaded to save.');
