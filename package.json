@@ -6,7 +6,10 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "npx http-server www -p 8080 -o",
-    "sync": "npx cap sync"
+    "sync": "npx cap sync",
+    "strip:models": "node -e \"const fs=require('fs'),p='android/app/src/main/assets/public/models';fs.rmSync(p,{recursive:true,force:true});console.log('android build: removed '+p)\"",
+    "sync:android": "npx cap sync android && npm run strip:models",
+    "copy:android": "npx cap copy android && npm run strip:models"
   },
   "keywords": [],
   "author": "",
