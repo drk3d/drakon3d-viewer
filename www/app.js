@@ -35,7 +35,8 @@ import {
   updateTempAngleWidget, updateAngleGhost,
   syncMeasurementTabsUI,
   onCanvasClick, updateClippingPlane, setupClippingHelper, updateClippingHelperPose,
-  cancelCurrentInProgressMeasurement, updateMeasurementScales
+  cancelCurrentInProgressMeasurement, updateMeasurementScales,
+  rebuildClippingGrid, applyClipWidgetVisibility
 } from './tools.js';
 import { onPointerDown, clearSelection, updatePropertiesPanel, addSelectionOutline, setupGumballHelper, clearGumballHelper, ensureOriginalTransform } from './selection.js';
 import { buildClippingCap, destroyClippingCap, setClippingCapEnabled, setClippingCapColor, updateClippingCapPose } from './clip-cap.js';
@@ -2197,7 +2198,7 @@ function bindUI() {
     if (S.clippingTransformControls) {
       S.clippingTransformControls.detach();
       S.clippingTransformControls.attach(S.clippingHelper);
-      S.clippingTransformControls.getHelper().visible = true;
+      applyClipWidgetVisibility();
     }
 
     // Save actual pose in state
@@ -2260,6 +2261,17 @@ function bindUI() {
       updateSliderFill(heightSlider);
     }
 
+    // 4b. Reset widget visibility + grid size to defaults
+    S.clipGridVisible = true;
+    S.clipGizmoVisible = true;
+    S.clipGridScale = 1.0;
+    document.getElementById('btn-clip-grid-toggle')?.classList.add('active');
+    document.getElementById('btn-clip-gizmo-toggle')?.classList.add('active');
+    const gridSizeSlider = document.getElementById('clip-grid-size');
+    if (gridSizeSlider) gridSizeSlider.value = 1.0;
+    const gridSizeVal = document.getElementById('clip-grid-size-val');
+    if (gridSizeVal) gridSizeVal.textContent = '1.0x';
+
     // 5. Re-activate clipping fresh from scratch!
     setClippingActive(true);
 
@@ -2290,6 +2302,31 @@ function bindUI() {
     setClippingCapColor(e.detail.color);
     e.target.style.background = e.detail.color;
   });
+
+  // ── Grid widget toggle (grid lines + rotation arcs) ──
+  document.getElementById('btn-clip-grid-toggle')?.addEventListener('click', e => {
+    S.clipGridVisible = !S.clipGridVisible;
+    e.currentTarget.classList.toggle('active', S.clipGridVisible);
+    applyClipWidgetVisibility();
+  });
+
+  // ── Move widget toggle (translate gizmo) ──
+  document.getElementById('btn-clip-gizmo-toggle')?.addEventListener('click', e => {
+    S.clipGizmoVisible = !S.clipGizmoVisible;
+    e.currentTarget.classList.toggle('active', S.clipGizmoVisible);
+    applyClipWidgetVisibility();
+  });
+
+  // ── Grid size slider ──
+  const clipGridSizeSlider = document.getElementById('clip-grid-size');
+  if (clipGridSizeSlider) {
+    clipGridSizeSlider.addEventListener('input', e => {
+      S.clipGridScale = parseFloat(e.target.value);
+      const valEl = document.getElementById('clip-grid-size-val');
+      if (valEl) valEl.textContent = S.clipGridScale.toFixed(1) + 'x';
+      rebuildClippingGrid();
+    });
+  }
 
   // ── 9. Object search (live) ──
   const findInput = document.getElementById('find-search-input');
@@ -2351,6 +2388,7 @@ function bindUI() {
   // Helper: raycast against arc hit meshes
   function hitTestArcHandles(clientX, clientY) {
     if (!S.clippingHelper || !S.clippingEnabled || S.clippingArcHandles.length === 0) return null;
+    if (S.clipGizmoVisible === false) return null;  // arcs hidden with Gumball → not interactive
     const mouse = new THREE.Vector2(
       (clientX / window.innerWidth) * 2 - 1,
       -(clientY / window.innerHeight) * 2 + 1
@@ -2728,7 +2766,7 @@ function bindUI() {
       if (S.clippingTransformControls && S.clippingHelper) {
         S.clippingTransformControls.detach();
         S.clippingTransformControls.attach(S.clippingHelper);
-        S.clippingTransformControls.getHelper().visible = true;
+        applyClipWidgetVisibility();
       }
 
       if (!History.suppress && beforeState) {

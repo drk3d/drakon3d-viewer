@@ -1002,22 +1002,14 @@ export function setupClippingHelper() {
   S.clippingBaseQuaternion = null;
   if (!S.clippingEnabled) return;
 
-  const size = (S.currentModel
+  const baseSize = (S.currentModel
     ? new THREE.Box3().setFromObject(S.currentModel).getSize(new THREE.Vector3()).length() * 0.65
     : 50) * 0.60;
+  S.clippingGridBaseSize = baseSize;
+  const size = baseSize * (S.clipGridScale ?? 1);
 
   // Build clipping plane grid (white/light blue grid)
-  const div = 5, pts = [];
-  for (let i = -div; i <= div; i++) {
-    const t = (i / div) * size;
-    pts.push(-size, t, 0, size, t, 0);
-    pts.push(t, -size, 0, t, size, 0);
-  }
-  const b = size;
-  pts.push(-b,-b,0, b,-b,0, b,-b,0, b,b,0, b,b,0, -b,b,0, -b,b,0, -b,-b,0);
-
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  const geo = buildClippingGridGeometry(size);
   const mat = new THREE.LineBasicMaterial({
     color: 0x4da6ff, depthTest: false, depthWrite: false, transparent: true, opacity: 0.65
   });
@@ -1033,7 +1025,56 @@ export function setupClippingHelper() {
 
   if (S.clippingTransformControls) {
     S.clippingTransformControls.attach(S.clippingHelper);
-    S.clippingTransformControls.getHelper().visible = true;
+  }
+
+  // Apply the user's grid / move widget visibility toggles
+  applyClipWidgetVisibility();
+}
+
+// Builds the grid LineSegments geometry for a given half-size.
+function buildClippingGridGeometry(size) {
+  const div = 5, pts = [];
+  for (let i = -div; i <= div; i++) {
+    const t = (i / div) * size;
+    pts.push(-size, t, 0, size, t, 0);
+    pts.push(t, -size, 0, t, size, 0);
+  }
+  const b = size;
+  pts.push(-b,-b,0, b,-b,0, b,-b,0, b,b,0, b,b,0, -b,b,0, -b,b,0, -b,-b,0);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  return geo;
+}
+
+// Rebuilds only the grid geometry to reflect S.clipGridScale (slider-driven).
+// Pose, arc handles and the move gizmo are left untouched.
+export function rebuildClippingGrid() {
+  if (!S.clippingHelper) return;
+  const size = (S.clippingGridBaseSize || 50) * (S.clipGridScale ?? 1);
+  S.clippingHelper.geometry.dispose();
+  S.clippingHelper.geometry = buildClippingGridGeometry(size);
+}
+
+// Applies S.clipGridVisible / S.clipGizmoVisible to the live widgets.
+// Grid toggle controls only the grid lines; the Gumball toggle controls the
+// translate gizmo + rotation arc handles (and disables their interaction when off).
+export function applyClipWidgetVisibility() {
+  const active    = !!S.clippingEnabled;
+  const gridOn    = active && S.clipGridVisible !== false;
+  const gumballOn = active && S.clipGizmoVisible !== false;
+
+  if (S.clippingHelper) S.clippingHelper.visible = gridOn;
+
+  // Rotation arc handles are part of the Gumball widget
+  S.clippingArcHandles.forEach(h => {
+    if (h.mesh)    h.mesh.visible    = gumballOn;
+    if (h.hitMesh) h.hitMesh.visible = gumballOn;
+  });
+
+  if (S.clippingTransformControls) {
+    const helper = S.clippingTransformControls.getHelper();
+    if (helper) helper.visible = gumballOn && !!S.clippingHelper;
+    S.clippingTransformControls.enabled = gumballOn;
   }
 }
 
