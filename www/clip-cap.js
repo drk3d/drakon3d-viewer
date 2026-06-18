@@ -31,27 +31,50 @@ let _stencilMeshFront = null; // stencil writer — front faces (decrement)
 let _mergedGeo   = null; // merged position-only geometry (world space)
 let _modelCenter = null; // THREE.Vector3 — model bbox center (for plane placement)
 
-// A section cap only makes sense for 3D VOLUMES. The one thing that genuinely
-// breaks the back/front stencil count is a FLAT open surface (ground plane,
-// terrain, single panel): all its faces share one orientation, so they fill the
-// whole plane (and break on clip-flip). We must NOT use a watertight test here —
-// Rhino meshes are routinely "unwelded" (split vertices at smoothing creases) so
-// a perfectly solid puzzle piece reports thousands of boundary edges, yet the
-// back/front count renders it correctly anyway. Instead we exclude only meshes
-// whose geometry is essentially PLANAR (one bbox dimension ≈ 0). Real solids —
-// even imperfect/unwelded ones — keep all three dimensions and pass.
-function _isFlatSurface(geo) {
+// A section cap only makes sense for CLOSED (watertight) solids. The stencil
+// count runs along the WHOLE view ray (depthTest off), so an OPEN mesh anywhere
+// in the column stays unbalanced and paints the cap color onto it even when the
+// clip plane never touches it — that's the "untouched object gets filled" bug.
+// A closed solid that isn't cut balances to zero, so it never paints.
+//
+// The catch: Rhino meshes are routinely "unwelded" (split vertices at smoothing
+// creases), so a perfectly solid piece looks open at a fixed tolerance. We weld
+// with a tolerance RELATIVE to the mesh size before counting boundary edges, so
+// unwelded-but-closed solids are correctly recognised while genuinely open
+// meshes (furniture shells, ground planes, flat panels) are excluded.
+// Returns true only if every welded edge is shared by ≥2 triangles (no holes).
+function _isClosedSolid(geo) {
   const pos = geo.attributes?.position;
-  if (!pos) return true;                          // no geometry → skip
+  if (!pos) return false;
+  const idx = geo.index ? geo.index.array : null;
+  const triCount = idx ? idx.length / 3 : pos.count / 3;
+  if (triCount < 4) return false;                 // too few tris to bound a volume
+  if (triCount > 300000) return true;             // too big to weld-check; assume solid
   if (!geo.boundingBox) geo.computeBoundingBox();
   const bb = geo.boundingBox;
-  const ex = bb.max.x - bb.min.x;
-  const ey = bb.max.y - bb.min.y;
-  const ez = bb.max.z - bb.min.z;
-  const maxE = Math.max(ex, ey, ez);
-  const minE = Math.min(ex, ey, ez);
-  if (maxE <= 0) return true;
-  return minE <= maxE * 0.01;                     // thinnest dimension < 1% of largest → flat
+  const diag = Math.hypot(bb.max.x - bb.min.x, bb.max.y - bb.min.y, bb.max.z - bb.min.z);
+  const inv = 1 / Math.max(diag * 1e-4, 1e-6);    // weld tolerance ∝ mesh size
+  const arr = pos.array;
+  const vmap = new Map(); let nextId = 0;
+  const idFor = vi => {
+    const k = Math.round(arr[vi*3]*inv) + ',' + Math.round(arr[vi*3+1]*inv) + ',' + Math.round(arr[vi*3+2]*inv);
+    let id = vmap.get(k);
+    if (id === undefined) { id = nextId++; vmap.set(k, id); }
+    return id;
+  };
+  const edges = new Map();
+  const ek = (a, b) => a < b ? a + '_' + b : b + '_' + a;
+  for (let t = 0; t < triCount; t++) {
+    let a, b, c;
+    if (idx) { a = idx[t*3]; b = idx[t*3+1]; c = idx[t*3+2]; } else { a = t*3; b = t*3+1; c = t*3+2; }
+    const ia = idFor(a), ib = idFor(b), ic = idFor(c);
+    const e1 = ek(ia, ib), e2 = ek(ib, ic), e3 = ek(ic, ia);
+    edges.set(e1, (edges.get(e1) || 0) + 1);
+    edges.set(e2, (edges.get(e2) || 0) + 1);
+    edges.set(e3, (edges.get(e3) || 0) + 1);
+  }
+  for (const count of edges.values()) if (count < 2) return false;  // boundary edge → open
+  return true;
 }
 
 export function buildClippingCap() {
@@ -67,7 +90,7 @@ export function buildClippingCap() {
     if (mats.length > 0 && mats.every(m => m?.transparent && (m?.opacity ?? 1) < 0.5)) return;
     const srcGeo = mesh.geometry;
     if (!srcGeo?.attributes?.position) return;
-    if (_isFlatSurface(srcGeo)) return;  // skip flat open surfaces (ground/terrain/panels)
+    if (!_isClosedSolid(srcGeo)) return;  // section fill is for closed solids only
 
     mesh.updateWorldMatrix(true, false);
     const g = new THREE.BufferGeometry();
