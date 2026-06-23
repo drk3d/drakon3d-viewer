@@ -42,6 +42,7 @@ export const S = {
   // ── Rhino native data ────────────────────────────────────────────────────
   rhinoInstance:       null,
   rhinoBackgroundColor: null,
+  missingRenderMeshCount: 0,         // # of 3dm Brep/Extrusion objects with no stored render mesh
   fileDefaultBgStyle:  null,
   fileBackgroundColorTop: null,      // sRGB hex string '#rrggbb' (or null)
   fileBackgroundColorBottom: null,   // sRGB hex string '#rrggbb' (or null)

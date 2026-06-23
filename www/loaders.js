@@ -8,7 +8,8 @@ import { renderLayerUI, updateLayerVisibility } from './layers.js';
 import { createAnnotationSprites } from './annotations.js';
 import { renderNamedViewsUI } from './camera.js';
 import { resetSettingsToDefault } from './session.js';
-import { showLoading, hideLoading, setProgress, setFileName, showModelInfo } from './helpers.js';
+import { showLoading, hideLoading, setProgress, setFileName, showModelInfo, showToast } from './helpers.js';
+import { t } from './i18n.js';
 import { setToolbarModelState, changeDisplayMode } from './app.js';
 import { destroyClippingCap } from './clip-cap.js';
 
@@ -642,6 +643,7 @@ export async function preprocess3dm(file, skipLayerParse) {
   S.parsed3dmFileInfo = null;
   S._objLayerById = new Map();
   S._instanceLayerByPos = new Map();
+  S.missingRenderMeshCount = 0;
   let fileData = file;
 
   // Wait up to 6 s for the rhino3dm WASM to finish initializing.
@@ -1260,6 +1262,39 @@ export async function preprocess3dm(file, skipLayerParse) {
       } catch { return null; }
     };
 
+    // Helper: does this Brep/Extrusion carry a stored render mesh?
+    // THREE.js Rhino3dmLoader only renders the *saved* render mesh (BrepFace.getMesh
+    // / Extrusion.getMesh) — rhino3dm has no NURBS mesher, so a file saved without
+    // render meshes (e.g. wireframe display + "Save Small") shows nothing. We detect
+    // those objects here so the load path can advise the user to re-save from Rhino.
+    const meshTypeAny = (() => {
+      try { return S.rhinoInstance.MeshType?.Any ?? 0; } catch { return 0; }
+    })();
+    const hasRenderMesh = (g, name) => {
+      try {
+        if (name === 'Extrusion') {
+          const m = g.getMesh(meshTypeAny);
+          if (m) { try { m.delete(); } catch {} return true; }
+          return false;
+        }
+        if (name === 'Brep') {
+          const faces = g.faces();
+          const fc = faces?.count ?? 0;
+          let found = false;
+          for (let fi = 0; fi < fc; fi++) {
+            const face = faces.get(fi);
+            const m = face ? face.getMesh(meshTypeAny) : null;
+            if (m) { found = true; try { m.delete(); } catch {} }
+            try { face?.delete(); } catch {}
+            if (found) break;
+          }
+          try { faces?.delete(); } catch {}
+          return found;
+        }
+      } catch (e) { /* on error, don't raise a false alarm */ }
+      return true; // other geometry types handle their own rendering
+    };
+
     const objects = doc.objects();
     const count   = objects.count;
     let hasSubD = false, hasAnnotation = false, hasLayoutObject = false;
@@ -1341,6 +1376,13 @@ export async function preprocess3dm(file, skipLayerParse) {
         const isInstanceReference = safeInst(geom, S.rhinoInstance.InstanceReference)
           || geomName === 'InstanceReference'
           || geomNameLc.includes('instancereference');
+
+        // Flag Brep/Extrusion objects that lack a stored render mesh — these
+        // won't render (rhino3dm can't tessellate NURBS) and the user is told
+        // to re-save from Rhino with render meshes.
+        if (geomName === 'Brep' || geomName === 'Extrusion') {
+          if (!hasRenderMesh(geom, geomName)) S.missingRenderMeshCount++;
+        }
 
         if (isSubD) {
           hasSubD = true;
@@ -2135,6 +2177,9 @@ export async function handleFile(file, rhinoLoader, gltfLoader, fileHandle = nul
         renderNamedViewsUI();
         setFileName(file.name);
         showModelInfo(S.currentModel, file.size);
+        if (S.missingRenderMeshCount > 0) {
+          showToast(t('msg.no_render_mesh').replace('{n}', S.missingRenderMeshCount));
+        }
       } catch (postErr) {
         console.error('[load] post-processing crash:', postErr);
         alert('3DM 파일 처리 중 오류가 발생했습니다: ' + postErr.message);

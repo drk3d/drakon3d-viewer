@@ -20,6 +20,47 @@ export function hideLoading() {
   document.getElementById('loading')?.classList.add('hidden');
 }
 
+// ── Toast (non-blocking notification) ────────────────────────────────────────
+// Lightweight info banner used for non-fatal notices (e.g. a 3dm file that
+// carries geometry without render meshes). Auto-dismisses after `duration` ms;
+// a close button lets the user dismiss early. Stacks multiple toasts vertically.
+let _toastContainer = null;
+export function showToast(message, { duration = 9000 } = {}) {
+  if (!message) return;
+  if (!_toastContainer) {
+    _toastContainer = document.createElement('div');
+    _toastContainer.id = 'toast-container';
+    document.body.appendChild(_toastContainer);
+  }
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+
+  const text = document.createElement('span');
+  text.className = 'toast-msg';
+  text.textContent = message;
+
+  const close = document.createElement('button');
+  close.className = 'toast-close';
+  close.setAttribute('aria-label', 'Dismiss');
+  close.innerHTML = '&times;';
+
+  const dismiss = () => {
+    toast.classList.remove('show');
+    toast.addEventListener('transitionend', () => toast.remove(), { once: true });
+    // Fallback removal in case the transitionend never fires.
+    setTimeout(() => toast.remove(), 400);
+  };
+  close.addEventListener('click', dismiss);
+
+  toast.appendChild(text);
+  toast.appendChild(close);
+  _toastContainer.appendChild(toast);
+
+  // Trigger the enter transition on the next frame.
+  requestAnimationFrame(() => toast.classList.add('show'));
+  if (duration > 0) setTimeout(dismiss, duration);
+}
+
 // ── Save to disk (folder picker on desktop Chromium, download elsewhere) ──────
 // Acquire the sink SYNCHRONOUSLY inside the click handler — showSaveFilePicker
 // requires an active user gesture, so call beginSave() *before* any slow blob
