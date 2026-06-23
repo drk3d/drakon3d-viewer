@@ -61,6 +61,58 @@ export function showToast(message, { duration = 9000 } = {}) {
   if (duration > 0) setTimeout(dismiss, duration);
 }
 
+// ── Modal notice (blocking, single OK button) ────────────────────────────────
+// Centered modal with a message and one confirm button. `onClose` fires on every
+// dismissal path — OK button, Enter/Esc key, or backdrop click — so callers can
+// run a single follow-up action (e.g. reload the page). Reuses the app's existing
+// .modal-overlay / .modal-box styling.
+export function showModal(message, { okLabel = 'OK', onClose = null } = {}) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+
+  const box = document.createElement('div');
+  box.className = 'modal-box';
+  box.style.maxWidth = '400px';
+
+  const body = document.createElement('div');
+  body.className = 'modal-body';
+  body.style.padding = '20px';
+
+  const msg = document.createElement('p');
+  msg.style.cssText = 'margin:0;font-size:0.82rem;line-height:1.55;color:var(--text);white-space:pre-line;';
+  msg.textContent = message;
+
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;justify-content:flex-end;margin-top:4px;';
+
+  const ok = document.createElement('button');
+  ok.className = 'panel-action-btn btn-primary';
+  ok.style.cssText = 'font-size:0.78rem;padding:6px 22px;';
+  ok.textContent = okLabel;
+
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    document.removeEventListener('keydown', onKey);
+    overlay.remove();
+    if (typeof onClose === 'function') onClose();
+  };
+  const onKey = (e) => { if (e.key === 'Escape' || e.key === 'Enter') { e.preventDefault(); close(); } };
+
+  ok.addEventListener('click', close);
+  overlay.addEventListener('mousedown', (e) => { if (e.target === overlay) close(); });
+  document.addEventListener('keydown', onKey);
+
+  row.appendChild(ok);
+  body.appendChild(msg);
+  body.appendChild(row);
+  box.appendChild(body);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+  ok.focus();
+}
+
 // ── Save to disk (folder picker on desktop Chromium, download elsewhere) ──────
 // Acquire the sink SYNCHRONOUSLY inside the click handler — showSaveFilePicker
 // requires an active user gesture, so call beginSave() *before* any slow blob

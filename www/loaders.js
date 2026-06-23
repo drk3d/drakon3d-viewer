@@ -8,7 +8,7 @@ import { renderLayerUI, updateLayerVisibility } from './layers.js';
 import { createAnnotationSprites } from './annotations.js';
 import { renderNamedViewsUI } from './camera.js';
 import { resetSettingsToDefault } from './session.js';
-import { showLoading, hideLoading, setProgress, setFileName, showModelInfo, showToast } from './helpers.js';
+import { showLoading, hideLoading, setProgress, setFileName, showModelInfo, showModal } from './helpers.js';
 import { t } from './i18n.js';
 import { setToolbarModelState, changeDisplayMode } from './app.js';
 import { destroyClippingCap } from './clip-cap.js';
@@ -2178,7 +2178,12 @@ export async function handleFile(file, rhinoLoader, gltfLoader, fileHandle = nul
         setFileName(file.name);
         showModelInfo(S.currentModel, file.size);
         if (S.missingRenderMeshCount > 0) {
-          showToast(t('msg.no_render_mesh').replace('{n}', S.missingRenderMeshCount));
+          // Blocking notice — the loaded model is unusable (geometry missing), so
+          // on dismissal we refresh to the empty state where a new file can be opened.
+          showModal(t('msg.no_render_mesh').replace('{n}', S.missingRenderMeshCount), {
+            okLabel: t('common.ok'),
+            onClose: () => location.reload()
+          });
         }
       } catch (postErr) {
         console.error('[load] post-processing crash:', postErr);

@@ -33,6 +33,7 @@ export const TRANSLATIONS = {
     'view.view_name_label':     'View Name',
     'common.cancel':            'Cancel',
     'common.save':              'Save',
+    'common.ok':                'OK',
 
     'zoom.extents':       'Zoom Extents',
     'zoom.selected':      'Zoom Selected',
@@ -250,6 +251,7 @@ export const TRANSLATIONS = {
     'view.view_name_label':     '뷰 이름',
     'common.cancel':            '취소',
     'common.save':              '저장',
+    'common.ok':                '확인',
 
     'zoom.extents':       '전체 줌',
     'zoom.selected':      '선택 줌',
@@ -467,6 +469,7 @@ export const TRANSLATIONS = {
     'view.view_name_label':     'Nom de la vue',
     'common.cancel':            'Annuler',
     'common.save':              'Enregistrer',
+    'common.ok':                'OK',
 
     'zoom.extents':       'Zoom étendu',
     'zoom.selected':      'Zoom sélection',
@@ -661,6 +664,7 @@ export const TRANSLATIONS = {
     'view.view_name_label':     'Ansichtsname',
     'common.cancel':            'Abbrechen',
     'common.save':              'Speichern',
+    'common.ok':                'OK',
 
     'zoom.extents':       'Zoom Alles',
     'zoom.selected':      'Zoom Auswahl',
@@ -855,6 +859,7 @@ export const TRANSLATIONS = {
     'view.view_name_label':     'Nombre de vista',
     'common.cancel':            'Cancelar',
     'common.save':              'Guardar',
+    'common.ok':                'Aceptar',
 
     'zoom.extents':       'Zoom extensión',
     'zoom.selected':      'Zoom selección',
@@ -1049,6 +1054,7 @@ export const TRANSLATIONS = {
     'view.view_name_label':     'Nome vista',
     'common.cancel':            'Annulla',
     'common.save':              'Salva',
+    'common.ok':                'OK',
 
     'zoom.extents':       'Zoom estensione',
     'zoom.selected':      'Zoom selezione',
@@ -1243,6 +1249,7 @@ export const TRANSLATIONS = {
     'view.view_name_label':     'ビュー名',
     'common.cancel':            'キャンセル',
     'common.save':              '保存',
+    'common.ok':                'OK',
 
     'zoom.extents':       'ズーム全体',
     'zoom.selected':      'ズーム選択',
@@ -1437,6 +1444,7 @@ export const TRANSLATIONS = {
     'view.view_name_label':     '视图名称',
     'common.cancel':            '取消',
     'common.save':              '保存',
+    'common.ok':                '确定',
 
     'zoom.extents':       '缩放至全部',
     'zoom.selected':      '缩放至选择',
@@ -1631,6 +1639,7 @@ export const TRANSLATIONS = {
     'view.view_name_label':     '視圖名稱',
     'common.cancel':            '取消',
     'common.save':              '儲存',
+    'common.ok':                '確定',
 
     'zoom.extents':       '縮放至全部',
     'zoom.selected':      '縮放至選取',
@@ -1825,6 +1834,7 @@ export const TRANSLATIONS = {
     'view.view_name_label':     'Nome da vista',
     'common.cancel':            'Cancelar',
     'common.save':              'Salvar',
+    'common.ok':                'OK',
 
     'zoom.extents':       'Zoom extensão',
     'zoom.selected':      'Zoom seleção',
@@ -2019,6 +2029,7 @@ export const TRANSLATIONS = {
     'view.view_name_label':     'Název pohledu',
     'common.cancel':            'Zrušit',
     'common.save':              'Uložit',
+    'common.ok':                'OK',
 
     'zoom.extents':       'Zoom vše',
     'zoom.selected':      'Zoom výběr',
@@ -2213,6 +2224,7 @@ export const TRANSLATIONS = {
     'view.view_name_label':     'Nazwa widoku',
     'common.cancel':            'Anuluj',
     'common.save':              'Zapisz',
+    'common.ok':                'OK',
 
     'zoom.extents':       'Zoom całość',
     'zoom.selected':      'Zoom zaznaczenie',
