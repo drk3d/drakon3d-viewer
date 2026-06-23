@@ -118,6 +118,13 @@ class HistoryManager {
         const state = (key === 'before') ? action.before : action.after;
         const tools = await import('./tools.js');
         tools.reconstructMeasurements(state);
+      } else if (action.type === 'flipNormals') {
+        // Flip is its own inverse — undo and redo both re-apply the flip to the
+        // same targets, which restores or re-applies the inversion in lockstep.
+        const sel = await import('./selection.js');
+        action.targets.forEach(sel.flipMeshNormals);
+        const d = await import('./display.js');
+        d.applyDisplayMode();
       } else if (action.targets) {
         const states = action[key];
         

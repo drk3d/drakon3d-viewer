@@ -3,6 +3,7 @@ import { S } from './state.js';
 import { applyDisplayMode } from './display.js';
 import { History } from './history.js';
 import { bindSliderDblClickInput } from './helpers.js';
+import { t } from './i18n.js';
 
 // ── Pointer hit-test / selection ─────────────────────────────────────────────
 
@@ -579,6 +580,12 @@ export function updatePropertiesPanel() {
 
   // ── Transform Section ────────────────────────────────────────────────
   const modified = S.selectedObjects.some(isTransformModified);
+  const hasMeshForFlip = S.selectedObjects.some(o => {
+    if (o.isMesh && !o.isLine && o.geometry?.attributes?.normal) return true;
+    let found = false;
+    o.traverse?.(c => { if (!found && c.isMesh && !c.isLine && c.geometry?.attributes?.normal) found = true; });
+    return found;
+  });
   htmlContent += `
     <div class="mat-divider"></div>
     <div class="mat-section-title">Transform ${modified ? ' <span style="font-size:0.68rem;color:var(--accent)">(modified)</span>' : ''}</div>
@@ -589,8 +596,9 @@ export function updatePropertiesPanel() {
           ${modified ? 'Modified' : 'Original'}
         </span>
       </div>
-      <div class="mat-footer" style="margin-top:8px;">
+      <div class="mat-footer" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
         <button id="btn-transform-reset" class="text-btn" style="font-size:0.74rem"${modified ? '' : ' disabled'}>Reset Transform</button>
+        ${hasMeshForFlip ? `<button id="btn-flip-normals" class="text-btn" style="font-size:0.74rem">${t('transform.flip_normals')}</button>` : ''}
       </div>
     </div>`;
 
@@ -1088,6 +1096,21 @@ export function updatePropertiesPanel() {
     updatePropertiesPanel();
   });
 
+  // ── Flip Normals Listener ────────────────────────────────────────────
+  // Toggles the normal direction + face winding on every selectable mesh in the
+  // selection. Useful when an imported BRep was inside-out: DoubleSide makes the
+  // wall visible from both faces, but THREE's gl_FrontFacing-based normal flip
+  // ends up lighting the wrong face, producing odd shading. Flipping the mesh
+  // data restores normal/winding agreement so Rendered/Architecture shade like
+  // Rhino. Idempotent — re-applying flips back, so undo/redo just repeats it.
+  document.getElementById('btn-flip-normals')?.addEventListener('click', () => {
+    const targets = collectFlipTargets(S.selectedObjects);
+    if (!targets.length) return;
+    targets.forEach(flipMeshNormals);
+    History.push({ type: 'flipNormals', targets, before: null, after: null });
+    applyDisplayMode();
+  });
+
   if (window.Coloris) {
     Coloris.wrap('.layer-color-picker-input');
   }
@@ -1316,5 +1339,60 @@ export function resetTransform(obj) {
     obj.quaternion.copy(obj.userData.originalTransform.quaternion);
     obj.scale.copy(obj.userData.originalTransform.scale);
     obj.updateMatrixWorld(true);
+  }
+}
+
+// ── Flip Normals helpers ─────────────────────────────────────────────────────
+// Collects every renderable Mesh (with normals) inside the selection. Groups
+// (e.g. block instances) get descended into so a single click flips every face
+// of an instance.
+export function collectFlipTargets(selection) {
+  const targets = [];
+  for (const o of selection) {
+    o.traverse(c => {
+      if (c.isMesh && !c.isLine && c.geometry?.attributes?.normal) targets.push(c);
+    });
+  }
+  return targets;
+}
+
+// Inverts the mesh's outward direction in two ways at once: negates vertex
+// normals (so lighting points the other way) and reverses each triangle's
+// winding (so gl_FrontFacing on DoubleSide picks the opposite face). Doing
+// both keeps normal direction and winding consistent — flipping only one
+// produces broken lighting on the inside-out surface.
+export function flipMeshNormals(mesh) {
+  const g = mesh.geometry;
+  if (!g) return;
+  const nor = g.attributes.normal;
+  if (nor) {
+    const a = nor.array;
+    for (let i = 0; i < a.length; i++) a[i] = -a[i];
+    nor.needsUpdate = true;
+  }
+  const idx = g.index;
+  if (idx) {
+    const a = idx.array;
+    for (let i = 0; i < a.length; i += 3) { const t = a[i + 1]; a[i + 1] = a[i + 2]; a[i + 2] = t; }
+    idx.needsUpdate = true;
+  } else if (g.attributes.position) {
+    // Non-indexed: swap vertices 2 and 3 of every triangle. Also swap UV/color
+    // attributes in lockstep so they follow the new winding.
+    const swapTri = (arr, stride) => {
+      for (let i = 0; i < arr.length; i += stride * 3) {
+        for (let k = 0; k < stride; k++) {
+          const t = arr[i + stride + k];
+          arr[i + stride + k] = arr[i + stride * 2 + k];
+          arr[i + stride * 2 + k] = t;
+        }
+      }
+    };
+    swapTri(g.attributes.position.array, 3);
+    g.attributes.position.needsUpdate = true;
+    if (g.attributes.uv) { swapTri(g.attributes.uv.array, 2); g.attributes.uv.needsUpdate = true; }
+    if (g.attributes.color) {
+      const sz = g.attributes.color.itemSize || 3;
+      swapTri(g.attributes.color.array, sz); g.attributes.color.needsUpdate = true;
+    }
   }
 }

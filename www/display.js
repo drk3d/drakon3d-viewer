@@ -493,6 +493,9 @@ export function applyDisplayMode() {
         const m = base.clone();
         m.polygonOffset = true; m.polygonOffsetFactor = 1; m.polygonOffsetUnits = 1;
         m.roughness = 0.85; m.metalness = 0.05;
+        // Two-sided faces — match Rhino's shaded viewport so open surfaces and
+        // the inside of non-solid polysurfaces stay visible from behind.
+        m.side = THREE.DoubleSide;
         if (child.userData.objectColorCustom !== undefined) m.color?.set(child.userData.objectColorCustom);
         m.needsUpdate = true;
         child.material = m;
@@ -508,7 +511,8 @@ export function applyDisplayMode() {
       case 'arctic': {
         // Architecture: near-white surfaces + env-map IBL + sun shadows.
         const m = new THREE.MeshStandardMaterial({
-          color: 0xf0f0f0, roughness: 0.95, metalness: 0.0
+          color: 0xf0f0f0, roughness: 0.95, metalness: 0.0,
+          side: THREE.DoubleSide
         });
         m.polygonOffset = true; m.polygonOffsetFactor = 1; m.polygonOffsetUnits = 1;
         // Rely on scene.environment instead of explicit envMap so HDR changes apply.

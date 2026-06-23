@@ -34,6 +34,7 @@ export const TRANSLATIONS = {
     'common.cancel':            'Cancel',
     'common.save':              'Save',
     'common.ok':                'OK',
+    'transform.flip_normals':   'Flip Normals',
 
     'zoom.extents':       'Zoom Extents',
     'zoom.selected':      'Zoom Selected',
@@ -252,6 +253,7 @@ export const TRANSLATIONS = {
     'common.cancel':            '취소',
     'common.save':              '저장',
     'common.ok':                '확인',
+    'transform.flip_normals':   '법선 뒤집기',
 
     'zoom.extents':       '전체 줌',
     'zoom.selected':      '선택 줌',
@@ -470,6 +472,7 @@ export const TRANSLATIONS = {
     'common.cancel':            'Annuler',
     'common.save':              'Enregistrer',
     'common.ok':                'OK',
+    'transform.flip_normals':   'Inverser les normales',
 
     'zoom.extents':       'Zoom étendu',
     'zoom.selected':      'Zoom sélection',
@@ -665,6 +668,7 @@ export const TRANSLATIONS = {
     'common.cancel':            'Abbrechen',
     'common.save':              'Speichern',
     'common.ok':                'OK',
+    'transform.flip_normals':   'Normalen umkehren',
 
     'zoom.extents':       'Zoom Alles',
     'zoom.selected':      'Zoom Auswahl',
@@ -860,6 +864,7 @@ export const TRANSLATIONS = {
     'common.cancel':            'Cancelar',
     'common.save':              'Guardar',
     'common.ok':                'Aceptar',
+    'transform.flip_normals':   'Invertir normales',
 
     'zoom.extents':       'Zoom extensión',
     'zoom.selected':      'Zoom selección',
@@ -1055,6 +1060,7 @@ export const TRANSLATIONS = {
     'common.cancel':            'Annulla',
     'common.save':              'Salva',
     'common.ok':                'OK',
+    'transform.flip_normals':   'Inverti normali',
 
     'zoom.extents':       'Zoom estensione',
     'zoom.selected':      'Zoom selezione',
@@ -1250,6 +1256,7 @@ export const TRANSLATIONS = {
     'common.cancel':            'キャンセル',
     'common.save':              '保存',
     'common.ok':                'OK',
+    'transform.flip_normals':   '法線を反転',
 
     'zoom.extents':       'ズーム全体',
     'zoom.selected':      'ズーム選択',
@@ -1445,6 +1452,7 @@ export const TRANSLATIONS = {
     'common.cancel':            '取消',
     'common.save':              '保存',
     'common.ok':                '确定',
+    'transform.flip_normals':   '翻转法线',
 
     'zoom.extents':       '缩放至全部',
     'zoom.selected':      '缩放至选择',
@@ -1640,6 +1648,7 @@ export const TRANSLATIONS = {
     'common.cancel':            '取消',
     'common.save':              '儲存',
     'common.ok':                '確定',
+    'transform.flip_normals':   '翻轉法線',
 
     'zoom.extents':       '縮放至全部',
     'zoom.selected':      '縮放至選取',
@@ -1835,6 +1844,7 @@ export const TRANSLATIONS = {
     'common.cancel':            'Cancelar',
     'common.save':              'Salvar',
     'common.ok':                'OK',
+    'transform.flip_normals':   'Inverter normais',
 
     'zoom.extents':       'Zoom extensão',
     'zoom.selected':      'Zoom seleção',
@@ -2030,6 +2040,7 @@ export const TRANSLATIONS = {
     'common.cancel':            'Zrušit',
     'common.save':              'Uložit',
     'common.ok':                'OK',
+    'transform.flip_normals':   'Obrátit normály',
 
     'zoom.extents':       'Zoom vše',
     'zoom.selected':      'Zoom výběr',
@@ -2225,6 +2236,7 @@ export const TRANSLATIONS = {
     'common.cancel':            'Anuluj',
     'common.save':              'Zapisz',
     'common.ok':                'OK',
+    'transform.flip_normals':   'Odwróć normalne',
 
     'zoom.extents':       'Zoom całość',
     'zoom.selected':      'Zoom zaznaczenie',
