@@ -11,9 +11,15 @@
 //   2. APIs & Services → Enable APIs → enable "Google Drive API" and
 //      "Google Picker API".
 //   3. APIs & Services → Credentials → "+ CREATE CREDENTIALS"
-//        a. API Key — restrict by HTTP referrer:
-//             https://www.plusplastic.com/byRhinoView/*
-//             http://localhost:*/*   (optional, dev)
+//        a. API Key — leave "Application restrictions" set to "None".
+//           Do NOT use HTTP referrer restrictions: Google Picker loads
+//           inside a docs.google.com iframe and does not reliably forward
+//           the parent page's Referer header, so referrer-restricted keys
+//           get rejected with "The API developer key is invalid."
+//           Secure the key via "API restrictions" instead — limit it to
+//           exactly: Google Drive API + Google Picker API. With those two
+//           restrictions the key cannot be abused for anything else, and
+//           Drive data access still requires an OAuth token per user.
 //        b. OAuth client ID → Application type: Web application
 //             Authorized JavaScript origins:
 //               https://www.plusplastic.com
