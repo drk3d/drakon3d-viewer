@@ -211,6 +211,7 @@ export const TRANSLATIONS = {
     'camera.title':          'Camera',
     'camera.projection':     'Projection',
     'camera.proj_persp':     'Perspective',
+    'camera.proj_2pt':       '2-Point Perspective',
     'camera.proj_ortho':     'Parallel',
     'camera.fov':            'Lens Length',
     'camera.friction':       'Friction',
@@ -430,6 +431,7 @@ export const TRANSLATIONS = {
     'camera.title':          '카메라',
     'camera.projection':     '투영',
     'camera.proj_persp':     '투시',
+    'camera.proj_2pt':       '2점 투시',
     'camera.proj_ortho':     '평행',
     'camera.fov':            '렌즈 길이',
     'camera.friction':       '마찰',
@@ -628,6 +630,7 @@ export const TRANSLATIONS = {
     'camera.friction':    'Friction',
     'camera.projection':  'Projection',
     'camera.proj_persp':  'Perspective',
+    'camera.proj_2pt':    'Perspective 2 points',
     'camera.proj_ortho':  'Parallèle',
 
     'theme.label':        'Thème',
@@ -824,6 +827,7 @@ export const TRANSLATIONS = {
     'camera.friction':    'Reibung',
     'camera.projection':  'Projektion',
     'camera.proj_persp':  'Perspektive',
+    'camera.proj_2pt':    '2-Punkt-Perspektive',
     'camera.proj_ortho':  'Parallel',
 
     'theme.label':        'Design',
@@ -1020,6 +1024,7 @@ export const TRANSLATIONS = {
     'camera.friction':    'Fricción',
     'camera.projection':  'Proyección',
     'camera.proj_persp':  'Perspectiva',
+    'camera.proj_2pt':    'Perspectiva de 2 puntos',
     'camera.proj_ortho':  'Paralela',
 
     'theme.label':        'Tema',
@@ -1216,6 +1221,7 @@ export const TRANSLATIONS = {
     'camera.friction':    'Attrito',
     'camera.projection':  'Proiezione',
     'camera.proj_persp':  'Prospettiva',
+    'camera.proj_2pt':    'Prospettiva a 2 punti',
     'camera.proj_ortho':  'Parallelo',
 
     'theme.label':        'Tema',
@@ -1412,6 +1418,7 @@ export const TRANSLATIONS = {
     'camera.friction':    '摩擦',
     'camera.projection':  '投影',
     'camera.proj_persp':  'パースペクティブ',
+    'camera.proj_2pt':    '2点透視',
     'camera.proj_ortho':  '平行',
 
     'theme.label':        'テーマ',
@@ -1608,6 +1615,7 @@ export const TRANSLATIONS = {
     'camera.friction':    '摩擦力',
     'camera.projection':  '投影',
     'camera.proj_persp':  '透视',
+    'camera.proj_2pt':    '两点透视',
     'camera.proj_ortho':  '平行',
 
     'theme.label':        '主题',
@@ -1804,6 +1812,7 @@ export const TRANSLATIONS = {
     'camera.friction':    '摩擦力',
     'camera.projection':  '投影',
     'camera.proj_persp':  '透視',
+    'camera.proj_2pt':    '兩點透視',
     'camera.proj_ortho':  '平行',
 
     'theme.label':        '主題',
@@ -2000,6 +2009,7 @@ export const TRANSLATIONS = {
     'camera.friction':    'Fricção',
     'camera.projection':  'Projeção',
     'camera.proj_persp':  'Perspectiva',
+    'camera.proj_2pt':    'Perspectiva de 2 pontos',
     'camera.proj_ortho':  'Paralela',
 
     'theme.label':        'Tema',
@@ -2196,6 +2206,7 @@ export const TRANSLATIONS = {
     'camera.friction':    'Tření',
     'camera.projection':  'Projekce',
     'camera.proj_persp':  'Perspektiva',
+    'camera.proj_2pt':    '2bodová perspektiva',
     'camera.proj_ortho':  'Rovnoběžná',
 
     'theme.label':        'Téma',
@@ -2392,6 +2403,7 @@ export const TRANSLATIONS = {
     'camera.friction':    'Tarcie',
     'camera.projection':  'Rzut',
     'camera.proj_persp':  'Perspektywa',
+    'camera.proj_2pt':    'Perspektywa 2-punktowa',
     'camera.proj_ortho':  'Równoległy',
 
     'theme.label':        'Motyw',

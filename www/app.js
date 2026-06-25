@@ -18,7 +18,7 @@ import { initI18n, setLang, applyI18n, t, currentLang } from './i18n.js';
 import { S } from './state.js';
 import { updateSliderFill, updateAllSliderFills, updateSelectIcon, showLoading, hideLoading, bindSliderDblClickInput, beginSave } from './helpers.js';
 import { setupLights, updateSunLight, updateShadowCasting, addGroundPlane, removeGroundPlane } from './lighting.js';
-import { switchToOrtho, switchToPersp, setViewPreset, setWalkthroughMode, triggerCameraTransition, fitCameraToBox, fitCameraToObject, fitCameraToSelected, saveCustomView, renderNamedViewsUI } from './camera.js';
+import { switchToOrtho, switchToPersp, switchToTwoPoint, apply2PointConstraints, installTwoPointDragHandler, setViewPreset, setWalkthroughMode, triggerCameraTransition, fitCameraToBox, fitCameraToObject, fitCameraToSelected, saveCustomView, renderNamedViewsUI } from './camera.js';
 import { applySceneBackground, applyFileBackground, applyDisplayMode, applyLayerColorsToModel, recreateAllEdges } from './display.js';
 import { renderLayerUI, updateLayerVisibility } from './layers.js';
 import { createAnnotationSprites } from './annotations.js';
@@ -336,6 +336,9 @@ function init() {
   S.controls.enableDamping = true;
   S.controls.dampingFactor = 0.5;
   S.controls.autoRotateSpeed = 1.0;
+
+  // 2-Point Perspective drag interception (no-op until twoPointActive=true)
+  installTwoPointDragHandler();
 
   S.renderer.localClippingEnabled = true;
   S.scene.add(S.measurementGroup);
@@ -2834,10 +2837,13 @@ function bindUI() {
   // ── Camera projection toggle ──
   const projSelect = document.getElementById('select-projection');
   if (projSelect) {
-    projSelect.value = (S.camera === S.orthoCamera) ? 'parallel' : 'perspective';
+    projSelect.value = S.twoPointActive ? 'two-point'
+                     : (S.camera === S.orthoCamera) ? 'parallel'
+                     : 'perspective';
     projSelect.addEventListener('change', () => {
-      if (projSelect.value === 'parallel') switchToOrtho();
-      else switchToPersp();
+      if (projSelect.value === 'parallel')       switchToOrtho();
+      else if (projSelect.value === 'two-point') switchToTwoPoint();
+      else                                       switchToPersp();
     });
   }
 
@@ -3257,6 +3263,7 @@ function animate() {
     // from the mouse drag. `.enabled = false` only blocks input, not update.
   } else {
     S.controls.update();
+    apply2PointConstraints();
   }
   S.composer.render();
 

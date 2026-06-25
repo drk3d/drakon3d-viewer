@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { S } from './state.js';
 
 export function switchToOrtho() {
+  if (S.twoPointActive) disableTwoPoint();
   const dist   = S.perspCamera.position.distanceTo(S.controls.target);
   const h      = dist * Math.tan(S.perspCamera.fov * Math.PI / 360);
   const aspect = window.innerWidth / window.innerHeight;
@@ -28,6 +29,7 @@ export function switchToOrtho() {
 }
 
 export function switchToPersp() {
+  if (S.twoPointActive) disableTwoPoint();
   S.camera = S.perspCamera;
   S.controls.object = S.camera;
   if (S.composer?.passes) {
@@ -38,6 +40,106 @@ export function switchToPersp() {
   const ps = document.getElementById('select-projection');
   if (ps) ps.value = 'perspective';
   S.controls.update();
+}
+
+// ── 2-Point Perspective ───────────────────────────────────────────────────
+//
+// Rhino-style 2-point: the user orbits freely (any polar angle, any azimuth).
+// Each frame, AFTER OrbitControls.update(), we look at the camera/target
+// relationship and convert whatever pitch it would produce into an equivalent
+// vertical lens shift, then re-aim the camera horizontally. The user perceives
+// "looking up/down" but world-vertical lines stay parallel.
+//
+//   pitch = atan2(target.z - camera.z, horizontal_distance)
+//   lens_shift (NDC y) = tan(pitch) / tan(fov/2)
+//
+// This means pan / dolly / orbit all work as the user expects in any
+// direction — no input is intercepted.
+
+let _savedTarget = null; // THREE.Vector3 clone of S.controls.target on entry
+
+export function switchToTwoPoint() {
+  // 2-point only makes sense with a perspective camera.
+  if (S.camera === S.orthoCamera) {
+    S.perspCamera.position.copy(S.orthoCamera.position);
+    S.perspCamera.quaternion.copy(S.orthoCamera.quaternion);
+    S.perspCamera.up.copy(S.orthoCamera.up);
+    S.camera = S.perspCamera;
+    S.controls.object = S.camera;
+    if (S.composer?.passes) {
+      S.composer.passes.forEach(pass => {
+        if (pass.camera !== undefined) pass.camera = S.camera;
+      });
+    }
+  }
+
+  // Save the original orbit target so we can restore it on exit (so the
+  // round-trip is non-destructive — the camera goes back to its 3-point pose).
+  _savedTarget = S.controls.target.clone();
+
+  S.perspCamera.up.set(0, 0, 1);
+  S.twoPointActive = true;
+  S.twoPointShift  = 0; // recomputed each frame from camera/target geometry
+  const ps = document.getElementById('select-projection');
+  if (ps) ps.value = 'two-point';
+  S.controls.update();
+}
+
+function disableTwoPoint() {
+  S.twoPointActive = false;
+  S.twoPointShift  = 0;
+  if (_savedTarget) {
+    S.controls.target.copy(_savedTarget);
+    S.perspCamera.lookAt(_savedTarget);
+  }
+  _savedTarget = null;
+  // Reset projection matrix to a clean state.
+  if (S.perspCamera) S.perspCamera.updateProjectionMatrix();
+}
+
+// No-op kept for backward compatibility — the drag handler is no longer needed
+// since OrbitControls drives vertical motion directly.
+export function installTwoPointDragHandler() {}
+
+// Called every frame from animate(), after S.controls.update().
+// Converts the current pitch (target above/below camera) into a lens shift,
+// then re-aims the camera horizontally so verticals stay parallel.
+export function apply2PointConstraints() {
+  if (!S.twoPointActive || S.camera !== S.perspCamera) return;
+
+  S.perspCamera.up.set(0, 0, 1);
+
+  // Vector from camera to target — its horizontal magnitude and vertical
+  // component define the "pitch" the user has dialed in via OrbitControls.
+  const dx = S.controls.target.x - S.perspCamera.position.x;
+  const dy = S.controls.target.y - S.perspCamera.position.y;
+  const dz = S.controls.target.z - S.perspCamera.position.z;
+  const horiz = Math.hypot(dx, dy);
+  if (horiz < 1e-4) return; // looking straight up/down — 2-point ill-defined
+
+  const pitch = Math.atan2(dz, horiz);
+
+  // Re-aim camera horizontally in the same azimuth (level target at camera Z).
+  const levelTarget = new THREE.Vector3(
+    S.perspCamera.position.x + dx,
+    S.perspCamera.position.y + dy,
+    S.perspCamera.position.z
+  );
+  S.perspCamera.lookAt(levelTarget);
+  S.perspCamera.updateMatrixWorld();
+
+  // Lens shift = focal * tan(pitch) = tan(pitch) / tan(fov/2).
+  // m.elements[9] subtracts directly from NDC y, so this offsets the framing
+  // by exactly the amount the original pitch would have moved the horizon.
+  const t = Math.tan(S.perspCamera.fov * Math.PI / 360);
+  S.twoPointShift = Math.tan(pitch) / Math.max(t, 1e-6);
+
+  S.perspCamera.updateProjectionMatrix();
+  S.perspCamera.projectionMatrix.elements[9] = S.twoPointShift;
+  // updateProjectionMatrix() also writes projectionMatrixInverse, which is now
+  // stale relative to our shifted matrix. SSAO, screen-space passes, and
+  // depth-to-view reconstruction read this inverse — keep it in sync.
+  S.perspCamera.projectionMatrixInverse.copy(S.perspCamera.projectionMatrix).invert();
 }
 
 export function setViewPreset(preset) {
@@ -108,6 +210,12 @@ export function setWalkthroughMode(enable) {
 
   if (enable) {
     // 1. Force perspective — parallel projection makes no sense for walking.
+    //    Also exit 2-point: walkthrough needs free pitch.
+    if (S.twoPointActive) {
+      disableTwoPoint();
+      const ps = document.getElementById('select-projection');
+      if (ps) ps.value = 'perspective';
+    }
     if (S.camera === S.orthoCamera) switchToPersp();
 
     // 2. Derive initial yaw/pitch from current camera orientation so the

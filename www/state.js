@@ -159,6 +159,15 @@ export const S = {
   cameraTransition:  null,
   pendingOrthoSwitch: false,
 
+  // ── 2-point perspective ──────────────────────────────────────────────────
+  // When active: camera up is locked to world +Z, camera is forced to look
+  // horizontally (controls.target.z = camera.position.z), and the vertical
+  // "tilt" is faked by shifting the perspective frustum's principal point
+  // via projectionMatrix.elements[9]. This keeps world-vertical lines
+  // parallel in screen space — the same trick Rhino's 2-Point uses.
+  twoPointActive: false,
+  twoPointShift:  0,   // signed; +1 ≈ tilt the framing up by ~one full frame height
+
   // ── Measurement tool ─────────────────────────────────────────────────────
   distanceToolState:     null,
   angleToolState:        null,
