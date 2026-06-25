@@ -823,6 +823,38 @@
     </div>
   </div>
 
+  <!-- ── Export Package Options Dialog ── -->
+  <div id="export-package-dialog" class="modal-overlay hidden">
+    <div class="modal-box" style="width:340px;">
+      <div class="modal-header">
+        <span data-i18n="exportpkg.title">Export Package Options</span>
+        <button id="btn-close-export-pkg-dialog" class="icon-btn sm">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body" style="padding:16px;">
+        <label class="modal-row" style="margin-bottom:10px;">
+          <span data-i18n="exportpkg.hide_file">Hide File menu in viewer</span>
+          <input type="checkbox" id="exportpkg-hide-file" style="width:16px;height:16px;accent-color:var(--primary);">
+        </label>
+        <label class="modal-row" style="margin-bottom:10px;">
+          <span data-i18n="exportpkg.use_password">Password protect</span>
+          <input type="checkbox" id="exportpkg-use-password" style="width:16px;height:16px;accent-color:var(--primary);">
+        </label>
+        <div id="exportpkg-password-row" class="hidden" style="margin-bottom:6px;">
+          <label style="font-size:0.75rem;color:var(--text-2);display:block;margin-bottom:6px;" data-i18n="exportpkg.password_label">Password</label>
+          <input type="password" id="exportpkg-password" autocomplete="new-password"
+            style="width:100%;background:var(--surface-hi);border:1px solid var(--border);color:var(--text);border-radius:var(--r-sm);padding:7px 10px;font-size:0.8rem;outline:none;box-sizing:border-box;">
+          <p style="font-size:0.7rem;color:var(--text-2);margin:6px 0 0;" data-i18n="exportpkg.password_hint">The model is encrypted; the viewer cannot open without the password.</p>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end;">
+          <button id="btn-cancel-export-pkg" class="panel-action-btn" style="font-size:0.75rem;padding:5px 14px;" data-i18n="common.cancel">Cancel</button>
+          <button id="btn-confirm-export-pkg" class="panel-action-btn btn-primary" style="font-size:0.75rem;padding:5px 14px;" data-i18n="exportpkg.export">Export</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Capture Dialog ── -->
   <div id="capture-dialog" class="modal-overlay hidden">
     <div class="modal-box">

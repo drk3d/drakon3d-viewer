@@ -578,11 +578,14 @@ export async function saveSession(customFileName = null, pickLocation = false) {
 // viewer shell (viewer-shell.html, produced by build/build-shell.mjs). The
 // result is one double-clickable .html with the model inside — no server, no
 // internet, no install. Bootstrap in app.js auto-loads window.__RHV_PACKAGE__.
-export async function exportPackage(customFileName = null) {
+export async function exportPackage(customFileName = null, opts = {}) {
   if (!S.currentModel) {
     alert('No model loaded to export.');
     return;
   }
+  const hideFileMenu = !!opts.hideFileMenu;
+  const password     = (typeof opts.password === 'string' && opts.password.length) ? opts.password : null;
+
   const { showLoading, hideLoading, beginSave } = await import('./helpers.js');
 
   const isCapacitor = window.Capacitor && window.Capacitor.isPluginAvailable('FileOpener');
@@ -609,11 +612,24 @@ export async function exportPackage(customFileName = null) {
     let shell = await shellResp.text();
 
     const { finalBuffer, finalName } = await buildSessionBuffer(customFileName);
-    const b64 = arrayBufferToBase64(finalBuffer);
 
-    const inject =
-      `window.__RHV_PACKAGE__=${JSON.stringify(b64)};` +
-      `window.__RHV_PACKAGE_NAME__=${JSON.stringify(finalName + '.rhv')};`;
+    // Build the inject string. With a password, encrypt the raw binary payload
+    // with AES-GCM (key derived via PBKDF2). Without one, ship the plain base64.
+    let inject = '';
+    if (password) {
+      const enc = await _encryptBinary(new Uint8Array(finalBuffer), password);
+      inject =
+        `window.__RHV_PACKAGE_ENCRYPTED__=${JSON.stringify(enc)};` +
+        `window.__RHV_PACKAGE_NAME__=${JSON.stringify(finalName + '.rhv')};`;
+    } else {
+      const b64 = arrayBufferToBase64(finalBuffer);
+      inject =
+        `window.__RHV_PACKAGE__=${JSON.stringify(b64)};` +
+        `window.__RHV_PACKAGE_NAME__=${JSON.stringify(finalName + '.rhv')};`;
+    }
+    if (hideFileMenu) {
+      inject += `window.__RHV_HIDE_FILE__=true;`;
+    }
 
     // Function replacements: a string replacement would interpret "$&"/"$'"/…
     // patterns, and the base64 payload / file name could contain them.
@@ -664,6 +680,32 @@ function arrayBufferToBase64(buffer) {
     binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
   }
   return btoa(binary);
+}
+
+// AES-GCM encrypt a binary payload with a key derived from `password` via
+// PBKDF2-SHA256 (200k iterations). Returns { salt, iv, data } all base64.
+// Decrypt in app.js bootstrap via the same parameters.
+async function _encryptBinary(uint8, password) {
+  const enc  = new TextEncoder();
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv   = crypto.getRandomValues(new Uint8Array(12));
+  const baseKey = await crypto.subtle.importKey(
+    'raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']
+  );
+  const key = await crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: 200000, hash: 'SHA-256' },
+    baseKey,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt']
+  );
+  const cipher = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, uint8);
+  return {
+    v:    1,
+    salt: arrayBufferToBase64(salt),
+    iv:   arrayBufferToBase64(iv),
+    data: arrayBufferToBase64(new Uint8Array(cipher)),
+  };
 }
 
 // ── Load session ─────────────────────────────────────────────────────────────

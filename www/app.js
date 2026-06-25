@@ -126,9 +126,14 @@ animate();
 
 // ── Auto-load embedded model (self-contained Export Package HTML) ────────────
 // When this page was produced by "Export Package", the model travels inline as
-// a base64 gzip'd .rhv in window.__RHV_PACKAGE__. Decode it into a File and feed
-// it straight through the normal session loader — no fetch, no server needed.
-if (typeof window.__RHV_PACKAGE__ === 'string' && window.__RHV_PACKAGE__.length) {
+// either a plain base64 gzip'd .rhv in window.__RHV_PACKAGE__, OR an encrypted
+// {salt,iv,data} blob in window.__RHV_PACKAGE_ENCRYPTED__ (AES-GCM+PBKDF2).
+// Either way we decode/decrypt to bytes, wrap as a File, and feed it through
+// the normal session loader — no fetch, no server needed.
+const _hasPlainPackage     = typeof window.__RHV_PACKAGE__ === 'string' && window.__RHV_PACKAGE__.length;
+const _hasEncryptedPackage = window.__RHV_PACKAGE_ENCRYPTED__ && typeof window.__RHV_PACKAGE_ENCRYPTED__.data === 'string';
+
+if (_hasPlainPackage || _hasEncryptedPackage) {
   // This is a delivered review artifact, not an authoring session — hide the
   // save/export actions that don't make sense here (and Export Package can't
   // work standalone, since it fetches the viewer shell that only exists on the
@@ -136,12 +141,24 @@ if (typeof window.__RHV_PACKAGE__ === 'string' && window.__RHV_PACKAGE__.length)
   ['btn-save-panel', 'btn-save-as-panel', 'btn-save-glb', 'btn-export-package']
     .forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
 
+  // Optional: hide the File menu entirely (export option).
+  if (window.__RHV_HIDE_FILE__) {
+    const fileBtn = document.getElementById('btn-file');
+    if (fileBtn) fileBtn.style.display = 'none';
+  }
+
   (async () => {
     try {
       const name = window.__RHV_PACKAGE_NAME__ || 'model.rhv';
-      const binary = atob(window.__RHV_PACKAGE__);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      let bytes;
+      if (_hasEncryptedPackage) {
+        bytes = await _decryptEmbeddedPayload(window.__RHV_PACKAGE_ENCRYPTED__);
+        if (!bytes) return; // user cancelled / wrong password — loading stays
+      } else {
+        const binary = atob(window.__RHV_PACKAGE__);
+        bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      }
       const file = new File([bytes], name, { type: 'application/octet-stream' });
       await loadSession(file);
     } catch (e) {
@@ -149,6 +166,53 @@ if (typeof window.__RHV_PACKAGE__ === 'string' && window.__RHV_PACKAGE__.length)
       document.getElementById('loading')?.classList.add('hidden');
     }
   })();
+}
+
+// Prompt for the package password, derive the key, decrypt the payload, and
+// return raw bytes. Re-prompts on wrong password; returns null only if the
+// user cancels. Used only on packaged HTML — never reached on the dev server.
+async function _decryptEmbeddedPayload(enc) {
+  const b64ToBytes = (b64) => {
+    const bin = atob(b64);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  };
+  const salt = b64ToBytes(enc.salt);
+  const iv   = b64ToBytes(enc.iv);
+  const data = b64ToBytes(enc.data);
+
+  // Hide the spinning loader during the prompt so the user can read the dialog.
+  document.getElementById('loading')?.classList.add('hidden');
+
+  let attempt = 0;
+  while (true) {
+    const msg = attempt === 0
+      ? t('exportpkg.prompt_label')
+      : t('exportpkg.wrong_password') + '\n' + t('exportpkg.prompt_label');
+    const password = window.prompt(msg);
+    if (password == null) return null; // user cancelled
+
+    try {
+      const baseKey = await crypto.subtle.importKey(
+        'raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']
+      );
+      const key = await crypto.subtle.deriveKey(
+        { name: 'PBKDF2', salt, iterations: 200000, hash: 'SHA-256' },
+        baseKey,
+        { name: 'AES-GCM', length: 256 },
+        false,
+        ['decrypt']
+      );
+      const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data);
+      // Re-show the loader now that we're about to actually load the model.
+      document.getElementById('loading')?.classList.remove('hidden');
+      return new Uint8Array(plain);
+    } catch {
+      attempt++;
+      // AES-GCM throws on bad key — loop back and re-prompt.
+    }
+  }
 }
 
 // ── init ───────────────────────────────────────────────────────────────────
@@ -980,9 +1044,53 @@ function bindUI() {
     Dropbox.pickAndLoad(cloudLoaders);
   });
   document.getElementById('btn-save-panel').addEventListener('click', () => { saveSession(); });
+  // Export Package opens an options dialog (hide File menu, password protect).
+  // The dialog's confirm button is what eventually calls exportPackage(), so the
+  // FSA save picker still fires inside a real user gesture.
   document.getElementById('btn-export-package')?.addEventListener('click', () => {
     if (!S.currentModel) { alert('No model loaded to export.'); return; }
-    exportPackage();
+    const dlg = document.getElementById('export-package-dialog');
+    // Reset fields each time the dialog opens.
+    const hideCb = document.getElementById('exportpkg-hide-file');
+    const pwdCb  = document.getElementById('exportpkg-use-password');
+    const pwdRow = document.getElementById('exportpkg-password-row');
+    const pwdIn  = document.getElementById('exportpkg-password');
+    if (hideCb) hideCb.checked = false;
+    if (pwdCb)  pwdCb.checked  = false;
+    if (pwdIn)  pwdIn.value    = '';
+    pwdRow?.classList.add('hidden');
+    dlg?.classList.remove('hidden');
+    leftPanel.classList.add('hidden');
+  });
+
+  document.getElementById('exportpkg-use-password')?.addEventListener('change', (e) => {
+    const row = document.getElementById('exportpkg-password-row');
+    if (!row) return;
+    if (e.target.checked) {
+      row.classList.remove('hidden');
+      document.getElementById('exportpkg-password')?.focus();
+    } else {
+      row.classList.add('hidden');
+    }
+  });
+
+  document.getElementById('btn-close-export-pkg-dialog')?.addEventListener('click', () => {
+    document.getElementById('export-package-dialog')?.classList.add('hidden');
+  });
+  document.getElementById('btn-cancel-export-pkg')?.addEventListener('click', () => {
+    document.getElementById('export-package-dialog')?.classList.add('hidden');
+  });
+  document.getElementById('btn-confirm-export-pkg')?.addEventListener('click', () => {
+    const hideFileMenu = !!document.getElementById('exportpkg-hide-file')?.checked;
+    const usePassword  = !!document.getElementById('exportpkg-use-password')?.checked;
+    const password     = usePassword ? (document.getElementById('exportpkg-password')?.value || '') : '';
+    if (usePassword && !password) {
+      // Require a non-empty password when the user opted in.
+      document.getElementById('exportpkg-password')?.focus();
+      return;
+    }
+    document.getElementById('export-package-dialog')?.classList.add('hidden');
+    exportPackage(null, { hideFileMenu, password });
   });
   document.getElementById('btn-save-as-panel')?.addEventListener('click', () => {
     if (!S.currentModel) {
