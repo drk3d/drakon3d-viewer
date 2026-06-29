@@ -112,7 +112,10 @@ export function updateSunLight() {
   S.sunLight.shadow.normalBias =  maxDim * 0.001; // scale with model size
   S.sunLight.shadow.camera.near   = maxDim * 0.01;
   S.sunLight.shadow.camera.far    = maxDim * 10;
-  const h = maxDim * 3;
+  // Tight orthographic shadow frustum: model diagonal half ≈ maxDim * √3/2 (~0.87),
+  // so 0.9 covers every sun angle without slack. Looser frustums (e.g. ×3) starve
+  // shadow-map texel density and produce acne when long lenses zoom in.
+  const h = maxDim * 0.9;
   S.sunLight.shadow.camera.left   = -h;
   S.sunLight.shadow.camera.right  =  h;
   S.sunLight.shadow.camera.top    =  h;
