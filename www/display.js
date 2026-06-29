@@ -471,22 +471,26 @@ export function applyDisplayMode() {
 
     switch (S.currentMode) {
 
-      case 'wireframe':
-        // Hide faces by writing only to depth buffer (transparent front face)
-        if (edgeOverlay) {
-          child.material = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: true });
-        } else {
-          const base = child.userData.shadedMaterial || orig;
-          const m = base.clone();
-          m.polygonOffset = true; m.polygonOffsetFactor = 1; m.polygonOffsetUnits = 1;
-          child.material = m;
+      case 'wireframe': {
+        // Wireframe mode always shows edges over depth-only (invisible) faces,
+        // regardless of the edge-overlay panel toggle — that toggle only governs
+        // optional edge overlay in the OTHER shaded modes. Previously, with the
+        // panel off, wireframe fell back to a solid shaded render (and the edge
+        // geometry was never built at load), so the model looked shaded.
+        child.material = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: true });
+        let wfEdges = edges;
+        if (!wfEdges && child.isMesh && child.geometry) {
+          // Built on demand when edges weren't generated at load time.
+          addEdges(child);
+          wfEdges = child.getObjectByName('rhino-edges');
         }
-        if (edges) {
-          edges.visible = edgeOverlay;
+        if (wfEdges) {
+          wfEdges.visible = true;
           // Use raw color which has automatic theme inversion for black/white lines
-          edges.material.color.copy(rawColor());
+          wfEdges.material.color.copy(rawColor());
         }
         break;
+      }
 
       case 'shaded': {
         const base = child.userData.shadedMaterial || orig;

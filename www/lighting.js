@@ -217,6 +217,40 @@ export function updateGroundAppearance() {
   }
 }
 
+// ── Visible-only bounding box ────────────────────────────────────────────────
+// THREE.js Box3.setFromObject includes children whose own `.visible` is false
+// AND counts instance-definition member geometry at its local origin, both of
+// which the Rhino loader leaves in the tree. That inflates the box back toward
+// (0,0,0) for off-origin models, which (a) mis-sizes the ground plane so it
+// stretches across the world origin and (b) makes the AO passes darken a ghost
+// patch there. We walk the tree honoring ancestor + layer visibility and force
+// a world-matrix update first so instanced geometry is measured at its placed
+// location. Falls back to the full object box when nothing visible matches.
+export function computeVisibleBoundingBox(root) {
+  const box = new THREE.Box3();
+  if (!root) return box;
+  root.updateMatrixWorld(true);
+  const layerVis = new Map();
+  (S.parsedLayers || []).forEach(l => layerVis.set(l.index, l.visible !== false));
+  root.traverse(c => {
+    if (!c) return;
+    if (c.name === 'rhino-edges' || c.name === 'rhino-outline' || c.name === 'ground-plane') return;
+    if (!(c.isMesh || c.isLine)) return;
+    if (!c.visible) return;
+    let p = c.parent, parentVisible = true;
+    while (p) { if (!p.visible) { parentVisible = false; break; } p = p.parent; }
+    if (!parentVisible) return;
+    const li = c.userData?.attributes?.layerIndex;
+    if (typeof li === 'number' && layerVis.get(li) === false) return;
+    if (!c.geometry?.boundingBox) { try { c.geometry?.computeBoundingBox?.(); } catch {} }
+    const bb = c.geometry?.boundingBox;
+    if (!bb) return;
+    box.union(bb.clone().applyMatrix4(c.matrixWorld));
+  });
+  if (box.isEmpty()) box.setFromObject(root);
+  return box;
+}
+
 export function addGroundPlane(box) {
   removeGroundPlane();
   const center = box.getCenter(new THREE.Vector3());
@@ -303,8 +337,7 @@ export function applyFileSunSettings() {
     
     if (S.currentModel) {
       if (S.groundEnabled) {
-        const box = new THREE.Box3().setFromObject(S.currentModel);
-        addGroundPlane(box);
+        addGroundPlane(computeVisibleBoundingBox(S.currentModel));
       } else {
         removeGroundPlane();
       }

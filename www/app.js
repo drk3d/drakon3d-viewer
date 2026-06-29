@@ -17,7 +17,7 @@ import { initI18n, setLang, applyI18n, t, currentLang } from './i18n.js';
 
 import { S } from './state.js';
 import { updateSliderFill, updateAllSliderFills, updateSelectIcon, showLoading, hideLoading, bindSliderDblClickInput, beginSave } from './helpers.js';
-import { setupLights, updateSunLight, updateShadowCasting, addGroundPlane, removeGroundPlane } from './lighting.js';
+import { setupLights, updateSunLight, updateShadowCasting, addGroundPlane, removeGroundPlane, computeVisibleBoundingBox } from './lighting.js';
 import { switchToOrtho, switchToPersp, switchToTwoPoint, apply2PointConstraints, installTwoPointDragHandler, setViewPreset, setWalkthroughMode, triggerCameraTransition, fitCameraToBox, fitCameraToObject, fitCameraToSelected, saveCustomView, renderNamedViewsUI } from './camera.js';
 import { applySceneBackground, applyFileBackground, applyDisplayMode, applyLayerColorsToModel, recreateAllEdges } from './display.js';
 import { renderLayerUI, updateLayerVisibility } from './layers.js';
@@ -1370,8 +1370,7 @@ function bindUI() {
     S.groundEnabled = e.target.checked;
     updateModeSetting('ground', e.target.checked);
     if (S.groundEnabled && S.currentModel) {
-      const box = new THREE.Box3().setFromObject(S.currentModel);
-      addGroundPlane(box);
+      addGroundPlane(computeVisibleBoundingBox(S.currentModel));
     } else {
       removeGroundPlane();
     }
@@ -3831,8 +3830,7 @@ export function applyModeSettings(mode) {
   updateShadowCasting();
   
   if (S.groundEnabled && S.currentModel) {
-    const box = new THREE.Box3().setFromObject(S.currentModel);
-    addGroundPlane(box);
+    addGroundPlane(computeVisibleBoundingBox(S.currentModel));
   } else {
     removeGroundPlane();
   }

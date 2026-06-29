@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { S } from './state.js';
 import { applyDisplayMode, applyFileBackground, applyLayerColorsToModel,
          addEdges, fixMaterialTransparency, clearTechnicalOutlines } from './display.js';
-import { setupModelShadowFrustum, addGroundPlane, removeGroundPlane } from './lighting.js';
+import { setupModelShadowFrustum, addGroundPlane, removeGroundPlane, computeVisibleBoundingBox } from './lighting.js';
 import { fitCameraToObject, fitCameraToBox } from './camera.js';
 import { renderLayerUI, updateLayerVisibility } from './layers.js';
 import { createAnnotationSprites } from './annotations.js';
@@ -1834,48 +1834,6 @@ function applyGtaoClipBox(box) {
     u.sceneBoxMin.value.copy(box.min);
     u.sceneBoxMax.value.copy(box.max);
   }
-}
-
-// ── Visible-only bounding box ────────────────────────────────────────────────
-// THREE.js Box3.setFromObject excludes children whose own `.visible` is false,
-// but the Rhino loader leaves layer-hidden meshes with mesh.visible === true;
-// the layer-visibility pipeline currently kicks in elsewhere (material swap),
-// so the loader-given mesh stays visible to setFromObject and inflates the box.
-// We walk the tree ourselves and respect ancestor visibility plus the
-// userData layer-visibility flag the layers module sets.
-function computeVisibleBoundingBox(root) {
-  const box = new THREE.Box3();
-  if (!root) return box;
-  // Ensure world matrices are current — right after load they may still be
-  // stale, which would place instanced (idef-member) geometry at its local
-  // origin and wrongly pull the box back toward (0,0,0). Box3.setFromObject
-  // does this internally; we replicate it because we walk the tree by hand.
-  root.updateMatrixWorld(true);
-  // Build a quick layerIndex → visible lookup from S.parsedLayers
-  const layerVis = new Map();
-  (S.parsedLayers || []).forEach(l => layerVis.set(l.index, l.visible !== false));
-  root.traverse(c => {
-    if (!c) return;
-    if (c.name === 'rhino-edges' || c.name === 'rhino-outline' || c.name === 'ground-plane') return;
-    if (!(c.isMesh || c.isLine)) return;
-    if (!c.visible) return;
-    // ancestor visibility
-    let p = c.parent, parentVisible = true;
-    while (p) { if (!p.visible) { parentVisible = false; break; } p = p.parent; }
-    if (!parentVisible) return;
-    // layer visibility — the loader doesn't toggle mesh.visible from
-    // layer.visible, so consult the parsed layer table directly.
-    const li = c.userData?.attributes?.layerIndex;
-    if (typeof li === 'number' && layerVis.get(li) === false) return;
-    if (!c.geometry?.boundingBox) { try { c.geometry?.computeBoundingBox?.(); } catch {} }
-    const bb = c.geometry?.boundingBox;
-    if (!bb) return;
-    box.union(bb.clone().applyMatrix4(c.matrixWorld));
-  });
-  // Fallback: if nothing visible matched (e.g. every object hidden), use the
-  // full object box so the camera and clip box still have something to frame.
-  if (box.isEmpty()) box.setFromObject(root);
-  return box;
 }
 
 // ── Wireframe fallback: attach line geometry for Brep/Extrusion objects that
