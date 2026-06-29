@@ -8,7 +8,7 @@ import { renderLayerUI, updateLayerVisibility } from './layers.js';
 import { createAnnotationSprites } from './annotations.js';
 import { renderNamedViewsUI } from './camera.js';
 import { resetSettingsToDefault } from './session.js';
-import { showLoading, hideLoading, setProgress, setFileName, showModelInfo, showModal } from './helpers.js';
+import { showLoading, hideLoading, setProgress, setFileName, showModelInfo, showModal, showToast } from './helpers.js';
 import { t } from './i18n.js';
 import { setToolbarModelState, changeDisplayMode } from './app.js';
 import { destroyClippingCap } from './clip-cap.js';
@@ -643,6 +643,7 @@ export async function preprocess3dm(file, skipLayerParse) {
   S.parsed3dmFileInfo = null;
   S._objLayerById = new Map();
   S._instanceLayerByPos = new Map();
+  S._wireframeFallback = new Map();
   S.missingRenderMeshCount = 0;
   let fileData = file;
 
@@ -1295,9 +1296,74 @@ export async function preprocess3dm(file, skipLayerParse) {
       return true; // other geometry types handle their own rendering
     };
 
+    // Fallback for Brep/Extrusion without a stored render mesh: sample edge
+    // curves to polylines (in WASM memory now, while the source brep is still
+    // alive), then attach them as THREE.LineSegments to the scene after load.
+    // This avoids serializing curves back through cleanDoc / 3dm and keeps the
+    // file load fast even with hundreds of edges.
+    const sampleBrepEdgesForWireframe = (g, a, name, segs = 24) => {
+      const layerIdx = a?.layerIndex ?? 0;
+      const verts = []; // flat array of pairs: x1,y1,z1, x2,y2,z2, …
+      let brep = g;
+      let needBrepDelete = false;
+      try {
+        if (name === 'Extrusion') {
+          brep = (typeof g.toBrep === 'function') ? g.toBrep(false) : null;
+          needBrepDelete = !!brep;
+        }
+        if (!brep) return;
+        const edges = brep.edges();
+        const ec = edges?.count ?? 0;
+        for (let ei = 0; ei < ec; ei++) {
+          const e = edges.get(ei);
+          if (!e) continue;
+          try {
+            const nc = (typeof e.toNurbsCurve === 'function') ? e.toNurbsCurve() : null;
+            if (nc) {
+              try {
+                const dom = nc.domain;
+                const t0 = (Array.isArray(dom) ? dom[0] : (dom?.t0 ?? dom?.min)) ?? 0;
+                const t1 = (Array.isArray(dom) ? dom[1] : (dom?.t1 ?? dom?.max)) ?? 1;
+                let prev = null;
+                for (let i = 0; i <= segs; i++) {
+                  const t = t0 + (t1 - t0) * (i / segs);
+                  const p = nc.pointAt(t);
+                  if (!p) continue;
+                  const cur = [
+                    p[0] ?? p.X ?? p.x ?? 0,
+                    p[1] ?? p.Y ?? p.y ?? 0,
+                    p[2] ?? p.Z ?? p.z ?? 0
+                  ];
+                  if (prev) verts.push(prev[0], prev[1], prev[2], cur[0], cur[1], cur[2]);
+                  prev = cur;
+                }
+              } catch (ee) { console.warn('[pre] wireframe sample err:', ee.message); }
+              try { nc.delete(); } catch {}
+            }
+          } catch (ce) { console.warn('[pre] wireframe edge convert err:', ce.message); }
+          try { e.delete(); } catch {}
+        }
+        try { edges.delete(); } catch {}
+      } catch (we) { console.warn('[pre] wireframe build err:', we.message); }
+      if (needBrepDelete) { try { brep.delete(); } catch {} }
+
+      if (verts.length === 0) return;
+      S._wireframeFallback = S._wireframeFallback || new Map();
+      let bucket = S._wireframeFallback.get(layerIdx);
+      if (!bucket) { bucket = []; S._wireframeFallback.set(layerIdx, bucket); }
+      bucket.push(verts);
+    };
+
     const objects = doc.objects();
     const count   = objects.count;
     let hasSubD = false, hasAnnotation = false, hasLayoutObject = false;
+
+    // Layer visibility lookup — used below to skip hidden-layer objects when
+    // counting Brep/Extrusion missing-render-mesh cases. Without this, a file
+    // whose only NURBS-mesh-less objects all live on hidden backup layers
+    // would still trigger the blocking "no render mesh" modal.
+    const layerVisById = new Map();
+    (S.parsedLayers || []).forEach(l => layerVisById.set(l.index, l.visible !== false));
 
     for (let i = 0; i < count; i++) {
       let modelObj = null, geom = null, attr = null;
@@ -1377,11 +1443,19 @@ export async function preprocess3dm(file, skipLayerParse) {
           || geomName === 'InstanceReference'
           || geomNameLc.includes('instancereference');
 
-        // Flag Brep/Extrusion objects that lack a stored render mesh — these
-        // won't render (rhino3dm can't tessellate NURBS) and the user is told
-        // to re-save from Rhino with render meshes.
+        // For Brep/Extrusion without a stored render mesh, convert edges to
+        // NurbsCurves so the user still sees a wireframe instead of nothing.
+        // Hidden objects and objects on hidden layers are skipped entirely —
+        // they wouldn't render anyway.
+        let wireframeFallback = false;
         if (geomName === 'Brep' || geomName === 'Extrusion') {
-          if (!hasRenderMesh(geom, geomName)) S.missingRenderMeshCount++;
+          const objVisible   = attr?.visible !== false;
+          const layerIdx     = attr?.layerIndex ?? 0;
+          const layerVisible = layerVisById.get(layerIdx) !== false;
+          if (objVisible && layerVisible && !hasRenderMesh(geom, geomName)) {
+            wireframeFallback = true;
+            S.missingRenderMeshCount++;
+          }
         }
 
         if (isSubD) {
@@ -1709,7 +1783,14 @@ export async function preprocess3dm(file, skipLayerParse) {
 
         } else {
           try {
-            attr ? cleanDoc.objects().add(geom, attr) : cleanDoc.objects().add(geom);
+            if (wireframeFallback) {
+              // No render mesh → sample edge curves to polylines now (while
+              // the source Brep is still alive in WASM). LineSegments are
+              // attached to the scene after the main model loads.
+              sampleBrepEdgesForWireframe(geom, attr, geomName);
+            } else {
+              attr ? cleanDoc.objects().add(geom, attr) : cleanDoc.objects().add(geom);
+            }
           } catch (e) { console.warn('[pre] add', geomName, 'err:', e.message); }
         }
       } catch (objErr) {
@@ -1735,6 +1816,34 @@ export async function preprocess3dm(file, skipLayerParse) {
   }
 
   return fileData;
+}
+
+// ── Wireframe fallback: attach line geometry for Brep/Extrusion objects that
+// had no stored render mesh. Buckets were filled during preprocess3dm with
+// edge polylines sampled per source-layer. We build one THREE.LineSegments per
+// layer so postProcessModel can color it via the existing isLine path.
+function attachWireframeFallback(model) {
+  if (!S._wireframeFallback || S._wireframeFallback.size === 0) return;
+  for (const [layerIdx, chunks] of S._wireframeFallback) {
+    let totalLen = 0;
+    for (const c of chunks) totalLen += c.length;
+    if (totalLen === 0) continue;
+    const arr = new Float32Array(totalLen);
+    let off = 0;
+    for (const c of chunks) { arr.set(c, off); off += c.length; }
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+    const mat = new THREE.LineBasicMaterial({ color: 0x888888 });
+    const lines = new THREE.LineSegments(geom, mat);
+    lines.name = 'wireframe-fallback';
+    // Tag with attributes so postProcessModel + updateLayerVisibility apply
+    // the layer color and visibility just like for any other Rhino object.
+    lines.userData = {
+      attributes: { layerIndex: layerIdx, name: 'wireframe-fallback' }
+    };
+    model.add(lines);
+  }
+  S._wireframeFallback.clear();
 }
 
 // ── Model post-processing (called after every load) ───────────────────────────
@@ -2160,6 +2269,7 @@ export async function handleFile(file, rhinoLoader, gltfLoader, fileHandle = nul
         S.scene.add(S.currentModel);
         document.getElementById('empty-state')?.classList.add('hidden');
         setToolbarModelState(true);
+        attachWireframeFallback(S.currentModel);
         postProcessModel(S.currentModel, extractEdges);
         applyLayerColorsToModel(S.currentModel);
         updateLayerVisibility();
@@ -2178,12 +2288,9 @@ export async function handleFile(file, rhinoLoader, gltfLoader, fileHandle = nul
         setFileName(file.name);
         showModelInfo(S.currentModel, file.size);
         if (S.missingRenderMeshCount > 0) {
-          // Blocking notice — the loaded model is unusable (geometry missing), so
-          // on dismissal we refresh to the empty state where a new file can be opened.
-          showModal(t('msg.no_render_mesh').replace('{n}', S.missingRenderMeshCount), {
-            okLabel: t('common.ok'),
-            onClose: () => location.reload()
-          });
+          // Non-blocking — those objects are now shown as wireframes from their
+          // edge curves, so the model is usable. We just inform the user.
+          showToast(t('msg.no_render_mesh').replace('{n}', S.missingRenderMeshCount));
         }
       } catch (postErr) {
         console.error('[load] post-processing crash:', postErr);
