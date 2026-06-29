@@ -533,6 +533,7 @@ export async function loadCADFile(file, isSTEP, extractEdges) {
     fitCameraToObject(S.currentModel, false);
     const box = new THREE.Box3().setFromObject(S.currentModel);
     setupModelShadowFrustum(box);
+    S.gtaoPass?.setSceneClipBox(box);
     if (S.groundEnabled) addGroundPlane(box);
     applyFileBackground();
     applyDisplayMode();
@@ -581,6 +582,7 @@ export async function loadSTLFile(file, extractEdges) {
     fitCameraToObject(S.currentModel, false);
     const box = new THREE.Box3().setFromObject(S.currentModel);
     setupModelShadowFrustum(box);
+    S.gtaoPass?.setSceneClipBox(box);
     if (S.groundEnabled) addGroundPlane(box);
     applyFileBackground();
     applyDisplayMode();
@@ -622,6 +624,7 @@ export async function load3MFFile(file, extractEdges) {
     fitCameraToObject(S.currentModel, false);
     const box = new THREE.Box3().setFromObject(S.currentModel);
     setupModelShadowFrustum(box);
+    S.gtaoPass?.setSceneClipBox(box);
     if (S.groundEnabled) addGroundPlane(box);
     applyFileBackground();
     applyDisplayMode();
@@ -2221,6 +2224,7 @@ export async function handleFile(file, rhinoLoader, gltfLoader, fileHandle = nul
         fitCameraToObject(S.currentModel, false);
         const box = new THREE.Box3().setFromObject(S.currentModel);
         setupModelShadowFrustum(box);
+        S.gtaoPass?.setSceneClipBox(box);
         if (S.groundEnabled) addGroundPlane(box);
         applyFileBackground();
         applyDisplayMode();
@@ -2276,6 +2280,7 @@ export async function handleFile(file, rhinoLoader, gltfLoader, fileHandle = nul
         fitCameraToObject(S.currentModel, false);
         const box = new THREE.Box3().setFromObject(S.currentModel);
         setupModelShadowFrustum(box);
+        S.gtaoPass?.setSceneClipBox(box);
         if (S.groundEnabled) addGroundPlane(box);
         applyFileBackground();
         if (S.fileSkylightEnabled) {
@@ -2332,6 +2337,7 @@ export async function loadGeometryFromGLB(glbBuffer, fileName, fileSize) {
   fitCameraToObject(S.currentModel, false);
   const box = new THREE.Box3().setFromObject(S.currentModel);
   setupModelShadowFrustum(box);
+  S.gtaoPass?.setSceneClipBox(box);
   if (S.groundEnabled) addGroundPlane(box);
   applyFileBackground();
   applyDisplayMode();
