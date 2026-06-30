@@ -18,7 +18,7 @@ import { initI18n, setLang, applyI18n, t, currentLang } from './i18n.js';
 import { S } from './state.js';
 import { updateSliderFill, updateAllSliderFills, updateSelectIcon, showLoading, hideLoading, bindSliderDblClickInput, beginSave } from './helpers.js';
 import { setupLights, updateSunLight, updateShadowCasting, addGroundPlane, removeGroundPlane, computeVisibleBoundingBox } from './lighting.js';
-import { switchToOrtho, switchToPersp, switchToTwoPoint, apply2PointConstraints, installTwoPointDragHandler, setViewPreset, setWalkthroughMode, triggerCameraTransition, fitCameraToBox, fitCameraToObject, fitCameraToSelected, saveCustomView, renderNamedViewsUI } from './camera.js';
+import { switchToOrtho, switchToPersp, switchToTwoPoint, apply2PointConstraints, installTwoPointDragHandler, setViewPreset, setWalkthroughMode, triggerCameraTransition, fitCameraToBox, fitCameraToObject, fitCameraToSelected, saveCustomView, renderNamedViewsUI, updateAdaptiveClipping } from './camera.js';
 import { applySceneBackground, applyFileBackground, applyDisplayMode, applyLayerColorsToModel, recreateAllEdges } from './display.js';
 import { renderLayerUI, updateLayerVisibility } from './layers.js';
 import { createAnnotationSprites } from './annotations.js';
@@ -3372,6 +3372,9 @@ function animate() {
     S.controls.update();
     apply2PointConstraints();
   }
+  // Keep perspective near/far tight to the scene so depth precision (and GTAO)
+  // holds up at long lens lengths / zoom-out. No-op for ortho.
+  updateAdaptiveClipping();
   S.composer.render();
 
   // Render arc overlay scene on top — no clipping planes active.

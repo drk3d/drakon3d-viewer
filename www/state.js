@@ -20,6 +20,7 @@ export const S = {
 
   // ── Scene objects ────────────────────────────────────────────────────────
   currentModel:    null,
+  clipSphere:      null,   // {center, radius} for adaptive perspective near/far
   currentMode:     'shaded',
   edgeThresholdAngle: 30,
   measurementGroup: null,

@@ -312,6 +312,25 @@ export function fitCameraToBox(box, preserveView = false, animate = false) {
     S.orthoCamera.updateProjectionMatrix();
   }
 
+  // Cache the model's world-space bounding sphere so the render loop can
+  // adaptively tighten the perspective near/far. The fixed far/near = 100000
+  // ratio above wrecks depth-buffer precision; with a long lens + zoom-out the
+  // model sits deep in that range, and GTAO — which reconstructs view positions
+  // from depth — produces speckle noise. See updateAdaptiveClipping().
+  //   - radius     bounds the MODEL → drives `near` (precision where AO matters).
+  //   - farRadius  also covers the ground plane (span = max(x,y)*5, so its
+  //                half-diagonal) → drives `far` so the ground stays visible.
+  // Keeping `near` tight to the model (not the much larger ground sphere) is
+  // what actually restores precision: depth resolution at the model scales with
+  // (far-near)/near, so a large `near` just in front of the model is the win.
+  const groundHalfDiag = Math.max(size.x, size.y) * 2.5 * Math.SQRT2;
+  const sphere = box.getBoundingSphere(new THREE.Sphere());
+  S.clipSphere = {
+    center:    sphere.center.clone(),
+    radius:    Math.max(sphere.radius, 1e-4),
+    farRadius: Math.max(sphere.radius, groundHalfDiag, 1e-4)
+  };
+
   let targetPos;
   if (preserveView) {
     const dir = new THREE.Vector3();
@@ -337,6 +356,35 @@ export function fitCameraToBox(box, preserveView = false, animate = false) {
 
 export function fitCameraToObject(obj, preserve, animate = false) {
   fitCameraToBox(new THREE.Box3().setFromObject(obj), preserve, animate);
+}
+
+// Adaptively fit the perspective camera's near/far to the scene bounding sphere
+// each frame. Keeps far/near small (~2-3x) so the 24-bit depth buffer retains
+// precision at any lens length / zoom level. Without this, a long lens (tiny
+// FOV → camera far back) plus zoom-out pushes the model into the low-precision
+// far half of the depth range, and GTAO reconstructs jittery view positions
+// from the quantized depth → uniform speckle AO noise over every surface.
+// Ortho is left untouched (linear depth has no such precision problem).
+export function updateAdaptiveClipping() {
+  const cam = S.perspCamera;
+  if (!cam || S.camera !== cam || !S.clipSphere) return;
+
+  const d  = cam.position.distanceTo(S.clipSphere.center);
+  const r  = S.clipSphere.radius;      // model only → tight near plane
+  const fr = S.clipSphere.farRadius;   // model + ground → far plane
+
+  // near just in front of the model (clamped positive when the camera is inside
+  // the model sphere); far behind the model + ground. The nearest model point
+  // is d-r and the farthest ground point is within d+fr, so visible geometry is
+  // never clipped. A small margin on near guards against grazing-angle clipping.
+  const near = Math.max(d - r * 1.05, r * 1e-3, 1e-4);
+  const far  = d + fr;
+
+  if (Math.abs(cam.near - near) > near * 1e-3 || Math.abs(cam.far - far) > far * 1e-3) {
+    cam.near = near;
+    cam.far  = far;
+    cam.updateProjectionMatrix();
+  }
 }
 
 export function fitCameraToSelected() {
