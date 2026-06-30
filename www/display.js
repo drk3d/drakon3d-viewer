@@ -444,7 +444,10 @@ export function applyDisplayMode() {
       // Also respect layer visibility — don't show curves on hidden layers
       const curveLayerVis = childLayer ? childLayer.visible : true;
       const curveObjVis = !S.hiddenObjects?.has(child);
-      child.visible = modeAllowsCurves && curveLayerVis && curveObjVis;
+      // Rhino per-object hidden state (3DMLoader applies layer visibility only).
+      // S.revealHidden ("Show All") overrides it to reveal file-author-hidden.
+      const curveRhinoVis = S.revealHidden || child.userData?.attributes?.visible !== false;
+      child.visible = modeAllowsCurves && curveLayerVis && curveObjVis && curveRhinoVis;
 
       // Ensure the line has its own unique cloned material from originalMaterial,
       // so modifying its color does not affect other lines sharing the material.

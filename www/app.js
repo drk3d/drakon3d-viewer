@@ -1377,11 +1377,10 @@ function bindUI() {
   });
   document.getElementById('chk-annotations-panel').addEventListener('change', e => {
     updateModeSetting('annotations', e.target.checked);
-    if (S.annotationGroup) {
-      S.annotationGroup.traverse(child => {
-        if (child !== S.annotationGroup) child.visible = e.target.checked;
-      });
-    }
+    // Route through updateLayerVisibility so the toggle honors layer visibility,
+    // Rhino per-object hidden state, and the user hide-set — not just the
+    // annotation checkbox. (updateLayerVisibility reads the checkbox itself.)
+    updateLayerVisibility();
   });
 
   // Measurements visibility — toggles all completed-measurement objects, plus
@@ -1853,8 +1852,11 @@ function bindUI() {
 
   // ── Show/hide ──
   document.getElementById('btn-show-all').addEventListener('click', () => {
+    // Reveal both viewer-side hides AND Rhino's per-object hidden objects,
+    // matching Rhino's Show command. revealHidden is reset on the next load.
     S.hiddenObjects.forEach(obj => { obj.visible = true; });
     S.hiddenObjects.clear();
+    S.revealHidden = true;
     updateLayerVisibility();
   });
   document.getElementById('btn-hide-selected').addEventListener('click', () => {
@@ -3838,11 +3840,10 @@ export function applyModeSettings(mode) {
     removeGroundPlane();
   }
 
-  if (S.annotationGroup) {
-    S.annotationGroup.traverse(child => {
-      if (child !== S.annotationGroup) child.visible = settings.annotations;
-    });
-  }
+  // Gate annotation visibility through updateLayerVisibility so layer + Rhino
+  // per-object hidden state are honored, not just this mode's annotation flag
+  // (the chk-annotations-panel checkbox was synced to it above).
+  if (S.annotationGroup) updateLayerVisibility();
 }
 
 // ── Switch display mode and apply its visibility settings ──

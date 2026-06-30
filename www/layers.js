@@ -770,10 +770,20 @@ export function updateLayerVisibility() {
     const layerVis  = layer ? layer.visible : true;
     const objectVis = !S.hiddenObjects.has(child);
 
+    // Rhino per-object hidden state. THREE's Rhino3dmLoader applies only LAYER
+    // visibility (3DMLoader.js:539), so individually-hidden objects must be
+    // gated here too. Source of truth: userData.attributes.visible for geometry,
+    // parsedAnnotations[].visible for annotation children (which carry annIndex
+    // instead of attributes). S.revealHidden ("Show All") overrides it to reveal
+    // file-author-hidden objects, matching Rhino's Show command.
+    const rhinoVis = S.revealHidden || (isAnnotation
+      ? (S.parsedAnnotations?.[child.userData.annIndex]?.visible !== false)
+      : (child.userData?.attributes?.visible !== false));
+
     if (isAnnotation) {
-      child.visible = layerVis && objectVis && annVisible;
+      child.visible = layerVis && objectVis && annVisible && rhinoVis;
     } else {
-      child.visible = layerVis && objectVis;
+      child.visible = layerVis && objectVis && rhinoVis;
     }
   };
 

@@ -139,6 +139,10 @@ export const S = {
 
   // ── Hidden objects ───────────────────────────────────────────────────────
   hiddenObjects: new Set(),
+  // When true, "Show All" has overridden Rhino's per-object hidden state so
+  // file-author-hidden objects are revealed too (matches Rhino's Show command).
+  // Reset to false on every model load. See updateLayerVisibility().
+  revealHidden: false,
 
   // ── File / session ───────────────────────────────────────────────────────
   currentFileName: '',

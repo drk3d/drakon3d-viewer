@@ -1510,7 +1510,7 @@ export async function preprocess3dm(file, skipLayerParse) {
                 ];
               }
             } catch {}
-            S.parsedAnnotations.push({ type: 'TextDot', text: textVal, position: origin, layerIndex: attr?.layerIndex ?? 0, objectColor: getObjectColor(attr) });
+            S.parsedAnnotations.push({ type: 'TextDot', text: textVal, position: origin, layerIndex: attr?.layerIndex ?? 0, objectColor: getObjectColor(attr), visible: attr?.visible !== false });
           } catch (e) { console.warn('[pre] TextDot err:', e.message); }
 
         } else if (isAnnotation) {
@@ -1745,6 +1745,7 @@ export async function preprocess3dm(file, skipLayerParse) {
               dimPoints,
               objectColor: getObjectColor(attr),
               layerIndex: attr?.layerIndex ?? 0,
+              visible: attr?.visible !== false,
               isBold
             });
           } catch (e) { console.warn('[pre] Annotation err:', e.message); }
@@ -2160,6 +2161,7 @@ export function clearCurrentModel() {
   removeGroundPlane();
 
   S.hiddenObjects = new Set();
+  S.revealHidden = false; // each model starts honoring its own hidden state
 
   if (S.annotationGroup) {
     S.annotationGroup.traverse(child => {

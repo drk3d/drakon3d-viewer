@@ -152,7 +152,7 @@ export async function createAnnotationSprites() {
           isColorByLayer: ann.isColorByLayer !== false,
           objectColorCustom: ann.objectColorCustom
         };
-        obj3d.visible  = isVisible && annVisible;
+        obj3d.visible  = isVisible && annVisible && (S.revealHidden || ann.visible !== false);
         S.annotationGroup.add(obj3d);
       }
     } catch (err) {
