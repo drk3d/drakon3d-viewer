@@ -106,11 +106,13 @@ window.addEventListener('unhandledrejection', e => {
 
 // ── rhino3dm init ──────────────────────────────────────────────────────────
 if (window.rhino3dm) {
-  window.rhino3dm().then(rhino => { S.rhinoInstance = rhino; });
+  // Self-hosted WASM (same-origin) — no CDN cross-origin fetch, so no CORS
+  // preflight. locateFile resolves rhino3dm.wasm next to the local .min.js.
+  window.rhino3dm({ locateFile: (p) => 'libs/' + p }).then(rhino => { S.rhinoInstance = rhino; });
 }
 
 const rhinoLoader = new Rhino3dmLoader();
-rhinoLoader.setLibraryPath('https://cdn.jsdelivr.net/npm/rhino3dm@8.17.0/');
+rhinoLoader.setLibraryPath('libs/');
 
 const gltfLoader = new GLTFLoader();
 

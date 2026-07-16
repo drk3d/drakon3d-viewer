@@ -82,10 +82,11 @@ html = html.replace(
   () => `<script id="coloris-js">${colorisJs}</script>`
 );
 
-// Remove the rhino3dm CDN script — the shell only ever loads embedded GLB,
-// never raw .3dm, so the WASM parser is dead weight (and external).
+// Remove the rhino3dm script — the shell only ever loads embedded GLB,
+// never raw .3dm, so the WASM parser is dead weight (and its local
+// libs/rhino3dm.wasm wouldn't ship inside the single-file export anyway).
 html = html.replace(
-  /<script src="https:\/\/cdn\.jsdelivr\.net\/npm\/rhino3dm[^>]*><\/script>\s*/,
+  /<script src="libs\/rhino3dm\.min\.js"><\/script>\s*/,
   ''
 );
 
