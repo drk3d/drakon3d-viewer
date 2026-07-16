@@ -55,6 +55,9 @@ let html = readFileSync(resolve(www, 'index.html'), 'utf8');
 html = html.replace(/<link rel="preconnect"[^>]*>\s*/g, '');
 html = html.replace(/<link href="https:\/\/fonts\.googleapis\.com[^>]*>\s*/g, '');
 
+// Drop Noto Sans local font links (offline -> fall back to system fonts)
+html = html.replace(/<link href="css\/notosans_(?:multi|kr)\.css"[^>]*>\s*/g, '');
+
 // IMPORTANT: every replacement below uses a FUNCTION replacement (() => value)
 // rather than a string. String replacements interpret "$&", "$`", "$'", "$1"…
 // patterns — and minified JS/CSS is full of "$&"/"$'" sequences, which would
