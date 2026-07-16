@@ -231,7 +231,8 @@ export async function loadOCCT() {
   if (window.occtimportjs) return window.occtimportjs;
   return new Promise((resolve, reject) => {
     const script   = document.createElement('script');
-    script.src     = 'https://cdn.jsdelivr.net/npm/occt-import-js@0.0.22/dist/occt-import-js.js';
+    // Self-hosted (same-origin) — avoids CDN cross-origin CORS preflight.
+    script.src     = 'libs/occt-import-js.js';
     script.onload  = () => resolve(window.occtimportjs);
     script.onerror = () => reject(new Error('Failed to load occt-import-js script'));
     document.head.appendChild(script);
@@ -252,7 +253,7 @@ export async function loadCADFile(file, isSTEP, extractEdges) {
     const occtimportjsFn = await loadOCCT();
     setProgress(40);
     const occt = await occtimportjsFn({
-      locateFile: (name) => `https://cdn.jsdelivr.net/npm/occt-import-js@0.0.22/dist/${name}`
+      locateFile: (name) => `libs/${name}`
     });
     setProgress(60);
 
