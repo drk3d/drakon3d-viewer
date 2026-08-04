@@ -204,8 +204,16 @@ function restoreTextureMimeTypes(originals) {
 // have proven to balloon the JSON chunk (Rhino raw doc dump on the root node,
 // cloned Three.js Material instances on every mesh). Stripped temporarily for
 // export — the live viewer keeps full userData.
-const ROOT_USERDATA_STRIP   = ['materials', 'layers', 'groups', 'settings',
-                                'warnings', 'objectType'];
+//
+// ROOT_USERDATA_STRIP is applied to children too (some loaders copy the dump onto
+// them), so anything listed here is lost from every mesh on save. 'objectType' is
+// deliberately NOT in it: it is a short string that records whether a mesh came
+// from a Rhino Brep or a Rhino Mesh, which is what lets the viewer decide not to
+// run dihedral edge extraction over mesh objects. Stripping it made that
+// indistinguishable after a .rhv round-trip. The root's own 'File3dm' value is
+// removed separately below.
+const ROOT_USERDATA_STRIP   = ['materials', 'layers', 'groups', 'settings', 'warnings'];
+const ROOT_ONLY_STRIP       = ['objectType'];
 const MESH_USERDATA_STRIP   = ['originalMaterial', 'renderedMaterial',
                                 'shadedMaterial', 'materialColor'];
 
@@ -221,6 +229,7 @@ function stripExportUserData(model) {
     }
   }
   stripFrom(model, ROOT_USERDATA_STRIP);
+  stripFrom(model, ROOT_ONLY_STRIP);
   model.traverse(child => {
     if (child === model) return;
     stripFrom(child, MESH_USERDATA_STRIP);

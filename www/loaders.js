@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { S } from './state.js';
 import { applyDisplayMode, applyFileBackground, applyLayerColorsToModel,
-         addEdges, fixMaterialTransparency, clearTechnicalOutlines } from './display.js';
+         addEdges, isEdgeEligible, fixMaterialTransparency, clearTechnicalOutlines } from './display.js';
 import { setupModelShadowFrustum, addGroundPlane, removeGroundPlane, computeVisibleBoundingBox } from './lighting.js';
 import { fitCameraToObject, fitCameraToBox } from './camera.js';
 import { renderLayerUI, updateLayerVisibility } from './layers.js';
@@ -1924,9 +1924,11 @@ function measureModelWeight(model) {
     triangles += tris;
 
     // A file can carry edges for only some objects — the Rhino exporter reads them
-    // from Brep topology, which pure Mesh objects do not have. Only the geometry
-    // that still needs extraction has any cost, so that is what gets counted.
-    if (!child.children?.some(c => c.name === 'rhino-edges')) {
+    // from Brep topology, which pure Mesh objects do not have. Only geometry that
+    // is both edge-eligible and lacks precomputed edges costs anything, so that is
+    // what gets counted.
+    const hasEdges = child.children?.some(c => c.name === 'rhino-edges');
+    if (!hasEdges && isEdgeEligible(child)) {
       meshesNeedingEdges++;
       trianglesNeedingEdges += tris;
     }
@@ -1945,6 +1947,9 @@ export function postProcessModel(model, addEdgesFlag, colorsAreSRGBStoredAsLinea
   // work, so the traverse below can skip both without re-deciding per child.
   const weight = measureModelWeight(model);
   S.edgesPrecomputed = weight.precomputedEdges > 0;
+  // Kept regardless of the deferral decision — the angle slider needs to know
+  // whether any geometry uses a dihedral threshold at all, on light models too.
+  S.edgeWeight = weight;
 
   // Only geometry that still needs extraction costs anything, so both thresholds
   // look at that alone — never at the model's total size. Edge extraction is
@@ -2217,9 +2222,11 @@ export function postProcessModel(model, addEdgesFlag, colorsAreSRGBStoredAsLinea
 
     // Per mesh, not per model: a file may carry edges for some objects and not
     // others, and extracting on top of an existing edge child would both pay the
-    // cost the file avoided and leave two overlapping outlines.
+    // cost the file avoided and leave two overlapping outlines. Mesh and SubD
+    // objects are skipped outright — their tessellation has no edges to find.
     if (addEdgesFlag && child.geometry && child.isMesh && !child.isLine
-        && !child.children?.some(c => c.name === 'rhino-edges')) addEdges(child);
+        && !child.children?.some(c => c.name === 'rhino-edges')
+        && isEdgeEligible(child)) addEdges(child);
     // BVH is triangle-based — running it on Line geometry reorders the index
     // buffer as if it were triangles, corrupting LINE_STRIP vertex order and
     // producing dashed/zigzag curves.
@@ -2477,13 +2484,18 @@ export async function loadGeometryFromGLB(glbBuffer, fileName, fileSize) {
 // Tells the user why the edge overlay is off, so a heavy model doesn't just look
 // like the setting was ignored. Non-blocking — the model is fully usable.
 export function notifyIfEdgesDeferred() {
-  // The angle threshold has no meaning for exact Brep edges, so the slider is
-  // disabled rather than left looking functional. Independent of the toast below:
-  // precomputed edges may be present on a perfectly light model.
+  // The angle threshold only means something for geometry whose edges are derived
+  // by dihedral angle. Exact Brep edges from the file ignore it, and Mesh/SubD
+  // objects are excluded from extraction entirely — so if nothing in the scene is
+  // eligible, the slider is disabled rather than left looking functional.
+  //
+  // It stays live for mesh-only formats (STL, 3MF, GLB, STEP/IGES), where dihedral
+  // extraction is the only possible edge source.
   const sl = document.getElementById('sl-edge-angle');
   if (sl) {
-    sl.disabled = !!S.edgesPrecomputed;
-    sl.title = S.edgesPrecomputed ? t('msg.edges_precomputed_angle') : '';
+    const usesThreshold = (S.edgeWeight?.meshesNeedingEdges ?? 0) > 0;
+    sl.disabled = !usesThreshold;
+    sl.title = usesThreshold ? '' : t('msg.edges_precomputed_angle');
   }
 
   if (!S.deferredStats) return;

@@ -658,8 +658,35 @@ export function fixMaterialTransparency(mat) {
   }
 }
 
+// Rhino object types whose tessellation has no topological edges to find.
+//
+// A Rhino Mesh has no Brep edges — its "edges" are just its triangulation, so a
+// dihedral-angle pass over an imported tree or a scanned terrain produces noise
+// rather than an outline. SubD is smooth for the same reason. Skipping them is
+// both better looking and dramatically cheaper: on a sample architectural model
+// they were 96% of the triangles while being none of the geometry a user would
+// want outlined.
+const NO_TOPOLOGY_EDGE_TYPES = new Set(['Mesh', 'SubD', 'PointSet', 'PointCloud']);
+
+/**
+ * Whether dihedral edge extraction is worth running on this mesh.
+ *
+ * An absent objectType means the geometry did not come from a .3dm at all (STL,
+ * 3MF, GLB, STEP/IGES via OCCT). Those are mesh-only formats where EdgesGeometry
+ * is the only possible edge source, so they stay eligible — the exclusion is
+ * specifically about Rhino objects that *have* a topological alternative.
+ */
+export function isEdgeEligible(mesh) {
+  const type = mesh?.userData?.objectType ?? mesh?.userData?.attributes?.objectType;
+  return !(type && NO_TOPOLOGY_EDGE_TYPES.has(type));
+}
+
 export function addEdges(mesh, thresholdAngle) {
   if (!mesh || !mesh.isMesh || mesh.isLine || !mesh.geometry) return;
+  // Guard here as well as at the call sites: addEdges is reached from load,
+  // display-mode changes and the angle slider, and a Mesh object must never
+  // acquire dihedral edges through any of them.
+  if (!isEdgeEligible(mesh)) return;
 
   // Skip if mesh is part of annotations
   let isAnn = false;

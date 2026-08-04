@@ -242,6 +242,12 @@ export const S = {
   // recreateAllEdges() would destroy them — both are gated on this flag.
   edgesPrecomputed: false,
 
+  // Last model's edge accounting from measureModelWeight(): { meshes, triangles,
+  // precomputedEdges, meshesNeedingEdges, trianglesNeedingEdges }. Kept for every
+  // load, not just heavy ones, because the edge-angle slider is enabled only when
+  // some geometry actually derives its edges from the dihedral threshold.
+  edgeWeight: null,
+
   // ── Theme ────────────────────────────────────────────────────────────────
   THEME_KEY:    'byrhinoview_theme',
   currentTheme: (() => {
