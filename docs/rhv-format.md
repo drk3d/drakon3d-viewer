@@ -276,6 +276,13 @@ Both producers can also emit a single self-contained `.html`: the prebuilt
 `viewer-shell.html` (from `npm run build:shell`) with the gzip'd RV3D container
 injected at the `/*__RHV_PACKAGE__*/` placeholder.
 
+> **`viewer-shell.html` is a build artifact of `www/`, and nothing rebuilds it
+> automatically.** Every package embeds a whole copy of the viewer, so a stale shell
+> means packages ship stale viewer code — with no error and no obvious symptom
+> beyond "the package behaves like an older build". Run `npm run build:shell` after
+> changing anything under `www/`, and bump the version tag in `index.html` when the
+> change matters, since that tag is what identifies the shell.
+
 | Global | Contents |
 |---|---|
 | `window.__RHV_PACKAGE__` | base64 of the container |
