@@ -1877,7 +1877,109 @@ function attachWireframeFallback(model) {
 // For GLB-based loads (direct .glb/.gltf, or .rhv packages) the GLTFLoader
 // already produces correctly-spaced linear colors, so the conversion would be
 // a DOUBLE convert and surfaces render too dark. Pass false in those paths.
+// Above either threshold, edge extraction and BVH construction are skipped at
+// load time. Measured on an 18,026-mesh / 2.79M-triangle .rhv: 15.8s with edges
+// vs 2.9s without, i.e. edges alone were 82% of the load. EdgesGeometry is
+// O(triangles) *and* allocates a second geometry plus a LineSegments child per
+// mesh, so it also multiplies draw calls. Kept generous enough that ordinary
+// models (tens to hundreds of meshes) are unaffected.
+const HEAVY_MESH_COUNT     = 5000;
+const HEAVY_TRIANGLE_COUNT = 1500000;
+
+// Restores the exact 'rhino-edges' name on edge objects carried in a .rhv.
+//
+// GLTFLoader passes every node name through createUniqueName(), so a file with N
+// edge objects yields one 'rhino-edges' plus 'rhino-edges_1', 'rhino-edges_2', …
+// Everything in the viewer matches that name exactly (getObjectByName, the
+// overlay-name skip lists, raycast filtering), so without this only the first
+// object would have working edges and the rest would behave as loose curves.
+//
+// The producer therefore marks the role in node extras, which GLTFLoader copies to
+// userData verbatim and never rewrites. See docs/rhv-format.md §5.3d.
+function normalizePrecomputedEdgeNames(model) {
+  model.traverse(child => {
+    if (child.userData?.role === 'rhino-edges') child.name = 'rhino-edges';
+  });
+}
+
+// Counts renderable meshes and triangles without allocating anything, and notes
+// whether the file already carries edge geometry (the Rhino export plugin can
+// write edges from real Brep topology, which is both cheaper and more accurate
+// than EdgesGeometry — see docs/rhv-format.md).
+function measureModelWeight(model) {
+  let meshes = 0, triangles = 0, precomputedEdges = 0;
+  let meshesNeedingEdges = 0, trianglesNeedingEdges = 0;
+  model.traverse(child => {
+    if (child.name === 'rhino-edges') { precomputedEdges++; return; }
+    if (!child.isMesh || child.isLine) return;
+    if (child.name === 'rhino-outline' ||
+        child.name === 'selection-outline' || child.name === 'ground-plane') return;
+    meshes++;
+    const g = child.geometry;
+    let tris = 0;
+    if (g) {
+      if (g.index) tris = g.index.count / 3;
+      else if (g.attributes?.position) tris = g.attributes.position.count / 3;
+    }
+    triangles += tris;
+
+    // A file can carry edges for only some objects — the Rhino exporter reads them
+    // from Brep topology, which pure Mesh objects do not have. Only the geometry
+    // that still needs extraction has any cost, so that is what gets counted.
+    if (!child.children?.some(c => c.name === 'rhino-edges')) {
+      meshesNeedingEdges++;
+      trianglesNeedingEdges += tris;
+    }
+  });
+  return {
+    meshes, triangles: Math.round(triangles), precomputedEdges,
+    meshesNeedingEdges, trianglesNeedingEdges: Math.round(trianglesNeedingEdges)
+  };
+}
+
 export function postProcessModel(model, addEdgesFlag, colorsAreSRGBStoredAsLinear = true) {
+  // Must run before anything that matches on the 'rhino-edges' name.
+  normalizePrecomputedEdgeNames(model);
+
+  // Decide up front whether this model is too heavy for per-mesh edge and BVH
+  // work, so the traverse below can skip both without re-deciding per child.
+  const weight = measureModelWeight(model);
+  S.edgesPrecomputed = weight.precomputedEdges > 0;
+
+  // Only geometry that still needs extraction costs anything, so both thresholds
+  // look at that alone — never at the model's total size. Edge extraction is
+  // O(triangles) (measured ~10s for 4.3M, essentially independent of mesh count),
+  // while edges already in the file are free to show. So a fully-covered model
+  // opens with edges on however large it is, and a mesh-only model still defers.
+  const isHeavy = weight.meshesNeedingEdges > HEAVY_MESH_COUNT
+               || weight.trianglesNeedingEdges > HEAVY_TRIANGLE_COUNT;
+
+  if (S.edgesPrecomputed) {
+    const coverage = weight.triangles > 0
+      ? Math.round(100 * (weight.triangles - weight.trianglesNeedingEdges) / weight.triangles) : 0;
+    console.info(`[load] ${weight.precomputedEdges.toLocaleString()} of ${weight.meshes.toLocaleString()} ` +
+                 `object(s) carry edges, covering ${coverage}% of triangles; ` +
+                 `${weight.trianglesNeedingEdges.toLocaleString()} triangle(s) would need extraction.`);
+  }
+
+  // All-or-nothing, deliberately. Showing the file's edges while skipping
+  // extraction for everything else leaves a few objects outlined among thousands
+  // that are not, which reads as a rendering bug rather than a performance
+  // trade-off. So when extraction is too expensive, the precomputed edges are
+  // hidden too and the user is told they can switch edges on.
+  S.edgesDeferred = isHeavy;
+  S.deferredStats = isHeavy ? weight : null;
+  if (isHeavy) {
+    console.info(`[load] edges off at load: ${weight.trianglesNeedingEdges.toLocaleString()} ` +
+                 `triangle(s) across ${weight.meshesNeedingEdges.toLocaleString()} mesh(es) would need extraction.`);
+    model.traverse(child => { if (child.name === 'rhino-edges') child.visible = false; });
+    // Reflect it in the UI so the state the user sees matches the scene. Set the
+    // property directly: dispatching 'change' would run recreateAllEdges.
+    const edgeChk = document.getElementById('chk-edges-panel');
+    if (edgeChk) edgeChk.checked = false;
+    addEdgesFlag = false;
+  }
+
   // Three.js Rhino3dmLoader deduplicates materials by color via _compareMaterials,
   // so several meshes can share one Material instance. convertSRGBToLinear()
   // mutates color in place — calling it once per mesh would convert the same
@@ -2113,11 +2215,18 @@ export function postProcessModel(model, addEdgesFlag, colorsAreSRGBStoredAsLinea
     child.userData.renderedMaterial = child.material.clone();
     fixMaterialTransparency(child.userData.renderedMaterial);
 
-    if (addEdgesFlag && child.geometry && child.isMesh && !child.isLine) addEdges(child);
+    // Per mesh, not per model: a file may carry edges for some objects and not
+    // others, and extracting on top of an existing edge child would both pay the
+    // cost the file avoided and leave two overlapping outlines.
+    if (addEdgesFlag && child.geometry && child.isMesh && !child.isLine
+        && !child.children?.some(c => c.name === 'rhino-edges')) addEdges(child);
     // BVH is triangle-based — running it on Line geometry reorders the index
     // buffer as if it were triangles, corrupting LINE_STRIP vertex order and
     // producing dashed/zigzag curves.
-    if (S.bvhReady && child.geometry && child.isMesh && !child.isLine) child.geometry.computeBoundsTree();
+    // Skipped on heavy models: it is only needed to accelerate selection and
+    // measurement raycasts, so paying for it up front on every mesh is the wrong
+    // trade when the model may never be picked.
+    if (S.bvhReady && !isHeavy && child.geometry && child.isMesh && !child.isLine) child.geometry.computeBoundsTree();
     child.castShadow    = S.shadowsEnabled;
     child.receiveShadow = S.shadowsEnabled;
   });
@@ -2210,7 +2319,7 @@ export async function handleFile(file, rhinoLoader, gltfLoader, fileHandle = nul
   const supportedExtensions = ['.3dm', '.glb', '.gltf', '.stl', '.3mf', '.stp', '.step', '.iges', '.igs', '.rhv'];
   const hasValidExt = supportedExtensions.some(ext => fileName.endsWith(ext));
   if (!hasValidExt) {
-    alert('지원되지 않는 파일 형식입니다.\n지원 포맷: .3dm, .glb, .gltf, .stl, .3mf, .stp, .step, .iges, .igs, .rhv');
+    alert(t('msg.unsupported_format'));
     return;
   }
 
@@ -2253,7 +2362,7 @@ export async function handleFile(file, rhinoLoader, gltfLoader, fileHandle = nul
       xhr => { if (xhr.total > 0) setProgress((xhr.loaded / xhr.total) * 90); },
       err => {
         console.error(err);
-        alert('GLTF 파일 로드 실패');
+        alert(t('msg.load_gltf_failed'));
         hideLoading();
         URL.revokeObjectURL(url);
         document.getElementById('empty-state')?.classList.remove('hidden');
@@ -2310,6 +2419,7 @@ export async function handleFile(file, rhinoLoader, gltfLoader, fileHandle = nul
         renderNamedViewsUI();
         setFileName(file.name);
         showModelInfo(S.currentModel, file.size);
+        notifyIfEdgesDeferred();
         if (S.missingRenderMeshCount > 0) {
           // Non-blocking — those objects are now shown as wireframes from their
           // edge curves, so the model is usable. We just inform the user.
@@ -2317,7 +2427,7 @@ export async function handleFile(file, rhinoLoader, gltfLoader, fileHandle = nul
         }
       } catch (postErr) {
         console.error('[load] post-processing crash:', postErr);
-        alert('3DM 파일 처리 중 오류가 발생했습니다: ' + postErr.message);
+        alert(t('msg.process_3dm_failed').replace('{err}', postErr?.message || postErr));
         document.getElementById('empty-state')?.classList.remove('hidden');
       } finally {
         hideLoading();
@@ -2326,7 +2436,7 @@ export async function handleFile(file, rhinoLoader, gltfLoader, fileHandle = nul
     xhr => { if (xhr.total > 0) setProgress(25 + (xhr.loaded / xhr.total) * 70); },
     err => {
       console.error(err);
-      alert('3DM 파일 로드 실패.\n라이노에서 "렌더링 메쉬만 저장" 옵션으로 파일 크기를 줄여 보세요.');
+      alert(t('msg.load_3dm_failed'));
       hideLoading();
       URL.revokeObjectURL(url);
       document.getElementById('empty-state')?.classList.remove('hidden');
@@ -2361,4 +2471,25 @@ export async function loadGeometryFromGLB(glbBuffer, fileName, fileSize) {
   applyDisplayMode();
   setFileName(fileName);
   showModelInfo(S.currentModel, fileSize);
+  notifyIfEdgesDeferred();
+}
+
+// Tells the user why the edge overlay is off, so a heavy model doesn't just look
+// like the setting was ignored. Non-blocking — the model is fully usable.
+export function notifyIfEdgesDeferred() {
+  // The angle threshold has no meaning for exact Brep edges, so the slider is
+  // disabled rather than left looking functional. Independent of the toast below:
+  // precomputed edges may be present on a perfectly light model.
+  const sl = document.getElementById('sl-edge-angle');
+  if (sl) {
+    sl.disabled = !!S.edgesPrecomputed;
+    sl.title = S.edgesPrecomputed ? t('msg.edges_precomputed_angle') : '';
+  }
+
+  if (!S.deferredStats) return;
+  // Report what actually drove the decision — the geometry needing extraction —
+  // not the model total, which can be far larger and misleading.
+  showToast(t('msg.edges_deferred')
+    .replace('{meshes}', S.deferredStats.meshesNeedingEdges.toLocaleString())
+    .replace('{triangles}', S.deferredStats.trianglesNeedingEdges.toLocaleString()));
 }

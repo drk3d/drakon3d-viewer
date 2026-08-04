@@ -14,6 +14,12 @@ node_modules/
 # Scratch / temp
 scratch/
 
+# Sample/ test
+sample_3dm/
+
+# Rhino .rhv export plugin — managed locally, not published
+rhino-plugin/
+
 # OS
 .DS_Store
 Thumbs.db

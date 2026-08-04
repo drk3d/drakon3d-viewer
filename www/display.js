@@ -684,6 +684,12 @@ export function recreateAllEdges(thresholdAngle) {
   const angle = S.edgeThresholdAngle ?? 30;
   if (!S.scene) return;
 
+  // The file's edges came from Brep topology, so they are exact and have no
+  // dihedral threshold to re-apply. Rebuilding would replace them with a coarser
+  // approximation derived from the tessellated mesh — and pay the extraction cost
+  // the precomputed edges exist to avoid.
+  if (S.edgesPrecomputed) return;
+
   S.scene.traverse(child => {
     if (child.isMesh && !['rhino-edges', 'rhino-outline', 'selection-outline', 'ground-plane'].includes(child.name)) {
       // Skip if child is part of annotations OR the measurement group.

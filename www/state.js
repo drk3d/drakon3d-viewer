@@ -226,6 +226,22 @@ export const S = {
   // ── BVH ──────────────────────────────────────────────────────────────────
   bvhReady: false,
 
+  // ── Heavy-model load deferral ────────────────────────────────────────────
+  // Set by postProcessModel when a model exceeds HEAVY_MESH_COUNT /
+  // HEAVY_TRIANGLE_COUNT. Edge extraction is O(triangles) and allocates a
+  // second geometry per mesh — measured at 82% of load time on an 18k-mesh
+  // model (15.8s → 2.9s with it off), so it is skipped rather than made the
+  // user wait. Session restore honours the flag instead of switching edges
+  // back on from the saved settings.
+  edgesDeferred: false,
+  deferredStats: null, // { meshes, triangles } for the toast / re-enable prompt
+
+  // True when the loaded file already carries edge geometry (written by the Rhino
+  // export plugin from Brep topology). Those edges are exact rather than derived
+  // from a dihedral-angle threshold, so the edge-angle slider does not apply and
+  // recreateAllEdges() would destroy them — both are gated on this flag.
+  edgesPrecomputed: false,
+
   // ── Theme ────────────────────────────────────────────────────────────────
   THEME_KEY:    'byrhinoview_theme',
   currentTheme: (() => {

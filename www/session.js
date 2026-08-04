@@ -2,8 +2,41 @@ import * as THREE from 'three';
 import { S } from './state.js';
 import { applyDisplayMode, applyCustomToMaterial } from './display.js';
 import { switchToPersp, getCustomViews } from './camera.js';
-import { updateSliderFill, isPageVisuallyDark } from './helpers.js';
+import { updateSliderFill, isPageVisuallyDark, showToast } from './helpers.js';
 import { History } from './history.js';
+import { t } from './i18n.js';
+
+// ── .rhv format versioning ───────────────────────────────────────────────────
+// Full contract in docs/rhv-format.md. Two producers write this format — this
+// file and rhino-plugin/src/RhvWriter.cs — so the constants below are a shared
+// interface, not local detail. Change the doc first.
+//
+// CONTAINER_VERSION describes the RV3D byte layout only. A file claiming a
+// higher one cannot be parsed at all (we would not know where the fields are),
+// so it is a hard fail. Everything additive goes in the JSON instead, which is
+// why this should stay at 1.
+//
+// SCHEMA_VERSION describes the metadata JSON. MIN_VIEWER_SCHEMA is what we
+// stamp into files we write: the oldest schema a reader needs to render our
+// output *correctly*. Keep it below SCHEMA_VERSION for additive changes so
+// older viewers keep opening new files and just ignore what they don't know.
+const CONTAINER_VERSION   = 1;
+const SCHEMA_VERSION      = 4;
+const MIN_VIEWER_SCHEMA   = 3;
+// Files written before schema 4 carry no minViewerSchema field.
+const LEGACY_MIN_SCHEMA   = 3;
+// Provenance only — never drives behaviour. Mirrors package.json and the version
+// tag in index.html. That tag is also what the Rhino plugin's ShellUpdater parses to
+// decide whether a published viewer-shell.html is newer, so bump all three together.
+const APP_VERSION         = '0.9.10';
+
+// Tagged so the loadSession catch can show the specific "update byRhinoView"
+// message instead of the generic corrupt-file alert.
+function versionError(message) {
+  const e = new Error(message);
+  e.rhvVersionError = true;
+  return e;
+}
 
 // ── IndexedDB for last-used file handle ──────────────────────────────────────
 
@@ -304,7 +337,11 @@ async function buildSessionBuffer(customFileName = null) {
     }));
 
     const data = {
-      version:             3, // version 3 includes unified geometry and annotations
+      version:             SCHEMA_VERSION,
+      // Our output stays renderable by any viewer that understands schema 3
+      // (unified geometry + annotations); schema 4 only added provenance.
+      minViewerSchema:     MIN_VIEWER_SCHEMA,
+      producer:            { name: 'byRhinoView.Viewer', version: APP_VERSION, host: navigator.userAgent },
       displayMode:         S.currentMode,
       settings,
       cameraState,
@@ -417,8 +454,8 @@ async function buildSessionBuffer(customFileName = null) {
             view.setUint8(2, 0x33);
             view.setUint8(3, 0x44);
 
-            // Version = 1
-            view.setUint32(4, 1, true);
+            // containerVersion — the RV3D byte layout, not the JSON schema.
+            view.setUint32(4, CONTAINER_VERSION, true);
 
             // JSON Length
             view.setUint32(8, jsonBytes.byteLength, true);
@@ -615,16 +652,35 @@ export async function exportPackage(customFileName = null, opts = {}) {
 
     // Build the inject string. With a password, encrypt the raw binary payload
     // with AES-GCM (key derived via PBKDF2). Without one, ship the plain base64.
+    //
+    // The base64 goes into an inert <script type="text/plain"> rather than a
+    // JavaScript string literal, and a small script assigns it to the globals the
+    // bootstrap in app.js reads. Measured on a 69 MB payload: as a literal the JS
+    // parser spends ~1s tokenising it; as inert character data a textContent read
+    // costs ~25ms. Nothing changes for the reader, so packages written either way
+    // still open. Keep this in step with HtmlPackageWriter in the Rhino plugin —
+    // docs/rhv-format.md §6 is the shared contract.
+    //
+    // Closing the shell's own <script id="rhv-package"> is safe: the HTML parser
+    // ends a script element at the first "</script", and base64 contains no '<'.
+    const PAYLOAD_ID = 'rhv-payload';
     let inject = '';
     if (password) {
       const enc = await _encryptBinary(new Uint8Array(finalBuffer), password);
+      // Salt and IV are a handful of bytes and stay inline; only the ciphertext is
+      // worth keeping out of the parser's way.
       inject =
-        `window.__RHV_PACKAGE_ENCRYPTED__=${JSON.stringify(enc)};` +
+        `</script><script id="${PAYLOAD_ID}" type="text/plain">${enc.data}</script>` +
+        `<script>var _p=document.getElementById(${JSON.stringify(PAYLOAD_ID)}).textContent;` +
+        `window.__RHV_PACKAGE_ENCRYPTED__={v:${JSON.stringify(enc.v ?? 1)},` +
+        `salt:${JSON.stringify(enc.salt)},iv:${JSON.stringify(enc.iv)},data:_p};` +
         `window.__RHV_PACKAGE_NAME__=${JSON.stringify(finalName + '.rhv')};`;
     } else {
       const b64 = arrayBufferToBase64(finalBuffer);
       inject =
-        `window.__RHV_PACKAGE__=${JSON.stringify(b64)};` +
+        `</script><script id="${PAYLOAD_ID}" type="text/plain">${b64}</script>` +
+        `<script>var _p=document.getElementById(${JSON.stringify(PAYLOAD_ID)}).textContent;` +
+        `window.__RHV_PACKAGE__=_p;` +
         `window.__RHV_PACKAGE_NAME__=${JSON.stringify(finalName + '.rhv')};`;
     }
     if (hideFileMenu) {
@@ -760,12 +816,39 @@ export async function loadSession(file, fileHandle = null) {
     let glbBuffer = null;
 
     if (isBinaryPackage) {
-      const version = view.getUint32(4, true);
+      const containerVersion = view.getUint32(4, true);
       const jsonLength = view.getUint32(8, true);
+
+      // A newer container layout is unreadable — we would not know where the
+      // fields sit. Fail loudly rather than parsing garbage. See
+      // docs/rhv-format.md §1.
+      if (containerVersion > CONTAINER_VERSION) {
+        throw versionError(t('msg.rhv_newer_container')
+          .replace('{found}', containerVersion)
+          .replace('{supported}', CONTAINER_VERSION));
+      }
 
       const jsonBytes = new Uint8Array(arrayBuffer, 12, jsonLength);
       const jsonStr = new TextDecoder().decode(jsonBytes);
       data = JSON.parse(jsonStr);
+
+      // Schema gating (docs/rhv-format.md §2). minViewerSchema is what the
+      // producer says we must understand to render the file *correctly*; a
+      // higher data.version alone only means there are fields we will ignore.
+      const minSchema = typeof data.minViewerSchema === 'number'
+        ? data.minViewerSchema : LEGACY_MIN_SCHEMA;
+      if (minSchema > SCHEMA_VERSION) {
+        throw versionError(t('msg.rhv_newer_schema')
+          .replace('{found}', minSchema)
+          .replace('{supported}', SCHEMA_VERSION));
+      }
+      if (typeof data.version === 'number' && data.version > SCHEMA_VERSION) {
+        console.warn(`[Session Load] file schema v${data.version} is newer than this viewer (v${SCHEMA_VERSION}); unknown settings ignored.`);
+        showToast(t('msg.rhv_newer_minor'));
+      }
+      if (data.producer?.name) {
+        console.info(`[Session Load] producer: ${data.producer.name} ${data.producer.version || ''} (${data.producer.host || 'unknown host'})`);
+      }
 
       // Restore parsedLayers early so that postProcessModel (called inside loadGeometryFromGLB)
       // can resolve the correct layer colors for shadedMaterial and other color checks.
@@ -848,7 +931,11 @@ export async function loadSession(file, fileHandle = null) {
         if (el) { el.checked = val; el.dispatchEvent(new Event('change')); }
       };
 
-      setCheck('chk-edges-panel',       s.edgeOverlay       ?? true);
+      // Geometry has already been post-processed at this point. If it was heavy
+      // enough that edges were deferred, restoring edgeOverlay:true here would
+      // dispatch 'change' and rebuild every edge — paying the exact cost the
+      // deferral avoided. Leave it off and let the user opt in.
+      if (!S.edgesDeferred) setCheck('chk-edges-panel', s.edgeOverlay ?? true);
       setCheck('chk-annotations-panel', s.annotationsEnabled ?? true);
       setCheck('chk-ground-panel',      S.groundEnabled);
       setCheck('chk-shadows-panel',     S.shadowsEnabled);
@@ -1174,7 +1261,10 @@ export async function loadSession(file, fileHandle = null) {
     hideLoading();
   } catch (e) {
     console.error('Session load failed', e);
-    alert('Failed to load session file.');
+    // Version-gate rejections (docs/rhv-format.md §2) already carry a message
+    // that tells the user what to do about it; a generic "failed to load" would
+    // throw that away and read as a corrupt file.
+    alert(e?.rhvVersionError ? e.message : t('msg.load_session_failed'));
     hideLoading();
   } finally {
     History.suppress = false;
