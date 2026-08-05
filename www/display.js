@@ -713,6 +713,62 @@ export function isEdgeEligible(mesh) {
  * solid show through. Safe for the AO passes and the clipping-cap stencil: both
  * render with their own materials rather than these.
  */
+// Shared by every filtered edge material, so moving the slider is one assignment
+// rather than a walk over the scene. three.js keeps the object reference we hand
+// it in onBeforeCompile, so mutating .value reaches all of them.
+const edgeAngleUniform = { value: 30 };
+
+export function setEdgeAngleUniform(deg) {
+  edgeAngleUniform.value = deg;
+}
+
+/**
+ * Makes the edge-angle slider filter an exact edge object instead of ignoring it.
+ *
+ * Exact edges are the complete set of surface boundaries, which includes the
+ * tangent-continuous ones — a fillet's two sides, a lofted patch join. Those are
+ * real edges and Rhino draws them, but they are also the lines people mean when
+ * they say a model looks busy, and the old dihedral extraction never showed them
+ * because a tangent join has no angle to detect.
+ *
+ * So the producer measures the angle between the two surfaces meeting along each
+ * edge and ships it per vertex, and the threshold becomes a filter over exact
+ * geometry rather than a parameter that generates approximate geometry. Same
+ * slider, same meaning, but nothing is rebuilt when it moves and the curves stay
+ * exact at every setting — no faceting on curved surfaces, no smooth-but-real
+ * edge dropped. Naked edges are tagged 180° so they survive any threshold, which
+ * is what EdgesGeometry does with boundary edges too.
+ *
+ * Edges without the attribute — sampled from a .3dm in the browser, where
+ * rhino3dm exposes no face adjacency to measure with — are left unfiltered.
+ */
+export function applyEdgeAngleFilter(line) {
+  const geom = line?.geometry;
+  const mat  = line?.material;
+  if (!geom?.attributes?._angle || !mat || mat.userData.__edgeAngleFilter) return;
+  mat.userData.__edgeAngleFilter = true;
+
+  mat.onBeforeCompile = shader => {
+    shader.uniforms.uEdgeAngleThreshold = edgeAngleUniform;
+    shader.vertexShader =
+      'attribute float _angle;\nvarying float vEdgeAngle;\n' +
+      shader.vertexShader.replace(
+        '#include <begin_vertex>',
+        '#include <begin_vertex>\n\tvEdgeAngle = _angle;'
+      );
+    shader.fragmentShader =
+      'uniform float uEdgeAngleThreshold;\nvarying float vEdgeAngle;\n' +
+      shader.fragmentShader.replace(
+        '#include <clipping_planes_fragment>',
+        '#include <clipping_planes_fragment>\n\tif ( vEdgeAngle < uEdgeAngleThreshold ) discard;'
+      );
+  };
+  // Or the patched program gets served to an unpatched material with the same
+  // parameters, and every line in the scene starts discarding.
+  mat.customProgramCacheKey = () => 'edgeAngleFilter';
+  mat.needsUpdate = true;
+}
+
 // Used for both the constant and the slope term. Chosen by testing, not derived:
 // 1 (the conventional starting point) held at moderate distance but broke up again
 // at close range on a concave junction, where the render mesh sits in FRONT of the
@@ -771,6 +827,9 @@ export function recreateAllEdges(thresholdAngle) {
     S.edgeThresholdAngle = thresholdAngle;
   }
   const angle = S.edgeThresholdAngle ?? 30;
+  // Exact edges carrying an angle re-filter from this alone — no rebuild, and it
+  // has to happen even when the traverse below finds nothing to regenerate.
+  setEdgeAngleUniform(angle);
   if (!S.scene) return;
 
   S.scene.traverse(child => {

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { S } from './state.js';
 import { applyDisplayMode, applyFileBackground, applyLayerColorsToModel,
-         addEdges, isEdgeEligible, fixMaterialTransparency,
+         addEdges, isEdgeEligible, applyEdgeAngleFilter, fixMaterialTransparency,
          clearTechnicalOutlines } from './display.js';
 import { setupModelShadowFrustum, addGroundPlane, removeGroundPlane, computeVisibleBoundingBox } from './lighting.js';
 import { fitCameraToObject, fitCameraToBox } from './camera.js';
@@ -2022,7 +2022,11 @@ const HEAVY_TRIANGLE_COUNT = 1500000;
 // userData verbatim and never rewrites. See docs/rhv-format.md §5.3d.
 function normalizePrecomputedEdgeNames(model) {
   model.traverse(child => {
-    if (child.userData?.role === 'rhino-edges') child.name = 'rhino-edges';
+    if (child.userData?.role !== 'rhino-edges') return;
+    child.name = 'rhino-edges';
+    // Only does anything for edges that shipped a per-vertex angle. Placed here
+    // so it covers both producers from one traverse.
+    applyEdgeAngleFilter(child);
   });
 }
 
@@ -2031,10 +2035,15 @@ function normalizePrecomputedEdgeNames(model) {
 // write edges from real Brep topology, which is both cheaper and more accurate
 // than EdgesGeometry — see docs/rhv-format.md).
 function measureModelWeight(model) {
-  let meshes = 0, triangles = 0, precomputedEdges = 0;
+  let meshes = 0, triangles = 0, precomputedEdges = 0, filterableEdges = 0;
   let meshesNeedingEdges = 0, trianglesNeedingEdges = 0;
   model.traverse(child => {
-    if (child.name === 'rhino-edges') { precomputedEdges++; return; }
+    if (child.name === 'rhino-edges') {
+      precomputedEdges++;
+      // Carries the producer's per-edge angle, so the slider filters it.
+      if (child.geometry?.attributes?._angle) filterableEdges++;
+      return;
+    }
     if (!child.isMesh || child.isLine) return;
     if (child.name === 'rhino-outline' ||
         child.name === 'selection-outline' || child.name === 'ground-plane') return;
@@ -2058,7 +2067,7 @@ function measureModelWeight(model) {
     }
   });
   return {
-    meshes, triangles: Math.round(triangles), precomputedEdges,
+    meshes, triangles: Math.round(triangles), precomputedEdges, filterableEdges,
     meshesNeedingEdges, trianglesNeedingEdges: Math.round(trianglesNeedingEdges)
   };
 }
@@ -2613,16 +2622,18 @@ export async function loadGeometryFromGLB(glbBuffer, fileName, fileSize) {
 // Tells the user why the edge overlay is off, so a heavy model doesn't just look
 // like the setting was ignored. Non-blocking — the model is fully usable.
 export function notifyIfEdgesDeferred() {
-  // The angle threshold only means something for geometry whose edges are derived
-  // by dihedral angle. Exact Brep edges from the file ignore it, and Mesh objects
-  // are excluded from extraction entirely — so if nothing in the scene is
-  // eligible, the slider is disabled rather than left looking functional.
+  // The threshold applies two different ways, and either is enough to keep the
+  // slider live: it generates dihedral edges for geometry with no topology (STL,
+  // 3MF, GLB, STEP/IGES), and it filters exact edges that shipped a per-edge angle
+  // — hiding tangent-continuous surface joins without touching real creases.
   //
-  // It stays live for mesh-only formats (STL, 3MF, GLB, STEP/IGES), where dihedral
-  // extraction is the only possible edge source.
+  // It is disabled only when neither applies: every edge is exact but unmeasured
+  // (sampled from a .3dm in the browser, where there is no face adjacency to
+  // measure), or there is nothing to outline at all.
   const sl = document.getElementById('sl-edge-angle');
   if (sl) {
-    const usesThreshold = (S.edgeWeight?.meshesNeedingEdges ?? 0) > 0;
+    const w = S.edgeWeight;
+    const usesThreshold = (w?.meshesNeedingEdges ?? 0) > 0 || (w?.filterableEdges ?? 0) > 0;
     sl.disabled = !usesThreshold;
     sl.title = usesThreshold ? '' : t('msg.edges_precomputed_angle');
   }

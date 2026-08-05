@@ -19,7 +19,7 @@ import { S } from './state.js';
 import { updateSliderFill, updateAllSliderFills, updateSelectIcon, showLoading, hideLoading, bindSliderDblClickInput, beginSave } from './helpers.js';
 import { setupLights, updateSunLight, updateShadowCasting, addGroundPlane, removeGroundPlane, computeVisibleBoundingBox } from './lighting.js';
 import { switchToOrtho, switchToPersp, switchToTwoPoint, apply2PointConstraints, installTwoPointDragHandler, setViewPreset, setWalkthroughMode, triggerCameraTransition, fitCameraToBox, fitCameraToObject, fitCameraToSelected, saveCustomView, renderNamedViewsUI, updateAdaptiveClipping } from './camera.js';
-import { applySceneBackground, applyFileBackground, applyDisplayMode, applyLayerColorsToModel, recreateAllEdges } from './display.js';
+import { applySceneBackground, applyFileBackground, applyDisplayMode, applyLayerColorsToModel, recreateAllEdges, setEdgeAngleUniform } from './display.js';
 import { renderLayerUI, updateLayerVisibility } from './layers.js';
 import { createAnnotationSprites } from './annotations.js';
 import { saveSession, loadSession, exportPackage } from './session.js';
@@ -1444,6 +1444,10 @@ function bindUI() {
       const val = parseInt(e.target.value);
       if (slEdgeAngleVal) slEdgeAngleVal.textContent = val + '°';
       updateSliderFill(e.target);
+      // Exact edges re-filter in the shader, so they can follow the drag. Dihedral
+      // edges still wait for 'change' — regenerating them per input event would
+      // stall the drag on any model large enough to care.
+      setEdgeAngleUniform(val);
     });
     slEdgeAngle.addEventListener('change', e => {
       const val = parseInt(e.target.value);

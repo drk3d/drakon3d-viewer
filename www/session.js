@@ -21,7 +21,7 @@ import { t } from './i18n.js';
 // output *correctly*. Keep it below SCHEMA_VERSION for additive changes so
 // older viewers keep opening new files and just ignore what they don't know.
 const CONTAINER_VERSION   = 1;
-const SCHEMA_VERSION      = 4;
+const SCHEMA_VERSION      = 5;
 const MIN_VIEWER_SCHEMA   = 3;
 // Files written before schema 4 carry no minViewerSchema field.
 const LEGACY_MIN_SCHEMA   = 3;
@@ -1028,6 +1028,11 @@ export async function loadSession(file, fileHandle = null) {
         S.edgeThresholdAngle = s.edgeThresholdAngle;
       }
       setSlider('sl-edge-angle', 'sl-edge-angle-val', S.edgeThresholdAngle ?? 30, 'degree');
+      // Exact edges filter in the shader off a uniform, which the slider's own
+      // events would normally set. Restoring a session moves neither, so the
+      // saved threshold has to be pushed through by hand or the file opens
+      // showing every edge regardless of what was saved.
+      (await import('./display.js')).setEdgeAngleUniform(S.edgeThresholdAngle ?? 30);
 
       const bgSel = document.getElementById('bg-type-select');
       if (bgSel && s.bgType) bgSel.value = s.bgType;
@@ -1401,6 +1406,7 @@ export function resetSettingsToDefault() {
   resetSlider('bg-radial-spread', 'bg-radial-spread-val', 0.5,  'percent');
   resetSlider('sl-edge-angle',    'sl-edge-angle-val',    30,   'degree');
   S.edgeThresholdAngle = 30;
+  import('./display.js').then(m => m.setEdgeAngleUniform(30));
 
   const ttToggleBtn = document.getElementById('btn-tt-toggle');
   if (ttToggleBtn?.classList.contains('active')) ttToggleBtn.click();

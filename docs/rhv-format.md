@@ -277,6 +277,33 @@ Two further constraints:
   directly-opened `.3dm` can only fall back to dihedral extraction, which finds a
   SubD's creases and boundaries but not its interior structure.
 
+**Per-edge angle (optional, schema 5).** The edge primitive may carry a custom
+`_ANGLE` scalar attribute: the angle in degrees between the two surfaces meeting
+along that edge, `0` meaning tangent. Both vertices of a segment carry their
+edge's value, so an edge is kept or dropped whole. Edges with no second face —
+naked or non-manifold — are written as `180` so they survive any threshold, which
+is what `EdgesGeometry` does with boundary edges.
+
+This is what lets the viewer's edge-angle slider **filter** exact edges rather
+than being irrelevant to them. Exact edges are the complete set of surface
+boundaries, tangent-continuous joins included; those are real edges Rhino draws,
+but they are also why a filleted model can look busier than the old dihedral
+extraction made it. With the attribute the same slider value means the same thing
+whichever source an object's edges came from, nothing is rebuilt when it moves,
+and the curves stay exact at every setting.
+
+Measure it the way `EdgesGeometry` measures its threshold — between face normals —
+or the slider will not agree with itself across a mixed scene. The writer reads
+the angle through the edge's **trims**, whose curves already live in face UV
+space, rather than through `BrepFace.ClosestPoint`; on a 114,000-edge model that
+is the difference between a visible pause and none. For SubD the tag is the
+answer without measuring: the limit surface is tangent-continuous across a smooth
+edge, so smooth is `0` and crease is `180`.
+
+Omitting the attribute is valid and stays readable: the viewer shows every edge
+and reports the slider as not applying to them. That is the `.3dm`-opened-directly
+case, where `rhino3dm`'s `BrepEdge` exposes no face adjacency to measure with.
+
 `role` is also what the viewer keys on when **re-saving** a `.rhv`. Edges marked
 exact are written back out, because the GLB carries no topology they could be
 rebuilt from; unmarked (dihedral) edges are dropped, since reloading reproduces
@@ -377,4 +404,7 @@ packages. `rhino-plugin/tools/crypto-compat/` verifies the two against each othe
 - The viewer's own `.rhv` writer never populates `producer`; treat its absence as
   "written by the viewer".
 - Files written before schema 4 have no `minViewerSchema`; read as `3`.
+- Schema 5 added the `_ANGLE` edge attribute (§5.3d). Purely additive, so
+  `minViewerSchema` stays at `3`: an older viewer ignores the attribute and draws
+  every edge, which is exactly what it did before the attribute existed.
 - The reader must tolerate a `.rhv` whose GLB contains no meshes (empty document).
