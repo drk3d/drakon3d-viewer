@@ -2222,8 +2222,8 @@ export function postProcessModel(model, addEdgesFlag, colorsAreSRGBStoredAsLinea
 
     // Per mesh, not per model: a file may carry edges for some objects and not
     // others, and extracting on top of an existing edge child would both pay the
-    // cost the file avoided and leave two overlapping outlines. Mesh and SubD
-    // objects are skipped outright — their tessellation has no edges to find.
+    // cost the file avoided and leave two overlapping outlines. Mesh objects are
+    // skipped outright — their tessellation has no edges to find.
     if (addEdgesFlag && child.geometry && child.isMesh && !child.isLine
         && !child.children?.some(c => c.name === 'rhino-edges')
         && isEdgeEligible(child)) addEdges(child);
@@ -2485,8 +2485,8 @@ export async function loadGeometryFromGLB(glbBuffer, fileName, fileSize) {
 // like the setting was ignored. Non-blocking — the model is fully usable.
 export function notifyIfEdgesDeferred() {
   // The angle threshold only means something for geometry whose edges are derived
-  // by dihedral angle. Exact Brep edges from the file ignore it, and Mesh/SubD
-  // objects are excluded from extraction entirely — so if nothing in the scene is
+  // by dihedral angle. Exact Brep edges from the file ignore it, and Mesh objects
+  // are excluded from extraction entirely — so if nothing in the scene is
   // eligible, the slider is disabled rather than left looking functional.
   //
   // It stays live for mesh-only formats (STL, 3MF, GLB, STEP/IGES), where dihedral

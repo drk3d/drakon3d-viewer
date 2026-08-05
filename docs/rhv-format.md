@@ -194,6 +194,20 @@ back, so this round-trips as `child.userData.attributes` — which is what
 where `0` means "from layer"; the viewer branches on that to decide whether an
 object follows its layer colour.
 
+`objectType` records what the object was in Rhino, spelled the way three.js's
+`3DMLoader` spells it (`"Brep"`, `"Extrusion"`, `"Surface"`, `"Mesh"`, `"SubD"`,
+`"Curve"`, `"Point"`, `"PointSet"`, `"InstanceReference"`) so that a `.rhv` and a
+directly-opened `.3dm` agree. The viewer uses it to decide whether dihedral edge
+extraction is worth running: `Mesh`, `PointSet` and `PointCloud` are excluded,
+because their tessellation *is* their geometry and a threshold pass over an
+imported tree or a scanned terrain yields noise, not an outline. `SubD` is **not**
+excluded — Rhino generates its tessellation from a controlled cage, so creases and
+boundaries produce genuine sharp angles.
+
+Omitting `objectType` is safe but pessimistic: the viewer treats unknown geometry
+as eligible, which is the right default for the mesh-only formats it also opens
+(STL, 3MF, GLB, STEP/IGES) where dihedral extraction is the only edge source.
+
 **5.3b — Textures.** Images must be embedded as `bufferView`s (never external
 URIs — the package has to stay self-contained) and must be `image/png` or
 `image/jpeg`, the only two formats glTF allows. Rhino documents freely reference
@@ -245,12 +259,16 @@ Two further constraints:
   the *inverse* of the parent's dequantization matrix, or the edges are scaled and
   offset by it.
 - **Prefer real topology.** Brep edges are exact; `EdgesGeometry` is a
-  dihedral-angle heuristic over the tessellated mesh. When edges come from
-  topology there is no threshold to re-apply, and the viewer disables its
-  edge-angle slider accordingly. Pure `Mesh` objects have no topology to read —
-  writing dihedral edges for them is the case where edge data can exceed the
-  geometry it describes, so it is better to write nothing and let the viewer build
-  them on demand.
+  dihedral-angle heuristic over the tessellated mesh. Edges supplied by the file
+  have no threshold to re-apply, so the viewer leaves them untouched when the
+  edge-angle slider moves, and disables the slider outright once *nothing* in the
+  scene derives its edges from the threshold. Both are decided per mesh: one file
+  may legitimately mix exact Brep edges with SubD edges the viewer still derives.
+- **Do not write edges for `Mesh` objects.** They have no topology to read, so the
+  only thing a writer could ship is a dihedral pass — the one case where edge data
+  can exceed the geometry it describes. The viewer will not derive them either
+  (see `objectType` in §5.3), so a `Mesh` object is simply drawn without an
+  outline, matching how it reads in Rhino.
 
 **5.4 — Nothing else in `userData`.** The viewer strips `originalMaterial`,
 `renderedMaterial`, `shadedMaterial`, `materialColor` (per mesh) and `materials`,

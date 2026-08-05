@@ -237,9 +237,10 @@ export const S = {
   deferredStats: null, // { meshes, triangles } for the toast / re-enable prompt
 
   // True when the loaded file already carries edge geometry (written by the Rhino
-  // export plugin from Brep topology). Those edges are exact rather than derived
-  // from a dihedral-angle threshold, so the edge-angle slider does not apply and
-  // recreateAllEdges() would destroy them — both are gated on this flag.
+  // export plugin from Brep topology). Only used for reporting coverage at load —
+  // protecting those edges from the angle slider is decided per mesh in
+  // recreateAllEdges(), since one file can mix exact Brep edges with SubD edges
+  // that are still derived from the threshold.
   edgesPrecomputed: false,
 
   // Last model's edge accounting from measureModelWeight(): { meshes, triangles,
