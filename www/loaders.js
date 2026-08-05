@@ -642,12 +642,21 @@ export async function load3MFFile(file, extractEdges) {
 
 // ── 3DM preprocessor (SubD → Mesh, extract annotations, layers) ──────────────
 
+// Wall-clock ceiling for sampling Brep edge curves during the pre-pass. See
+// sampleBrepEdgesForObject() for the measurements behind it. Deliberately larger
+// than the worst sample-file cost (2.0 s) so that real models complete, and
+// deliberately a clock rather than an edge count so that a pathological file
+// degrades to dihedral extraction instead of hanging the load.
+const BREP_EDGE_BUDGET_MS = 4000;
+
 export async function preprocess3dm(file, skipLayerParse) {
   S.parsedAnnotations = [];
   S.parsed3dmFileInfo = null;
   S._objLayerById = new Map();
   S._instanceLayerByPos = new Map();
   S._wireframeFallback = new Map();
+  S._brepEdgesById = new Map();
+  S._subdIds = new Set();
   S.missingRenderMeshCount = 0;
   let fileData = file;
 
@@ -1300,13 +1309,14 @@ export async function preprocess3dm(file, skipLayerParse) {
       return true; // other geometry types handle their own rendering
     };
 
-    // Fallback for Brep/Extrusion without a stored render mesh: sample edge
-    // curves to polylines (in WASM memory now, while the source brep is still
-    // alive), then attach them as THREE.LineSegments to the scene after load.
-    // This avoids serializing curves back through cleanDoc / 3dm and keeps the
-    // file load fast even with hundreds of edges.
-    const sampleBrepEdgesForWireframe = (g, a, name, segs = 24) => {
-      const layerIdx = a?.layerIndex ?? 0;
+    // Samples a Brep's (or Extrusion's) edge curves to polyline vertex pairs, in
+    // WASM memory now while the source geometry is still alive. Returns a flat
+    // array x1,y1,z1,x2,y2,z2,… in world coordinates, or null.
+    //
+    // Doing it here rather than after load avoids serializing curves back through
+    // cleanDoc / 3dm, and it is the only place the NURBS topology still exists —
+    // Rhino3dmLoader hands back nothing but the tessellated render mesh.
+    const sampleBrepEdgeVerts = (g, name, segs = 24) => {
       const verts = []; // flat array of pairs: x1,y1,z1, x2,y2,z2, …
       let brep = g;
       let needBrepDelete = false;
@@ -1315,7 +1325,7 @@ export async function preprocess3dm(file, skipLayerParse) {
           brep = (typeof g.toBrep === 'function') ? g.toBrep(false) : null;
           needBrepDelete = !!brep;
         }
-        if (!brep) return;
+        if (!brep) return null;
         const edges = brep.edges();
         const ec = edges?.count ?? 0;
         for (let ei = 0; ei < ec; ei++) {
@@ -1348,14 +1358,58 @@ export async function preprocess3dm(file, skipLayerParse) {
           try { e.delete(); } catch {}
         }
         try { edges.delete(); } catch {}
-      } catch (we) { console.warn('[pre] wireframe build err:', we.message); }
+      } catch (we) { console.warn('[pre] edge sample build err:', we.message); }
       if (needBrepDelete) { try { brep.delete(); } catch {} }
+      return verts.length ? verts : null;
+    };
 
-      if (verts.length === 0) return;
+    // Fallback for Brep/Extrusion without a stored render mesh: there is no
+    // surface to shade, so the sampled edges become the object's only visible
+    // form. Bucketed per source layer and attached as one LineSegments each.
+    const sampleBrepEdgesForWireframe = (g, a, name) => {
+      const verts = sampleBrepEdgeVerts(g, name);
+      if (!verts) return;
+      const layerIdx = a?.layerIndex ?? 0;
       S._wireframeFallback = S._wireframeFallback || new Map();
       let bucket = S._wireframeFallback.get(layerIdx);
       if (!bucket) { bucket = []; S._wireframeFallback.set(layerIdx, bucket); }
       bucket.push(verts);
+    };
+
+    // Real topological edges for Brep/Extrusion objects that DO have a render
+    // mesh. Without this the viewer can only run EdgesGeometry over the
+    // tessellation, which is a dihedral-angle guess: it misses smooth-tangent
+    // edges (fillet boundaries, tangent surface joins) and adds nothing where a
+    // curved surface is faceted finely enough. Brep edges are exact.
+    //
+    // Cost, measured against the browser's own rhino3dm build: 17.5–22.7 µs per
+    // edge and *zero* WASM heap growth, because each NurbsCurve is freed as soon
+    // as it is sampled. So this is bounded by wall time, not by file size or the
+    // 2 GB ceiling — a 221 MB architectural model spent 773 ms on 43,156 edges
+    // and a 429 MB one 2.0 s on 114,619. It also replaces work that costs more:
+    // dihedral extraction on the same 429 MB model measured ~11 s.
+    //
+    // The budget is a clock rather than an object or edge count so that a
+    // pathological file degrades instead of hanging. Objects sampled before it
+    // runs out keep their exact edges and the rest fall back to dihedral — a mix
+    // the viewer supports per mesh (see recreateAllEdges).
+    const edgeBudgetStart = performance.now();
+    let edgeBudgetSpent = false;
+    const sampleBrepEdgesForObject = (g, a, name) => {
+      if (edgeBudgetSpent) return;
+      const id = a?.id;
+      if (!id) return;   // no id, no way to match it to a mesh after load
+      const verts = sampleBrepEdgeVerts(g, name);
+      if (verts) {
+        S._brepEdgesById = S._brepEdgesById || new Map();
+        S._brepEdgesById.set(id, new Float32Array(verts));
+      }
+      if (performance.now() - edgeBudgetStart > BREP_EDGE_BUDGET_MS) {
+        edgeBudgetSpent = true;
+        console.warn(`[pre] Brep edge budget (${BREP_EDGE_BUDGET_MS} ms) spent after ` +
+                     `${S._brepEdgesById?.size ?? 0} object(s); the rest fall back to ` +
+                     `dihedral extraction.`);
+      }
     };
 
     const objects = doc.objects();
@@ -1459,11 +1513,27 @@ export async function preprocess3dm(file, skipLayerParse) {
           if (objVisible && layerVisible && !hasRenderMesh(geom, geomName)) {
             wireframeFallback = true;
             S.missingRenderMeshCount++;
+          } else if (objVisible && layerVisible) {
+            // Has a render mesh, so it will be shaded — sample its real edges so
+            // the outline comes from topology instead of the tessellation.
+            sampleBrepEdgesForObject(geom, attr, geomName);
           }
         }
 
         if (isSubD) {
           hasSubD = true;
+          // Remember that this object WAS a SubD. It leaves here as a plain Mesh,
+          // so Rhino3dmLoader will label it "Mesh" — which would exclude it from
+          // edge extraction, since a Rhino Mesh has no topology worth outlining.
+          // A SubD does: its tessellation comes from a controlled cage, so creases
+          // and boundaries are real edges. postProcessModel restores the type.
+          try {
+            const sid = attr?.id;
+            if (sid) {
+              S._subdIds = S._subdIds || new Set();
+              S._subdIds.add(sid);
+            }
+          } catch {}
           try {
             let meshGeom = null;
             let tempSubd = null;
@@ -1864,6 +1934,59 @@ function attachWireframeFallback(model) {
     model.add(lines);
   }
   S._wireframeFallback.clear();
+}
+
+// ── Real Brep edges: attach what the pre-pass sampled ────────────────────────
+//
+// Matched by object id, the same correlation key S._objLayerById uses, because
+// cleanDoc.add() does not preserve object identity any other way.
+//
+// The result is shaped exactly like the edges the Rhino export plugin writes into
+// a .rhv: a child named 'rhino-edges' carrying userData.role, which is what marks
+// an edge object as file-supplied — exact, and not to be rebuilt when the
+// edge-angle slider moves. See docs/rhv-format.md §5.3d.
+//
+// Must run before postProcessModel so measureModelWeight() counts these objects
+// as already covered and does not charge them against the deferral thresholds.
+function attachBrepEdges(model) {
+  const byId = S._brepEdgesById;
+  if (!byId || byId.size === 0) return 0;
+  let attached = 0;
+  model.traverse(child => {
+    if (!child.isMesh || child.isLine) return;
+    const id = child.userData?.attributes?.id;
+    if (!id) return;
+    const verts = byId.get(id);
+    if (!verts) return;
+    // Edge vertices are in world coordinates, and so is the render mesh of a
+    // non-instanced 3dm object — its node carries no transform. Anything with a
+    // transformed ancestor (block instances) would place these wrongly, and
+    // those objects are not sampled in the first place.
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+    const line = new THREE.LineSegments(geom, new THREE.LineBasicMaterial({ color: 0x000000 }));
+    line.name = 'rhino-edges';
+    line.userData.role = 'rhino-edges';
+    child.add(line);
+    attached++;
+  });
+  byId.clear();
+  if (attached) console.info(`[load] attached exact Brep edges to ${attached.toLocaleString()} object(s)`);
+  return attached;
+}
+
+// Restores the SubD label that preprocess3dm had to drop when it converted the
+// SubD to a Mesh for Rhino3dmLoader. Without it those objects read as Rhino
+// Meshes and get no edges at all.
+function restoreSubDObjectType(model) {
+  const ids = S._subdIds;
+  if (!ids || ids.size === 0) return;
+  model.traverse(child => {
+    if (!child.isMesh || child.isLine) return;
+    const id = child.userData?.attributes?.id;
+    if (id && ids.has(id)) child.userData.objectType = 'SubD';
+  });
+  ids.clear();
 }
 
 // ── Model post-processing (called after every load) ───────────────────────────
@@ -2408,6 +2531,11 @@ export async function handleFile(file, rhinoLoader, gltfLoader, fileHandle = nul
         document.getElementById('empty-state')?.classList.add('hidden');
         setToolbarModelState(true);
         attachWireframeFallback(S.currentModel);
+        // Both must precede postProcessModel: it decides edge extraction and the
+        // heavy-model deferral from what is already present and how each object
+        // is typed.
+        restoreSubDObjectType(S.currentModel);
+        attachBrepEdges(S.currentModel);
         postProcessModel(S.currentModel, extractEdges);
         applyLayerColorsToModel(S.currentModel);
         updateLayerVisibility();

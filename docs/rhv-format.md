@@ -269,6 +269,19 @@ Two further constraints:
   can exceed the geometry it describes. The viewer will not derive them either
   (see `objectType` in §5.3), so a `Mesh` object is simply drawn without an
   outline, matching how it reads in Rhino.
+- **`SubD` edges come from the control net,** read via `SubD.Edges` and evaluated
+  on the limit surface with `SubDEdge.ToNurbsCurve()` — not from
+  `ControlNetLine`, which would cut straight across a smoothly interpolated edge.
+  One entry per cage edge, so the data is small regardless of subdivision level.
+  This is plugin-only: `rhino3dm`'s WASM build exposes no SubD edge access, so a
+  directly-opened `.3dm` can only fall back to dihedral extraction, which finds a
+  SubD's creases and boundaries but not its interior structure.
+
+`role` is also what the viewer keys on when **re-saving** a `.rhv`. Edges marked
+exact are written back out, because the GLB carries no topology they could be
+rebuilt from; unmarked (dihedral) edges are dropped, since reloading reproduces
+them identically from the same threshold. Measured on a 1.29 MB session, keeping
+exact edges cost +121 KB (+9.4%).
 
 **5.4 — Nothing else in `userData`.** The viewer strips `originalMaterial`,
 `renderedMaterial`, `shadedMaterial`, `materialColor` (per mesh) and `materials`,

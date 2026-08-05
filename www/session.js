@@ -254,6 +254,9 @@ function restoreExportUserData(restore) {
 // (writes a .rhv) and exportPackage() (embeds into a self-contained .html).
 async function buildSessionBuffer(customFileName = null) {
   const toHide = [];
+  // Objects forced visible for the export because onlyVisible would otherwise
+  // drop data that cannot be reconstructed — see the rhino-edges case below.
+  const toReveal = [];
   // Declared in outer scope so the outer catch (synchronous errors before
   // GLTFExporter.parse fires) can also restore mutations.
   let outerTextureMimeOriginals = new Map();
@@ -366,10 +369,29 @@ async function buildSessionBuffer(customFileName = null) {
       customHdrName:       S.customHdrName || null
     };
 
-    // Temporarily hide UI outlines and apply Rendered/Custom PBR materials during GLB export
+    // Temporarily hide UI outlines and apply Rendered/Custom PBR materials during GLB export.
+    // GLTFExporter runs with onlyVisible, so hiding is how these are excluded.
     S.currentModel.traverse(child => {
-      if (['rhino-outline', 'selection-outline', 'rhino-edges', 'ground-plane'].includes(child.name)) {
+      if (['rhino-outline', 'selection-outline', 'ground-plane'].includes(child.name)) {
         if (child.visible) { toHide.push(child); child.visible = false; }
+        return;
+      }
+      // Edges are kept only when they cannot be rebuilt from the exported GLB.
+      // Exact ones — read from Brep/SubD topology, marked with role — have no
+      // source in the file: the NURBS topology never makes it into a GLB, so
+      // dropping them would silently downgrade every re-save to a dihedral
+      // approximation. Dihedral edges are dropped, because reloading rebuilds
+      // them identically from the same threshold and storing them would just
+      // inflate the file. See docs/rhv-format.md §5.3d.
+      if (child.name === 'rhino-edges') {
+        if (child.userData?.role !== 'rhino-edges') {
+          if (child.visible) { toHide.push(child); child.visible = false; }
+        } else if (!child.visible) {
+          // Exporting must not depend on whether the user has edges switched on:
+          // onlyVisible would drop them from the file for good. Force them visible
+          // for the export and let toReveal put them back.
+          toReveal.push(child); child.visible = true;
+        }
         return;
       }
       if (child.isMesh && child.userData.originalMaterial) {
@@ -431,6 +453,7 @@ async function buildSessionBuffer(customFileName = null) {
       });
       // Restore outlines visibility
       toHide.forEach(c => { c.visible = true; });
+      toReveal.forEach(c => { c.visible = false; });
     };
 
     const { GLTFExporter } = await import('three/addons/exporters/GLTFExporter.js');
@@ -524,6 +547,7 @@ async function buildSessionBuffer(customFileName = null) {
       mesh.material = mat;
     });
     toHide.forEach(c => { c.visible = true; });
+    toReveal.forEach(c => { c.visible = false; });
     console.error('[Session Export] error:', err);
     throw err;
   }
