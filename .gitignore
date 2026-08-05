@@ -31,3 +31,6 @@ capacitor.config.json
 
 # Python (root directory only)
 /*.py
+
+# Rhino lock files, written next to an open .3dm
+*.rhl
