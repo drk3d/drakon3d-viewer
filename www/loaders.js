@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { S } from './state.js';
 import { applyDisplayMode, applyFileBackground, applyLayerColorsToModel,
          addEdges, isEdgeEligible, applyEdgeAngleFilter, fixMaterialTransparency,
-         clearTechnicalOutlines } from './display.js';
+         clearTechnicalOutlines, clearSharedMaterials } from './display.js';
 import { setupModelShadowFrustum, addGroundPlane, removeGroundPlane, computeVisibleBoundingBox } from './lighting.js';
 import { fitCameraToObject, fitCameraToBox } from './camera.js';
 import { renderLayerUI, updateLayerVisibility } from './layers.js';
@@ -2408,6 +2408,9 @@ export function clearCurrentModel() {
   });
   S.scene.remove(S.currentModel);
   S.currentModel = null;
+  // Keyed partly on layer index and material colour, so it means nothing once a
+  // different model is loaded — and holding it would leak every material.
+  clearSharedMaterials();
   removeGroundPlane();
 
   S.hiddenObjects = new Set();

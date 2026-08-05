@@ -471,6 +471,9 @@ export function applyDisplayMode() {
     const orig  = child.userData.originalMaterial;
     const edges = child.getObjectByName('rhino-edges');
     if (edges) edges.renderOrder = 0;
+    // Surfaces carrying exact edges get a larger depth offset below, so they must
+    // not share a material with surfaces that have none.
+    const exactEdgeKey = edges?.userData?.role === 'rhino-edges' ? ':e' : '';
 
     switch (S.currentMode) {
 
@@ -497,15 +500,22 @@ export function applyDisplayMode() {
 
       case 'shaded': {
         const base = child.userData.shadedMaterial || orig;
-        const m = base.clone();
-        m.polygonOffset = true; m.polygonOffsetFactor = 1; m.polygonOffsetUnits = 1;
-        m.roughness = 0.85; m.metalness = 0.05;
-        // Two-sided faces — match Rhino's shaded viewport so open surfaces and
-        // the inside of non-solid polysurfaces stay visible from behind.
-        m.side = THREE.DoubleSide;
-        if (child.userData.objectColorCustom !== undefined) m.color?.set(child.userData.objectColorCustom);
-        m.needsUpdate = true;
-        child.material = m;
+        const custom = child.userData.objectColorCustom;
+        const build = () => {
+          const m = base.clone();
+          m.polygonOffset = true; m.polygonOffsetFactor = 1; m.polygonOffsetUnits = 1;
+          m.roughness = 0.85; m.metalness = 0.05;
+          // Two-sided faces — match Rhino's shaded viewport so open surfaces and
+          // the inside of non-solid polysurfaces stay visible from behind.
+          m.side = THREE.DoubleSide;
+          if (custom !== undefined) m.color?.set(custom);
+          m.needsUpdate = true;
+          return m;
+        };
+        // A per-object colour is by definition not shareable.
+        child.material = custom !== undefined
+          ? build()
+          : shareMaterial(materialKey('shaded', child, base), build);
         if (edges) {
           edges.visible = edgeOverlay;
           edges.material.color.setHex(0x000000);
@@ -516,16 +526,19 @@ export function applyDisplayMode() {
       }
 
       case 'arctic': {
-        // Architecture: near-white surfaces + env-map IBL + sun shadows.
-        const m = new THREE.MeshStandardMaterial({
-          color: 0xf0f0f0, roughness: 0.95, metalness: 0.0,
-          side: THREE.DoubleSide
+        // Architecture: near-white surfaces + env-map IBL + sun shadows. Identical
+        // for every object, so the whole model needs exactly one of these.
+        child.material = shareMaterial('arctic' + exactEdgeKey, () => {
+          const m = new THREE.MeshStandardMaterial({
+            color: 0xf0f0f0, roughness: 0.95, metalness: 0.0,
+            side: THREE.DoubleSide
+          });
+          m.polygonOffset = true; m.polygonOffsetFactor = 1; m.polygonOffsetUnits = 1;
+          // Rely on scene.environment instead of explicit envMap so HDR changes apply.
+          // 0.4 keeps IBL contribution modest — supplemental lights add the rest.
+          m.envMapIntensity = 0.4;
+          return m;
         });
-        m.polygonOffset = true; m.polygonOffsetFactor = 1; m.polygonOffsetUnits = 1;
-        // Rely on scene.environment instead of explicit envMap so HDR changes apply.
-        // 0.4 keeps IBL contribution modest — supplemental lights add the rest.
-        m.envMapIntensity = 0.4;
-        child.material = m;
         if (edges) {
           edges.visible = edgeOverlay;
           edges.material.color.setHex(0x000000);
@@ -545,6 +558,16 @@ export function applyDisplayMode() {
         // so downgrade to MeshStandardMaterial and copy just those four; this
         // matches what Rhino's Rendered viewport draws for a Physically Based
         // material with no clearcoat/sheen/transmission.
+        // Resolve the effective custom material first — it decides shareability.
+        // Priority: object-level customMaterial > layer customMaterial (when ByLayer) > none
+        let effectiveCustom = child.userData.customMaterial;
+        if (!effectiveCustom && child.userData.isMaterialByLayer) {
+          const childLayerIdx = (child.userData.attributes || {}).layerIndex ?? 0;
+          const childLayer = S.parsedLayers.find(l => l.index === childLayerIdx);
+          if (childLayer?.customMaterial) effectiveCustom = childLayer.customMaterial;
+        }
+
+        const buildRendered = () => {
         let m;
         if (base.isMeshPhysicalMaterial) {
           m = new THREE.MeshStandardMaterial({
@@ -571,17 +594,23 @@ export function applyDisplayMode() {
         // HDR changes from taking effect. envMapIntensity controls strength.
         m.envMap = null;
         m.envMapIntensity = 1.0;
-        // Resolve effective custom material:
-        // Priority: object-level customMaterial > layer customMaterial (when ByLayer) > none
-        let effectiveCustom = child.userData.customMaterial;
-        if (!effectiveCustom && child.userData.isMaterialByLayer) {
-          const childLayerIdx = (child.userData.attributes || {}).layerIndex ?? 0;
-          const childLayer = S.parsedLayers.find(l => l.index === childLayerIdx);
-          if (childLayer?.customMaterial) effectiveCustom = childLayer.customMaterial;
-        }
         applyCustomToMaterial(m, effectiveCustom);
         m.needsUpdate = true;
-        child.material = m;
+        return m;
+        };
+
+        // Only an OBJECT-level custom material forces its own instance. A layer's
+        // custom material is shared by everything on that layer, and layerIndex is
+        // already part of the key — but its *contents* go in too, so editing a
+        // layer's material does not hand back the cached material built from the
+        // previous settings.
+        child.material = child.userData.customMaterial
+          ? buildRendered()
+          : shareMaterial(
+              materialKey('rendered', child, base) + '|' +
+              (child.userData.materialColor?.getHexString() ?? '-') + '|' +
+              (effectiveCustom ? JSON.stringify(effectiveCustom) : '-'),
+              buildRendered);
         if (edges) {
           edges.visible = edgeOverlay;
           edges.material.color.setHex(0x000000);
@@ -597,19 +626,19 @@ export function applyDisplayMode() {
         child.renderOrder = 0;
         const orig = child.userData.originalMaterial;
         const isTransparent = orig?.transparent && (orig?.opacity ?? 1) < 0.95;
-        if (isTransparent) {
-          child.material = new THREE.MeshBasicMaterial({
-            color: 0xffffff, side: THREE.DoubleSide,
-            transparent: true, opacity: 0.08,
-            polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
-            depthWrite: false
-          });
-        } else {
-          child.material = new THREE.MeshBasicMaterial({
-            color: 0xffffff, side: THREE.DoubleSide,
-            polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1
-          });
-        }
+        // Two possible materials for the whole model, not two per object.
+        child.material = shareMaterial((isTransparent ? 'technical:t' : 'technical') + exactEdgeKey, () =>
+          isTransparent
+            ? new THREE.MeshBasicMaterial({
+                color: 0xffffff, side: THREE.DoubleSide,
+                transparent: true, opacity: 0.08,
+                polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
+                depthWrite: false
+              })
+            : new THREE.MeshBasicMaterial({
+                color: 0xffffff, side: THREE.DoubleSide,
+                polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1
+              }));
         if (edges) {
           edges.visible = edgeOverlay;
           edges.material.color.setHex(0x000000);
@@ -713,6 +742,76 @@ export function isEdgeEligible(mesh) {
  * solid show through. Safe for the AO passes and the clipping-cap stencil: both
  * render with their own materials rather than these.
  */
+// ── Shared display materials ─────────────────────────────────────────────────
+//
+// applyDisplayMode used to build a material per mesh per mode switch. On a model
+// with 156,578 objects that produced 156,578 material instances where the file
+// held 24 — one orange material copied 46,423 times — and three.js refreshes
+// uniforms whenever the material instance changes between draws, so the copies
+// cost real frame time as well as memory.
+//
+// Sharing is safe only where the objects would stay identical for the life of the
+// model, so the key carries everything that can diverge later:
+//
+//  - layerIndex, because layer colour is editable at runtime and must move one
+//    layer's objects without touching another's, even when the two currently
+//    render the same colour;
+//  - every visual property the mode sets from the object.
+//
+// An object with a per-object colour override never shares at all.
+//
+// Anything that mutates a material for one object — selection highlight, a colour
+// picked in the properties panel — must call ensureOwnMaterial() first.
+const sharedMaterials = new Map();
+
+export function clearSharedMaterials() {
+  for (const m of sharedMaterials.values()) m.dispose();
+  sharedMaterials.clear();
+}
+
+// layerIndex first: it is the property that makes two identical-looking objects
+// still need separate materials, because the layer panel can recolour one of them.
+function materialKey(mode, mesh, base) {
+  const layer = mesh.userData?.attributes?.layerIndex ?? -1;
+  const m = base;
+  return [
+    mode, layer,
+    m?.type, m?.color?.getHexString(), m?.opacity, m?.transparent, m?.depthWrite,
+    m?.side, m?.roughness, m?.metalness, m?.emissive?.getHexString(),
+    m?.map?.uuid ?? '-', m?.envMapIntensity,
+    // Exact edges make their surface carry a larger depth offset, which must not
+    // leak onto objects that have no edges to protect.
+    mesh.getObjectByName('rhino-edges')?.userData?.role === 'rhino-edges' ? 'e' : '-'
+  ].join('|');
+}
+
+function shareMaterial(key, build) {
+  let m = sharedMaterials.get(key);
+  if (!m) {
+    m = build();
+    m.userData.__shared = true;
+    sharedMaterials.set(key, m);
+  }
+  return m;
+}
+
+/**
+ * Gives a mesh a material of its own so it can be mutated without dragging every
+ * other object that happens to look the same along with it.
+ *
+ * Returns the material to mutate. Cheap and idempotent when the mesh already owns
+ * one, so call it freely at the top of any per-object edit.
+ */
+export function ensureOwnMaterial(mesh) {
+  const mat = mesh?.material;
+  if (!mat || Array.isArray(mat)) return mat;
+  if (!mat.userData.__shared) return mat;
+  const own = mat.clone();
+  own.userData.__shared = false;
+  mesh.material = own;
+  return own;
+}
+
 // Shared by every filtered edge material, so moving the slider is one assignment
 // rather than a walk over the scene. three.js keeps the object reference we hand
 // it in onBeforeCompile, so mutating .value reaches all of them.

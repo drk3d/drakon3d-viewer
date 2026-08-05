@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { S } from './state.js';
-import { applyDisplayMode } from './display.js';
+import { applyDisplayMode, ensureOwnMaterial } from './display.js';
 import { History } from './history.js';
 import { bindSliderDblClickInput } from './helpers.js';
 import { t } from './i18n.js';
@@ -666,7 +666,9 @@ export function updatePropertiesPanel() {
                 }
               }
             });
-            if (obj.material && !obj.userData.selectionBackup) obj.material.color.copy(lc);
+            // Recolouring one object must not drag every object sharing its
+            // display material along with it.
+            if (obj.material && !obj.userData.selectionBackup) ensureOwnMaterial(obj).color.copy(lc);
             obj.userData.objectColorCustom = undefined;
           }
         } else {
@@ -728,7 +730,7 @@ export function updatePropertiesPanel() {
           }
         });
         if (obj.userData.shadedMaterial) obj.userData.shadedMaterial.color.set(val);
-        if (obj.material && !obj.userData.selectionBackup) obj.material.color.set(val);
+        if (obj.material && !obj.userData.selectionBackup) ensureOwnMaterial(obj).color.set(val);
       }
     });
 
