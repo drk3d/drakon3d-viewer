@@ -713,14 +713,32 @@ export function isEdgeEligible(mesh) {
  * solid show through. Safe for the AO passes and the clipping-cap stencil: both
  * render with their own materials rather than these.
  */
+// Used for both the constant and the slope term. Chosen by testing, not derived:
+// 1 (the conventional starting point) held at moderate distance but broke up again
+// at close range on a concave junction, where the render mesh sits in FRONT of the
+// true edge. 4 held from a whole-model view down to an extreme close-up, with no
+// edges bleeding through thin geometry. Raise only with a case that needs it —
+// too much offset and edges on the far side of a thin wall start showing through.
+//
+// The right structural fix is the near plane: this viewer runs near/far at roughly
+// 6450:1, which leaves very little depth resolution to work with. Tightening that
+// would let a much smaller offset do the same job.
+const EXACT_EDGE_POLYGON_OFFSET = 4;
+
 export function applyExactEdgeSurfaceOffset(mesh) {
   const mats = Array.isArray(mesh?.material) ? mesh.material
              : mesh?.material ? [mesh.material] : [];
   for (const mat of mats) {
-    if (!mat || mat.polygonOffset) continue;
+    if (!mat) continue;
+    // Raise, never just skip. Several display modes already set a 1/1 offset of
+    // their own, so an "is it set?" guard here silently did nothing in exactly
+    // the modes people look at — shaded, rendered and arctic.
+    if (mat.polygonOffset
+        && mat.polygonOffsetFactor >= EXACT_EDGE_POLYGON_OFFSET
+        && mat.polygonOffsetUnits  >= EXACT_EDGE_POLYGON_OFFSET) continue;
     mat.polygonOffset       = true;
-    mat.polygonOffsetFactor = 1;
-    mat.polygonOffsetUnits  = 1;
+    mat.polygonOffsetFactor = Math.max(mat.polygonOffsetFactor || 0, EXACT_EDGE_POLYGON_OFFSET);
+    mat.polygonOffsetUnits  = Math.max(mat.polygonOffsetUnits  || 0, EXACT_EDGE_POLYGON_OFFSET);
     mat.needsUpdate         = true;
   }
 }
