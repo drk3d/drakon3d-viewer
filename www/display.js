@@ -620,6 +620,11 @@ export function applyDisplayMode() {
       }
 
     }
+
+    // After the mode has chosen a material: surfaces that carry exact edges need
+    // a depth offset or the outline breaks up into dashes. Applied here because
+    // this is the one place every mode's material assignment converges.
+    if (edges?.userData?.role === 'rhino-edges') applyExactEdgeSurfaceOffset(child);
   });
 
   // ── Sync the display mode dropdown button UI dynamically ──
@@ -684,6 +689,40 @@ const NO_TOPOLOGY_EDGE_TYPES = new Set(['Mesh', 'PointSet', 'PointCloud']);
 export function isEdgeEligible(mesh) {
   const type = mesh?.userData?.objectType ?? mesh?.userData?.attributes?.objectType;
   return !(type && NO_TOPOLOGY_EDGE_TYPES.has(type));
+}
+
+/**
+ * Pushes a surface a fraction of a depth unit away from the viewer so the exact
+ * edges lying on it are not swallowed by it.
+ *
+ * Only surfaces carrying exact edges need this. A dihedral edge reuses the mesh's
+ * own vertices, so its depth is bit-identical to the triangle edge underneath and
+ * the default LessEqualDepth test passes. An edge read from Brep or SubD topology
+ * follows the *true* surface, while the render mesh is a chordal approximation
+ * cutting inside it — so on curved geometry stretches of the curve fall behind
+ * neighbouring facets and get culled, and the outline reads as a dashed line.
+ *
+ * Offsetting the surface rather than biasing the line, because the gap is a
+ * world-space quantity while depth-buffer resolution is not: a constant clip-space
+ * bias that clears the gap when zoomed out is too small when zoomed in. Polygon
+ * offset is measured in depth-buffer units and includes a slope term, so it tracks
+ * both automatically — which is what GL provides it for. It also cannot apply to
+ * lines, only fills, so the surface is the only side that can carry it.
+ *
+ * Not depthTest:false on the edges, which would let edges on the far side of a
+ * solid show through. Safe for the AO passes and the clipping-cap stencil: both
+ * render with their own materials rather than these.
+ */
+export function applyExactEdgeSurfaceOffset(mesh) {
+  const mats = Array.isArray(mesh?.material) ? mesh.material
+             : mesh?.material ? [mesh.material] : [];
+  for (const mat of mats) {
+    if (!mat || mat.polygonOffset) continue;
+    mat.polygonOffset       = true;
+    mat.polygonOffsetFactor = 1;
+    mat.polygonOffsetUnits  = 1;
+    mat.needsUpdate         = true;
+  }
 }
 
 export function addEdges(mesh, thresholdAngle) {

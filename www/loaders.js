@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { S } from './state.js';
 import { applyDisplayMode, applyFileBackground, applyLayerColorsToModel,
-         addEdges, isEdgeEligible, fixMaterialTransparency, clearTechnicalOutlines } from './display.js';
+         addEdges, isEdgeEligible, fixMaterialTransparency,
+         clearTechnicalOutlines } from './display.js';
 import { setupModelShadowFrustum, addGroundPlane, removeGroundPlane, computeVisibleBoundingBox } from './lighting.js';
 import { fitCameraToObject, fitCameraToBox } from './camera.js';
 import { renderLayerUI, updateLayerVisibility } from './layers.js';
