@@ -248,10 +248,31 @@ export function applyDisplayMode() {
   }
 
   if (S.renderer) {
-    // Set toneMapping to NoToneMapping across all modes to ensure background colors (like solid white #ffffff)
-    // are rendered exactly as specified without dulling or compression, matching the exact color selection
-    // and standard CAD/Rhino viewport rendering characteristics.
-    S.renderer.toneMapping = THREE.NoToneMapping;
+    // Rendered mode gets a tone curve; the CAD-flat modes do not.
+    //
+    // Without one, a real environment blows out the saturated materials: measured
+    // on a Rhino export lit by an outdoor HDR, half the cyan sphere's pixels and a
+    // third of the red one's had a channel pinned at 255. Clipping a channel does
+    // not just brighten — it *saturates*, because the channels that were already
+    // lower stay put, so the surface loses its shading and reads as flat poster
+    // colour next to the same model in Rhino.
+    //
+    // It costs nothing where the old comment feared it would. A solid
+    // `scene.background` never reaches the tone curve at all: three.js sets it as
+    // the WebGL clear colour, which bypasses the shader — verified, #ffffff still
+    // reads 255,255,255 under Neutral and ACES alike. Only a gradient background
+    // is affected, being a CanvasTexture (white → 240 under Neutral).
+    //
+    // Neutral over ACES because it is the one that keeps the colours: on the same
+    // scene ACES flattened chroma from 57 to 38 while Neutral held it at 61.
+    //
+    // Not switched on the *background* type, deliberately. Tying the tone curve to
+    // the background would mean picking a different backdrop changed how every
+    // material looks; tying it to the display mode is a choice the user makes about
+    // how the model is drawn.
+    S.renderer.toneMapping = S.currentMode === 'rendered'
+      ? THREE.NeutralToneMapping
+      : THREE.NoToneMapping;
     S.renderer.toneMappingExposure = 1.0;
   }
   if (S.scene) {
@@ -550,44 +571,56 @@ export function applyDisplayMode() {
 
       case 'rendered': {
         const base = child.userData.renderedMaterial || orig;
-        // 3DMLoader builds a MeshPhysicalMaterial with ior≈1.7 (from Rhino's
-        // reflectivity) and specularIntensity=0.5. Those Physical-only terms
-        // shift the BRDF away from a standard PBR look — cyan surfaces pick
-        // up extra fresnel and end up reading too saturated/blue vs. Rhino's
-        // own renderer. Our UI only exposes color/roughness/metalness/opacity,
-        // so downgrade to MeshStandardMaterial and copy just those four; this
-        // matches what Rhino's Rendered viewport draws for a Physically Based
-        // material with no clearcoat/sheen/transmission.
         // Resolve the effective custom material first — it decides shareability.
         // Priority: object-level customMaterial > layer customMaterial (when ByLayer) > none
         let effectiveCustom = child.userData.customMaterial;
+        // Switching an object to ByLayer has to *detach* it from the material it
+        // carried, not just stop overriding one — in Rhino the object then uses the
+        // layer's material and nothing of its own survives. Its base material here is
+        // still the per-object one the file assigned, and leaving that in place shows
+        // up two ways: with an empty layer nothing changes at all, and with a layer
+        // material the layer's colour merely tints the object's own maps, so a wood
+        // texture and its bump carry on through a plain red layer material.
+        //
+        // Detaching starts from Rhino's default material — the same white matte
+        // sphere the Layers panel already draws for "no material assigned" — and lets
+        // the layer's own settings land on that instead.
+        //
+        // Objects the file itself marked ByLayer are untouched: their base material
+        // *is* the layer's, resolved by the exporter, textures and all, so there is
+        // nothing to detach and doing so would throw away maps the layer really has.
+        let detachedFromOwnMaterial = false;
         if (!effectiveCustom && child.userData.isMaterialByLayer) {
           const childLayerIdx = (child.userData.attributes || {}).layerIndex ?? 0;
           const childLayer = S.parsedLayers.find(l => l.index === childLayerIdx);
           if (childLayer?.customMaterial) effectiveCustom = childLayer.customMaterial;
+          detachedFromOwnMaterial = !child.userData.originalIsMaterialByLayer;
         }
 
         const buildRendered = () => {
-        let m;
-        if (base.isMeshPhysicalMaterial) {
-          m = new THREE.MeshStandardMaterial({
-            color:       base.color?.clone() ?? new THREE.Color(0xffffff),
-            roughness:   base.roughness ?? 0.5,
-            metalness:   base.metalness ?? 0.0,
-            opacity:     base.opacity   ?? 1.0,
-            transparent: !!base.transparent,
-            depthWrite:  base.depthWrite ?? true,
-            side:        base.side ?? THREE.FrontSide,
-            map:         base.map ?? null,
-            normalMap:   base.normalMap ?? null,
-            emissive:    base.emissive?.clone() ?? new THREE.Color(0x000000),
-            emissiveIntensity: base.emissiveIntensity ?? 1.0
-          });
-        } else {
-          m = base.clone();
-        }
-        if (child.userData.materialColor) m.color.copy(child.userData.materialColor);
-        if (m.roughness !== undefined && m.roughness < 0.05) m.roughness = 0.4;
+        let m = detachedFromOwnMaterial ? defaultLayerMaterial() : base.clone();
+        // A standard material silently drops transmission, ior and clearcoat, so a
+        // layer asking for any of them has to be upgraded first — otherwise the
+        // slider moves and nothing happens. Only on request: a physical material
+        // costs more to compile and most of a model does not need one.
+        if (!m.isMeshPhysicalMaterial && wantsPhysicalLobes(effectiveCustom)) m = toPhysical(m);
+        if (m.isMeshPhysicalMaterial) normalizeRhinoPhysical(m);
+        // An anisotropic BRDF is evaluated in a tangent frame. Without a tangent
+        // attribute the frame is undefined and the surface renders as hard-edged
+        // black wedges rather than degrading to isotropic, so the safe reading of
+        // "anisotropy on geometry that cannot support it" is none. Guarded here
+        // rather than at export because a .glb from anywhere can carry it.
+        if (m.anisotropy > 0 && !child.geometry?.attributes?.tangent) m.anisotropy = 0;
+        // Not when detached: materialColor is the object's own material colour, and
+        // re-applying it would put back the very thing ByLayer just took away.
+        if (child.userData.materialColor && !detachedFromOwnMaterial)
+          m.color.copy(child.userData.materialColor);
+        // A near-zero roughness is treated as a missing value rather than a request
+        // for a mirror — except on metal and glass, where a mirror finish is the
+        // whole point and the floor would turn chrome into pewter and a window into
+        // frosted glass.
+        if (m.roughness !== undefined && m.roughness < 0.05
+            && !(m.metalness > 0.9) && !(m.transmission > 0)) m.roughness = 0.4;
         if (m.metalness === undefined) m.metalness = 0.0;
         m.polygonOffset = true; m.polygonOffsetFactor = 1; m.polygonOffsetUnits = 1;
         // Don't set m.envMap directly — that overrides scene.environment and prevents
@@ -595,6 +628,17 @@ export function applyDisplayMode() {
         m.envMap = null;
         m.envMapIntensity = 1.0;
         applyCustomToMaterial(m, effectiveCustom);
+        reconcileTransmission(m);
+        // Transparency blends once in Rhino. Two-sided geometry blends it twice —
+        // three.js draws back faces and then front faces — and on a closed solid
+        // that is pure error, because the inside is never seen. Measured on a
+        // 28%-transparent sphere: the background arrived at 0.28² = 7.8% and the
+        // sphere read as opaque; single-sided brought it back to 28%.
+        //
+        // Only closed shells are switched. An open transparent surface genuinely
+        // needs its back face, or a glass wall vanishes when viewed from inside.
+        if ((m.transparent || m.transmission > 0) && child.userData.solid)
+          m.side = THREE.FrontSide;
         m.needsUpdate = true;
         return m;
         };
@@ -609,7 +653,10 @@ export function applyDisplayMode() {
           : shareMaterial(
               materialKey('rendered', child, base) + '|' +
               (child.userData.materialColor?.getHexString() ?? '-') + '|' +
-              (effectiveCustom ? JSON.stringify(effectiveCustom) : '-'),
+              (effectiveCustom ? JSON.stringify(effectiveCustom) : '-') +
+              // A detached object ignores `base` entirely, so it must not be handed
+              // a material cached under the base it no longer uses.
+              (detachedFromOwnMaterial ? '|bylayer-default' : ''),
               buildRendered);
         if (edges) {
           edges.visible = edgeOverlay;
@@ -779,9 +826,28 @@ function materialKey(mode, mesh, base) {
     m?.type, m?.color?.getHexString(), m?.opacity, m?.transparent, m?.depthWrite,
     m?.side, m?.roughness, m?.metalness, m?.emissive?.getHexString(),
     m?.map?.uuid ?? '-', m?.envMapIntensity,
+    // Every image slot, not just the colour one. Two materials that differ only in
+    // their normal or roughness map are different materials, and sharing on the
+    // colour map alone would hand the first one's bumps to the second.
+    m?.normalMap?.uuid ?? '-', m?.normalScale?.x,
+    m?.roughnessMap?.uuid ?? '-', m?.metalnessMap?.uuid ?? '-',
+    m?.aoMap?.uuid ?? '-', m?.aoMapIntensity,
+    m?.emissiveMap?.uuid ?? '-',
+    // The Physical-only lobes. They belong here for the same reason colour does:
+    // rendered mode no longer flattens them away, so two materials that differ
+    // only in transmission are genuinely different materials. Leaving them out
+    // silently hands the first one back for both, which turns every piece of
+    // glass on a layer into whatever the first material on it happened to be.
+    m?.transmission, m?.ior, m?.thickness,
+    m?.clearcoat, m?.clearcoatRoughness,
+    m?.sheen, m?.sheenColor?.getHexString(),
+    m?.specularIntensity, m?.anisotropy,
     // Exact edges make their surface carry a larger depth offset, which must not
     // leak onto objects that have no edges to protect.
-    mesh.getObjectByName('rhino-edges')?.userData?.role === 'rhino-edges' ? 'e' : '-'
+    mesh.getObjectByName('rhino-edges')?.userData?.role === 'rhino-edges' ? 'e' : '-',
+    // A closed shell drops its back faces when transparent, so it cannot share a
+    // material with an open surface that keeps them.
+    mesh.userData?.solid ? 's' : '-'
   ].join('|');
 }
 
@@ -1025,6 +1091,131 @@ export function applyLayerColorsToModel(model) {
   });
 }
 
+// ── Correcting what 3DMLoader hands us ───────────────────────────────────────
+// Every .3dm material arrives as a MeshPhysicalMaterial with Rhino's PBR channels
+// filled in — clearcoat, sheen, anisotropy, transmission and all. Keeping those is
+// the whole point; three of the slots just are not in three.js units.
+//
+// `ior` is not an index of refraction at all. 3DMLoader's constructor passes both
+// `ior: material.indexOfRefraction` and `reflectivity: material.reflectivity`, and
+// since three derives one from the other, whichever is applied last wins — which
+// is reflectivity. Verified against the loader: `{ior: 1.52, reflectivity: 1.0}`
+// yields ior 2.333, and every reflectivity-1 material in a test document reports
+// exactly that. So Rhino's real IOR never reaches us, and the value that does is a
+// re-encoded reflectivity that would light glass like diamond (F0 .16 against the
+// .04 of a dielectric). three's own default is the honest answer.
+//
+// `specularIntensity` comes from Rhino's PBR "Specular", a Disney principled
+// parameter where 0.5 *means* a standard dielectric. three treats it as a plain
+// multiplier on F0 where 1.0 means standard, so copying 0.5 across halves the
+// reflectivity instead of leaving it alone.
+//
+// Transparency arrives twice over: as `transmission`, and as `opacity` — which
+// fixMaterialTransparency then turns into `transparent: true, depthWrite: false`.
+// Applied together a window is both blended away to 20% *and* refracting, so it
+// reads as a faint smear. three.js wants exactly one of the two: transmission
+// drives the see-through and the material stays in the opaque queue, which is also
+// what lets the transmission pass sample the scene behind it.
+//
+// Resetting ior and specularIntensity reproduces exactly what the old
+// downgrade-to-MeshStandardMaterial produced for a plain material — Standard *is*
+// Physical with ior 1.5, specularIntensity 1 and no extra lobes — so opaque
+// materials are unchanged, while the lobes the downgrade discarded now survive.
+function normalizeRhinoPhysical(mat) {
+  if (mat.userData?.__from3dm) {
+    mat.ior = 1.5;
+    mat.specularIntensity = 1.0;
+  }
+
+  // Rhino's ranges are not three's. A test document produced clearcoat 1.267,
+  // which drives the clearcoat lobe past total reflection and blows out the
+  // highlight. Clamping is cheap and there is no legitimate value outside [0,1].
+  for (const k of ['clearcoat', 'clearcoatRoughness', 'sheen', 'transmission',
+                   'metalness', 'roughness', 'anisotropy', 'iridescence']) {
+    const v = mat[k];
+    if (typeof v === 'number' && (v < 0 || v > 1)) mat[k] = Math.min(1, Math.max(0, v));
+  }
+
+}
+
+// Makes transparency mean one thing.
+//
+// Rhino's transparency can reach a material by three routes at once: as
+// `transmission` from the PBR channels, as `opacity` (which
+// fixMaterialTransparency turns into `transparent: true, depthWrite: false`), and
+// again as an `opacity` on the layer's customMaterial. Applied together a window
+// is blended away to 12% *and* refracting, so it reads as a faint smear.
+//
+// Rhino's older material types take only the second route — their transparency
+// lives in the legacy field, so 3DMLoader's PBR branch never runs. A "Custom"
+// material and a "Glass" material at the same setting then render nothing alike
+// although Rhino draws both as glass. Material-level transparency in Rhino means
+// "see-through like glass", not "blend me", so transmission is the faithful
+// reading of all of them.
+//
+// An alpha map is the exception: that is real per-texel masking, and Rhino's
+// Transparency and PBR_Alpha textures both land there, so every texture-driven
+// cut-out is excluded by that one test.
+//
+// Runs *after* the custom material is applied, which is the whole point — a
+// layer's customMaterial carries the same Rhino transparency as a plain opacity
+// and would otherwise reinstate the blending this just removed.
+function reconcileTransmission(mat) {
+  if (!mat.isMeshPhysicalMaterial) return;
+
+  // Deriving transmission from opacity is a .3dm-only repair. A GLB says what it
+  // means: our writer sends transparency as KHR_materials_transmission with the
+  // base colour left opaque, so an alpha below 1 there is a deliberate blend
+  // (alphaMode BLEND) and turning it into glass would be overriding the file.
+  if (mat.userData?.__from3dm && mat.opacity < 1 && !mat.alphaMap) {
+    mat.transmission = Math.max(mat.transmission ?? 0, 1 - mat.opacity);
+  }
+
+  // The untangling is for everyone. A layer's customMaterial carries the same
+  // transparency again as a plain opacity whichever file it came from, so a GLB
+  // window arrives refracting from its extension and is then blended away by the
+  // layer swatch — the identical double-application, one route further along.
+  if (mat.transmission > 0) {
+    mat.opacity = 1.0;
+    mat.transparent = false;
+    mat.depthWrite = true;
+  }
+}
+
+/**
+ * What an object looks like on a layer that has no material.
+ *
+ * Rhino's default material, and the same thing the Layers panel already draws as
+ * its "no material assigned" swatch — a plain white matte sphere. Deliberately a
+ * fresh material rather than a neutered clone of the object's own: the point is
+ * that nothing of the old material survives.
+ */
+function defaultLayerMaterial() {
+  return new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.5, metalness: 0.0 });
+}
+
+/** Whether an edited material asks for something only MeshPhysicalMaterial has. */
+function wantsPhysicalLobes(custom) {
+  if (!custom) return false;
+  return (custom.transmission ?? 0) > 0 || (custom.clearcoat ?? 0) > 0;
+}
+
+/**
+ * Re-creates a standard material as a physical one, keeping everything it had.
+ *
+ * `MeshPhysicalMaterial.copy` cannot be used: it reads clearcoat, sheen and the
+ * rest off the source, which a standard material does not have. Borrowing the
+ * standard prototype's copy instead moves exactly the fields that exist and
+ * leaves the physical-only ones at their defaults, which is what "the same
+ * material, now able to hold more" should mean.
+ */
+function toPhysical(standard) {
+  const physical = new THREE.MeshPhysicalMaterial();
+  THREE.MeshStandardMaterial.prototype.copy.call(physical, standard);
+  physical.userData = { ...standard.userData };
+  return physical;
+}
+
 export function applyCustomToMaterial(mat, custom) {
   if (!custom || !mat) return;
   if (custom.color     !== undefined) mat.color?.set(custom.color);
@@ -1034,6 +1225,17 @@ export function applyCustomToMaterial(mat, custom) {
     mat.opacity     = custom.opacity;
     mat.transparent = custom.opacity < 0.999;
     mat.depthWrite  = custom.opacity >= 0.999;
+  }
+  // The Physical-only lobes. Guarded on the material rather than the value:
+  // assigning `transmission` to a MeshStandardMaterial silently does nothing,
+  // and a caller has no way to tell it was dropped.
+  if (mat.isMeshPhysicalMaterial) {
+    if (custom.transmission !== undefined) mat.transmission = custom.transmission;
+    // IOR is only meaningful alongside transmission, and 1 is vacuum — a reader
+    // derives F0 from it, so ((1-1)/(1+1))² = 0 and the surface loses its
+    // specular reflection entirely. Left alone rather than written as 1.
+    if (custom.ior !== undefined && custom.ior > 1.001) mat.ior = custom.ior;
+    if (custom.clearcoat !== undefined) mat.clearcoat = custom.clearcoat;
   }
   if (custom.mapTexture !== undefined) {
     if (custom.mapTexture === null) {

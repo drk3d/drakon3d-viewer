@@ -972,10 +972,11 @@ export async function preprocess3dm(file, skipLayerParse) {
             const rmi = l.renderMaterialIndex;
             if (typeof rmi === 'number' && rmi >= 0 && matLookup[rmi]) {
               layerCustomMaterial = { ...matLookup[rmi] };
-              // If material has no custom color, fall back to layer color
-              if (!layerCustomMaterial.color) {
-                layerCustomMaterial.color = `#${plainColor.r.toString(16).padStart(2,'0')}${plainColor.g.toString(16).padStart(2,'0')}${plainColor.b.toString(16).padStart(2,'0')}`;
-              }
+              // A material with no colour of its own is Rhino's default material,
+              // which is white. The layer's *display* colour is a different thing
+              // — it draws curves and wireframe — and borrowing it here made the
+              // Default layer, which is black, report a black material.
+              if (!layerCustomMaterial.color) layerCustomMaterial.color = '#ffffff';
             }
           } catch {}
           S.parsedLayers.push({
@@ -2224,6 +2225,17 @@ export function postProcessModel(model, addEdgesFlag, colorsAreSRGBStoredAsLinea
     }
 
     if (!child.isMesh && !child.isLine) return;
+
+    // Mark where the material came from. 3DMLoader synthesises a
+    // MeshPhysicalMaterial for every Rhino material and fills some of its slots
+    // with values that are not in three.js units, so rendered mode has to correct
+    // them (see normalizeRhinoPhysical in display.js). A GLB carries real glTF
+    // material extensions and must be left alone — the flag is what keeps the two
+    // apart once the exporter starts writing those extensions.
+    if (child.material && colorsAreSRGBStoredAsLinear) {
+      child.material.userData = child.material.userData || {};
+      child.material.userData.__from3dm = true;
+    }
 
     if (child.material?.color) {
       const mat = child.material;

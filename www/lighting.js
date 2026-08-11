@@ -50,8 +50,24 @@ export function setupLights() {
       break;
     }
     case 'rendered': {
+      // These fills were tuned against the built-in presets, which are modest
+      // studio maps. A document that brings its own captured sky already lights
+      // from every direction, and stacking them on top measurably overexposes it:
+      // on a Rhino export lit by an outdoor HDR they raised mean object brightness
+      // 157→175 and *tripled* the clipped pixels, 11.5% to 32.4%. A third of every
+      // surface was flat white, which reads as "too bright and oversaturated"
+      // beside the same model in Rhino.
+      //
+      // Scaled by the environment, deliberately, and never by the background: the
+      // environment is the light source, so material appearance following it is
+      // correct, while making it follow the background would mean picking a
+      // different background colour changed how the model is lit.
+      const documentHdr =
+        (document.getElementById('env-preset-select')?.value ?? S.currentEnvPreset) === 'hdr-custom';
+      const fill = documentHdr ? 0.2 : 1.0;
+
       // Env map provides realistic ambient; sun handled separately.
-      S.scene.add(new THREE.AmbientLight(0xffffff, ambSlider));
+      S.scene.add(new THREE.AmbientLight(0xffffff, ambSlider * fill));
       // HemisphereLight (sky-from-above + ground-from-below) fills shaded
       // surfaces so dark sides don't hue-shift. Three.js PBR diffuse uses
       // Lambertian /π normalisation, so a single directional light produces
@@ -59,11 +75,15 @@ export function setupLights() {
       // and bright dielectrics (cyan #00cdff, etc.) blue-shift because G falls
       // while B stays saturated. The hemispherical fill is directional
       // (top > bottom), so it preserves shading depth instead of flattening it.
-      // App is Z-up — the "sky" direction is +Z.
-      const hemi = new THREE.HemisphereLight(0xffffff, 0x404040, 1.4);
+      // App is Z-up — the "sky" direction is +Z. A real captured environment
+      // already fills from every direction, which is what this approximates, so
+      // it is the fill that steps back furthest when one is present.
+      const hemi = new THREE.HemisphereLight(0xffffff, 0x404040, 1.4 * fill);
       hemi.position.set(0, 0, 1);
       S.scene.add(hemi);
-      const key = new THREE.DirectionalLight(0xfff8f0, 0.65);
+      // The key keeps more of its strength: it is a shaping light, not a fill,
+      // and an overcast sky leaves the model without a direction to read form by.
+      const key = new THREE.DirectionalLight(0xfff8f0, documentHdr ? 0.3 : 0.65);
       key.position.copy(keyPos);
       S.scene.add(key);
       break;

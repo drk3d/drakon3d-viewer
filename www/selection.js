@@ -493,10 +493,21 @@ export function updatePropertiesPanel() {
     const commonRoughness = getCommonVal('roughness', 0.5);
     const commonMetalness = getCommonVal('metalness', 0.0);
     const commonOpacity   = getCommonVal('opacity', 1.0);
+    const commonTransmission = getCommonVal('transmission', 0.0);
+    const commonIor          = getCommonVal('ior', 1.5);
+    const commonClearcoat    = getCommonVal('clearcoat', 0.0);
 
     const roughnessReadout = commonRoughness.same ? commonRoughness.val.toFixed(2) : 'Various';
     const metalnessReadout = commonMetalness.same ? commonMetalness.val.toFixed(2) : 'Various';
     const opacityReadout   = commonOpacity.same   ? commonOpacity.val.toFixed(2)   : 'Various';
+    const transmissionReadout = commonTransmission.same ? commonTransmission.val.toFixed(2) : 'Various';
+    const iorReadout          = commonIor.same          ? commonIor.val.toFixed(3)          : 'Various';
+    const clearcoatReadout    = commonClearcoat.same    ? commonClearcoat.val.toFixed(2)    : 'Various';
+
+    // Transparency travels one of two mutually exclusive ways, so the panel greys
+    // out whichever one is not in play rather than leaving a slider that moves
+    // with nothing happening. See applyCustomToMaterial / reconcileTransmission.
+    const isGlass = commonTransmission.same && commonTransmission.val > 0;
 
     const getMeshTexName = (o) => {
       const orig = o.userData.renderedMaterial || o.userData.originalMaterial;
@@ -515,6 +526,25 @@ export function updatePropertiesPanel() {
 
     const displayTexName = texSame ? commonTexName : 'Various';
     const hasTex = texSame && commonTexName !== 'None' && commonTexName !== 'Various';
+
+    // The colour map is the only one the panel can edit, but it is no longer the
+    // only one a material carries — the exporter now sends normal, roughness,
+    // ambient-occlusion and emissive maps too. Listing them stops a bump from
+    // being invisible in the UI while it is plainly visible on the object.
+    const MAP_SLOTS = [
+      ['normalMap',    'Normal'],
+      ['roughnessMap', 'Roughness'],
+      ['metalnessMap', 'Metalness'],
+      ['aoMap',        'AO'],
+      ['emissiveMap',  'Emissive']
+    ];
+    const extraMaps = [];
+    for (const [slot, label] of MAP_SLOTS) {
+      if (selectedMeshes.every(o => {
+        const src = o.userData.renderedMaterial || o.userData.originalMaterial;
+        return !!src?.[slot];
+      })) extraMaps.push(label);
+    }
     const hasCustom = selectedMeshes.some(o => !!o.userData.customMaterial);
     // isMaterialByLayer: all selected meshes have no object-level customMaterial AND isMaterialByLayer flag
     const allMatByLayer = selectedMeshes.every(o => o.userData.isMaterialByLayer && !o.userData.customMaterial);
@@ -548,11 +578,32 @@ export function updatePropertiesPanel() {
           <input type="range" id="mat-metalness" min="0" max="1" step="0.01" value="${commonMetalness.val.toFixed(2)}" style="flex:1">
           <span class="mat-val" id="mat-metalness-val">${metalnessReadout}</span>
         </div>
-        <div class="mat-row">
+        <div class="mat-row" id="mat-opacity-row"${isGlass ? ' style="opacity:0.4"' : ''}>
           <span class="mat-label">Opacity</span>
-          <input type="range" id="mat-opacity" min="0" max="1" step="0.01" value="${commonOpacity.val.toFixed(2)}" style="flex:1">
+          <input type="range" id="mat-opacity" min="0" max="1" step="0.01" value="${commonOpacity.val.toFixed(2)}" style="flex:1"${isGlass ? ' disabled' : ''}>
           <span class="mat-val" id="mat-opacity-val">${opacityReadout}</span>
         </div>
+        <div class="mat-row">
+          <span class="mat-label">Transmission</span>
+          <input type="range" id="mat-transmission" min="0" max="1" step="0.01" value="${commonTransmission.val.toFixed(2)}" style="flex:1">
+          <span class="mat-val" id="mat-transmission-val">${transmissionReadout}</span>
+        </div>
+        <div class="mat-row" id="mat-ior-row"${isGlass ? '' : ' style="opacity:0.4"'}>
+          <span class="mat-label">IOR</span>
+          <input type="range" id="mat-ior" min="1" max="2.333" step="0.001" value="${commonIor.val.toFixed(3)}" style="flex:1"${isGlass ? '' : ' disabled'}>
+          <span class="mat-val" id="mat-ior-val">${iorReadout}</span>
+        </div>
+        <div class="mat-row">
+          <span class="mat-label">Clearcoat</span>
+          <input type="range" id="mat-clearcoat" min="0" max="1" step="0.01" value="${commonClearcoat.val.toFixed(2)}" style="flex:1">
+          <span class="mat-val" id="mat-clearcoat-val">${clearcoatReadout}</span>
+        </div>
+        ${extraMaps.length ? `
+        <div class="mat-row" style="align-items: center; gap: 8px;">
+          <span class="mat-label">Maps</span>
+          <span style="font-size:0.65rem;color:var(--text-2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+                title="Carried by the file and not editable here">${extraMaps.join(', ')}</span>
+        </div>` : ''}
         <div class="mat-row" style="align-items: center; gap: 8px;">
           <span class="mat-label">Texture</span>
           <div style="display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0;">
@@ -812,6 +863,11 @@ export function updatePropertiesPanel() {
             roughness:  layerCm?.roughness  ?? orig?.roughness  ?? 0.5,
             metalness:  layerCm?.metalness  ?? orig?.metalness  ?? 0.0,
             opacity:    layerCm?.opacity    ?? orig?.opacity    ?? 1.0,
+            // The Physical-only lobes come along too, or turning ByLayer off would
+            // quietly flatten a piece of glass into an opaque one.
+            transmission: layerCm?.transmission ?? orig?.transmission ?? 0.0,
+            ior:          layerCm?.ior          ?? orig?.ior          ?? 1.5,
+            clearcoat:    layerCm?.clearcoat    ?? orig?.clearcoat    ?? 0.0,
             mapTexture: layerCm?.mapTexture ?? orig?.map        ?? null,
             mapName:    layerCm?.mapName    ?? (orig?.map?.name || (orig?.map ? 'Texture' : 'None'))
           };
@@ -918,6 +974,57 @@ export function updatePropertiesPanel() {
       applyDisplayMode();
     });
 
+    // Transmission — see-through like glass, and the other half of the pair
+    // Opacity belongs to. Whichever is not in play is greyed out, because the
+    // viewer resolves the conflict in transmission's favour and the losing slider
+    // would otherwise move with nothing happening.
+    document.getElementById('mat-transmission')?.addEventListener('input', e => {
+      const v = parseFloat(e.target.value);
+      document.getElementById('mat-transmission-val').textContent = v.toFixed(2);
+      selectedMeshes.forEach(obj => {
+        ensureCustomMaterial(obj);
+        obj.userData.customMaterial.transmission = v;
+      });
+      const glass = v > 0;
+      const opacitySlider = document.getElementById('mat-opacity');
+      const opacityRow = document.getElementById('mat-opacity-row');
+      const iorSlider = document.getElementById('mat-ior');
+      const iorRow = document.getElementById('mat-ior-row');
+      if (opacitySlider) opacitySlider.disabled = glass;
+      if (opacityRow) opacityRow.style.opacity = glass ? '0.4' : '';
+      if (iorSlider) iorSlider.disabled = !glass;
+      if (iorRow) iorRow.style.opacity = glass ? '' : '0.4';
+      unsetMatByLayerToggle();
+      enableResetBtn();
+      applyDisplayMode();
+    });
+
+    // IOR
+    document.getElementById('mat-ior')?.addEventListener('input', e => {
+      const v = parseFloat(e.target.value);
+      document.getElementById('mat-ior-val').textContent = v.toFixed(3);
+      selectedMeshes.forEach(obj => {
+        ensureCustomMaterial(obj);
+        obj.userData.customMaterial.ior = v;
+      });
+      unsetMatByLayerToggle();
+      enableResetBtn();
+      applyDisplayMode();
+    });
+
+    // Clearcoat
+    document.getElementById('mat-clearcoat')?.addEventListener('input', e => {
+      const v = parseFloat(e.target.value);
+      document.getElementById('mat-clearcoat-val').textContent = v.toFixed(2);
+      selectedMeshes.forEach(obj => {
+        ensureCustomMaterial(obj);
+        obj.userData.customMaterial.clearcoat = v;
+      });
+      unsetMatByLayerToggle();
+      enableResetBtn();
+      applyDisplayMode();
+    });
+
     // Bind grabs and changes to sliders
     const bindSliderCapture = (id) => {
       let beforeState = null;
@@ -957,6 +1064,9 @@ export function updatePropertiesPanel() {
     bindSliderCapture('mat-roughness');
     bindSliderCapture('mat-metalness');
     bindSliderCapture('mat-opacity');
+    bindSliderCapture('mat-transmission');
+    bindSliderCapture('mat-ior');
+    bindSliderCapture('mat-clearcoat');
 
     // Precise inline number input overlays
     bindSliderDblClickInput('mat-roughness', 'mat-roughness-val');

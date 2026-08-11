@@ -234,9 +234,10 @@ function getMaterialSwatchStyle(layer) {
     return `background: radial-gradient(circle at 35% 30%, #ffffff 0%, #f3f3f3 35%, #c8c8c8 75%, #8a8a8a 100%)`;
   }
 
-  // Material assigned: use the material's color, fall back to layer color!
-  const layerHex = getLayerHex(layer);
-  const baseHex = cm.color || layerHex || '#ffffff';
+  // Material assigned: its own colour, defaulting to Rhino's white — the layer's
+  // display colour is a different thing and must not stand in for it, or the
+  // swatch above turns black on the Default layer.
+  const baseHex = cm.color || '#ffffff';
   const roughness = cm.roughness ?? 0.5;
   const metalness = cm.metalness ?? 0.0;
 
@@ -289,6 +290,14 @@ function openLayerMaterialDialog(layerIdx) {
   const metalVal   = document.getElementById('lmd-metalness-val');
   const opacSlider = document.getElementById('lmd-opacity');
   const opacVal    = document.getElementById('lmd-opacity-val');
+  const transSlider= document.getElementById('lmd-transmission');
+  const transVal   = document.getElementById('lmd-transmission-val');
+  const iorSlider  = document.getElementById('lmd-ior');
+  const iorVal     = document.getElementById('lmd-ior-val');
+  const coatSlider = document.getElementById('lmd-clearcoat');
+  const coatVal    = document.getElementById('lmd-clearcoat-val');
+  const texName    = document.getElementById('lmd-texture-name');
+  const texRemove  = document.getElementById('lmd-texture-remove');
   const resetBtn   = document.getElementById('lmd-reset-btn');
   const okBtn      = document.getElementById('lmd-ok-btn');
   const closeBtn   = document.getElementById('lmd-close-btn');
@@ -347,9 +356,13 @@ function openLayerMaterialDialog(layerIdx) {
   const shortLabel = layer.name.includes('::') ? layer.name.split('::').pop() : layer.name;
   if (nameEl) nameEl.textContent = shortLabel;
 
-  // initColor: use cm.color if set. Fall back to layer display color, then white.
-  const layerHex = getLayerHex(layer);
-  const initColor = cm.color || layerHex || '#ffffff';
+  // A layer's material colour and its display colour are unrelated things, and
+  // seeding one from the other gets it wrong the moment they differ: Default is a
+  // black layer, so opening its material dialog offered a black material where
+  // Rhino's default material is white. Rhino's default is what an unset material
+  // starts from — the same white the swatch beside this dialog already draws for
+  // "no material assigned".
+  const initColor = cm.color || '#ffffff';
 
   // Update color input without cloneNode (preserves Coloris binding)
   const colorInput = document.getElementById('lmd-color-input');
@@ -367,9 +380,12 @@ function openLayerMaterialDialog(layerIdx) {
     if (colorValue) colorValue.textContent = initColor;
   }
 
-  const roughInit = cm.roughness ?? 0.5;
-  const metalInit = cm.metalness ?? 0.0;
-  const opacInit  = cm.opacity   ?? 1.0;
+  const roughInit = cm.roughness    ?? 0.5;
+  const metalInit = cm.metalness    ?? 0.0;
+  const opacInit  = cm.opacity      ?? 1.0;
+  const transInit = cm.transmission ?? 0.0;
+  const iorInit   = cm.ior          ?? 1.5;
+  const coatInit  = cm.clearcoat    ?? 0.0;
 
   if (roughSlider) roughSlider.value = roughInit;
   if (roughVal)    roughVal.textContent = roughInit.toFixed(2);
@@ -377,26 +393,84 @@ function openLayerMaterialDialog(layerIdx) {
   if (metalVal)    metalVal.textContent = metalInit.toFixed(2);
   if (opacSlider)  opacSlider.value = opacInit;
   if (opacVal)     opacVal.textContent = opacInit.toFixed(2);
+  if (transSlider) transSlider.value = transInit;
+  if (transVal)    transVal.textContent = transInit.toFixed(2);
+  if (iorSlider)   iorSlider.value = iorInit;
+  if (iorVal)      iorVal.textContent = iorInit.toFixed(3);
+  if (coatSlider)  coatSlider.value = coatInit;
+  if (coatVal)     coatVal.textContent = coatInit.toFixed(2);
 
+  syncTransmissionDependents();
+  syncTextureRow();
   updateDialogSphere(initColor, roughInit, metalInit);
+
+  /**
+   * Shows the texture the layer's objects are actually rendering with.
+   *
+   * A layer material has no texture of its own to report — the file describes
+   * layers by their material's values, and any map an object shows comes from the
+   * material the exporter resolved onto it. So the name is read back off the
+   * objects on this layer, and clearing it writes an explicit `mapTexture: null`
+   * that applyCustomToMaterial can act on. Without that the layer material has no
+   * way to say "no texture" and the object's own map outlives every edit.
+   */
+  function syncTextureRow() {
+    if (!texName || !texRemove) return;
+    const lay = S.parsedLayers.find(l => l.index === _lmdLayerIdx);
+    const cleared = lay?.customMaterial?.mapTexture === null;
+
+    let name = null;
+    if (!cleared && S.currentModel) {
+      S.currentModel.traverse(child => {
+        if (name || !child.isMesh || child.userData.customMaterial) return;
+        if (!child.userData.isMaterialByLayer) return;
+        if (((child.userData.attributes || {}).layerIndex ?? 0) !== _lmdLayerIdx) return;
+        const src = child.userData.renderedMaterial || child.userData.originalMaterial;
+        if (src?.map) name = src.map.name || 'Texture';
+      });
+    }
+
+    texName.textContent = name || 'None';
+    texName.title = name || 'None';
+    texRemove.style.display = name ? 'inline-flex' : 'none';
+  }
+
+  // ── Transparency is one or the other ──────────────────────────────────
+  // Opacity blends the surface away; transmission refracts through it. A
+  // material that did both would be applied twice over, so the viewer resolves
+  // the conflict in transmission's favour — which would leave the Opacity
+  // slider moving with nothing happening. Grey it out instead of lying.
+  // IOR only means anything alongside transmission, so it follows the same rule.
+  function syncTransmissionDependents() {
+    const glass = parseFloat(transSlider?.value ?? 0) > 0;
+    const opacityRow = document.getElementById('lmd-opacity-row');
+    const iorRow = document.getElementById('lmd-ior-row');
+    if (opacSlider) opacSlider.disabled = glass;
+    if (opacityRow) opacityRow.style.opacity = glass ? '0.4' : '';
+    if (iorSlider) iorSlider.disabled = !glass;
+    if (iorRow) iorRow.style.opacity = glass ? '' : '0.4';
+  }
 
   // ── Helper: read all dialog fields and write to layer ─────────────────
   function applyDialogToLayer() {
     const lay = S.parsedLayers.find(l => l.index === _lmdLayerIdx);
     if (!lay) return;
     const cEl = document.getElementById('lmd-color-input');
-    const rEl = document.getElementById('lmd-roughness');
-    const mEl = document.getElementById('lmd-metalness');
-    const oEl = document.getElementById('lmd-opacity');
     const c = cEl?.value || initColor;
-    const r = parseFloat(rEl?.value ?? 0.5);
-    const m = parseFloat(mEl?.value ?? 0.0);
-    const o = parseFloat(oEl?.value ?? 1.0);
+    const r = parseFloat(roughSlider?.value ?? 0.5);
+    const m = parseFloat(metalSlider?.value ?? 0.0);
+    const o = parseFloat(opacSlider?.value ?? 1.0);
+    const t = parseFloat(transSlider?.value ?? 0.0);
+    const i = parseFloat(iorSlider?.value ?? 1.5);
+    const cc = parseFloat(coatSlider?.value ?? 0.0);
     if (!lay.customMaterial) lay.customMaterial = {};
-    lay.customMaterial.color     = c;
-    lay.customMaterial.roughness = r;
-    lay.customMaterial.metalness = m;
-    lay.customMaterial.opacity   = o;
+    lay.customMaterial.color        = c;
+    lay.customMaterial.roughness    = r;
+    lay.customMaterial.metalness    = m;
+    lay.customMaterial.opacity      = o;
+    lay.customMaterial.transmission = t;
+    lay.customMaterial.ior          = i;
+    lay.customMaterial.clearcoat    = cc;
     updateSwatchButton(lay);
     updateDialogSphere(c, r, m);
     if (S.currentModel) applyDisplayMode();
@@ -414,6 +488,30 @@ function openLayerMaterialDialog(layerIdx) {
   opacSlider?.addEventListener('input', () => {
     if (opacVal) opacVal.textContent = parseFloat(opacSlider.value).toFixed(2);
     applyDialogToLayer();
+  }, { signal });
+  transSlider?.addEventListener('input', () => {
+    if (transVal) transVal.textContent = parseFloat(transSlider.value).toFixed(2);
+    syncTransmissionDependents();
+    applyDialogToLayer();
+  }, { signal });
+  iorSlider?.addEventListener('input', () => {
+    if (iorVal) iorVal.textContent = parseFloat(iorSlider.value).toFixed(3);
+    applyDialogToLayer();
+  }, { signal });
+  coatSlider?.addEventListener('input', () => {
+    if (coatVal) coatVal.textContent = parseFloat(coatSlider.value).toFixed(2);
+    applyDialogToLayer();
+  }, { signal });
+
+  // Clearing is a value the layer material carries, not just a UI state — null
+  // means "this layer has no texture", which is different from never having said.
+  texRemove?.addEventListener('click', () => {
+    const lay = S.parsedLayers.find(l => l.index === _lmdLayerIdx);
+    if (!lay) return;
+    if (!lay.customMaterial) lay.customMaterial = {};
+    lay.customMaterial.mapTexture = null;
+    applyDialogToLayer();
+    syncTextureRow();
   }, { signal });
 
   // ── Color input (Coloris fires 'input' on the text element) ──────────

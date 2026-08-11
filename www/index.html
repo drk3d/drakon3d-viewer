@@ -997,11 +997,49 @@
           <span class="mat-val" id="lmd-metalness-val">0.00</span>
         </div>
 
-        <!-- Opacity -->
-        <div class="mat-row">
+        <!-- Opacity — a flat blend. Disabled while Transmission is up, because
+             transmission is the other, mutually exclusive way to be see-through. -->
+        <div class="mat-row" id="lmd-opacity-row">
           <span class="mat-label">Opacity</span>
           <input type="range" id="lmd-opacity" min="0" max="1" step="0.01" value="1.0">
           <span class="mat-val" id="lmd-opacity-val">1.00</span>
+        </div>
+
+        <!-- Transmission — see-through like glass, with refraction. -->
+        <div class="mat-row">
+          <span class="mat-label">Transmission</span>
+          <input type="range" id="lmd-transmission" min="0" max="1" step="0.01" value="0.0">
+          <span class="mat-val" id="lmd-transmission-val">0.00</span>
+        </div>
+
+        <!-- IOR — how hard transmission bends light. Glass is 1.52. The top of the
+             range is three.js's own clamp, so anything above it would be ignored. -->
+        <div class="mat-row" id="lmd-ior-row">
+          <span class="mat-label">IOR</span>
+          <input type="range" id="lmd-ior" min="1" max="2.333" step="0.001" value="1.5">
+          <span class="mat-val" id="lmd-ior-val">1.500</span>
+        </div>
+
+        <!-- Clearcoat — a clear lacquer over the surface. -->
+        <div class="mat-row">
+          <span class="mat-label">Clearcoat</span>
+          <input type="range" id="lmd-clearcoat" min="0" max="1" step="0.01" value="0.0">
+          <span class="mat-val" id="lmd-clearcoat-val">0.00</span>
+        </div>
+
+        <!-- Texture. Without a control here a layer material could never say "no
+             texture", so the object's own map survived every edit — colours and
+             values changed while the mapping stayed put. -->
+        <div class="mat-row" id="lmd-texture-row" style="align-items:center;gap:8px;">
+          <span class="mat-label">Texture</span>
+          <span id="lmd-texture-name"
+                style="font-size:0.68rem;color:var(--text-2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">None</span>
+          <button id="lmd-texture-remove" title="Remove texture"
+                  style="background:none;border:none;color:var(--text-3);cursor:pointer;padding:2px;display:none;align-items:center;">
+            <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
         </div>
       </div>
 
