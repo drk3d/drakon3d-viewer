@@ -27,6 +27,7 @@ import { handleFile, clearCurrentModel } from './loaders.js';
 import * as GoogleDrive from './cloud/google-drive.js';
 import * as OneDrive from './cloud/onedrive.js';
 import * as Dropbox from './cloud/dropbox.js';
+import { isConfigured as isCloudProviderConfigured } from './cloud/config.js';
 import { History } from './history.js';
 import {
   deactivateAllTools, clearMeasurements, renderMeasurementListUI,
@@ -1045,7 +1046,12 @@ function bindUI() {
   document.getElementById('btn-open-gdrive')?.addEventListener('click', () => {
     GoogleDrive.pickAndLoad(cloudLoaders);
   });
-  document.getElementById('btn-open-onedrive')?.addEventListener('click', () => {
+  // Only advertise OneDrive once its Entra application has been registered.
+  // Keeping this conditional means adding ONEDRIVE_CLIENT_ID later restores it
+  // without another UI change.
+  const oneDriveButton = document.getElementById('btn-open-onedrive');
+  if (!isCloudProviderConfigured('onedrive')) oneDriveButton?.remove();
+  oneDriveButton?.addEventListener('click', () => {
     OneDrive.pickAndLoad(cloudLoaders);
   });
   document.getElementById('btn-open-dropbox')?.addEventListener('click', () => {
