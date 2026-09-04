@@ -29,8 +29,9 @@
 //      your logo and homepage URL. drive.file is non-sensitive so no
 //      verification is required beyond brand info.
 // ──────────────────────────────────────────────────────────────────────────
-export const GOOGLE_CLIENT_ID = '';   // e.g. '1234-abc.apps.googleusercontent.com'
-export const GOOGLE_API_KEY   = '';   // e.g. 'AIzaSy…'
+export const GOOGLE_CLIENT_ID = '260222631220-ordn5ht5okskdbhbt1g1besig6h54gtm.apps.googleusercontent.com';
+// This browser key is limited to the two documented referrers and Google APIs.
+export const GOOGLE_API_KEY   = 'AIzaSyCFucEbrh6sF5wKKK_NADEZDXMohIILWmU';
 export const GOOGLE_SCOPES    = 'https://www.googleapis.com/auth/drive.file';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -58,7 +59,7 @@ export const ONEDRIVE_CLIENT_ID = '';   // e.g. '12345678-1234-1234-1234-1234567
 //      → Submit.
 //   4. Copy the App key below.
 // ──────────────────────────────────────────────────────────────────────────
-export const DROPBOX_APP_KEY = '';   // e.g. 'abcd1234efgh5678'
+export const DROPBOX_APP_KEY = '7g25nwzw2aj5se7';
 
 // Extensions exposed in the cloud pickers. Keep in sync with
 // loaders.js → handleFile() supportedExtensions.
