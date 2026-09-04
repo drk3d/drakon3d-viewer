@@ -11,15 +11,13 @@
 //   2. APIs & Services → Enable APIs → enable "Google Drive API" and
 //      "Google Picker API".
 //   3. APIs & Services → Credentials → "+ CREATE CREDENTIALS"
-//        a. API Key — leave "Application restrictions" set to "None".
-//           Do NOT use HTTP referrer restrictions: Google Picker loads
-//           inside a docs.google.com iframe and does not reliably forward
-//           the parent page's Referer header, so referrer-restricted keys
-//           get rejected with "The API developer key is invalid."
-//           Secure the key via "API restrictions" instead — limit it to
-//           exactly: Google Drive API + Google Picker API. With those two
-//           restrictions the key cannot be abused for anything else, and
-//           Drive data access still requires an OAuth token per user.
+//        a. API Key — restrict it to Websites:
+//             https://viewer.drakon3d.com/*
+//             https://docs.google.com/*
+//           Google Picker runs within a docs.google.com iframe, so it must
+//           be included alongside the viewer origin. Also apply API
+//           restrictions to exactly Google Drive API + Google Picker API.
+//           Drive data access still requires a per-user OAuth token.
 //        b. OAuth client ID → Application type: Web application
 //             Authorized JavaScript origins:
 //               https://viewer.drakon3d.com
