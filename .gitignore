@@ -4,6 +4,9 @@
 # Dependencies
 node_modules/
 
+# Cloudflare local deployment artifacts
+share-service/.wrangler/
+
 # IDE
 .idea/
 .vscode/

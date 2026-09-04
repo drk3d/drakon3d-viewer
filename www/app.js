@@ -135,14 +135,18 @@ animate();
 // the normal session loader — no fetch, no server needed.
 const _hasPlainPackage     = typeof window.__RHV_PACKAGE__ === 'string' && window.__RHV_PACKAGE__.length;
 const _hasEncryptedPackage = window.__RHV_PACKAGE_ENCRYPTED__ && typeof window.__RHV_PACKAGE_ENCRYPTED__.data === 'string';
+const _sharedModelId       = new URLSearchParams(window.location.search).get('share');
+const _sharedModelApi      = getSharedModelApiOrigin();
 
-if (_hasPlainPackage || _hasEncryptedPackage) {
+if (_hasPlainPackage || _hasEncryptedPackage || _sharedModelId) {
   // This is a delivered review artifact, not an authoring session — hide the
   // save/export actions that don't make sense here (and Export Package can't
   // work standalone, since it fetches the viewer shell that only exists on the
   // dev server).
-  ['btn-save-panel', 'btn-save-as-panel', 'btn-save-glb', 'btn-export-package']
-    .forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+  if (_hasPlainPackage || _hasEncryptedPackage) {
+    ['btn-save-panel', 'btn-save-as-panel', 'btn-save-glb', 'btn-export-package']
+      .forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+  }
 
   // Optional: hide the File menu entirely (export option).
   if (window.__RHV_HIDE_FILE__) {
@@ -152,6 +156,10 @@ if (_hasPlainPackage || _hasEncryptedPackage) {
 
   (async () => {
     try {
+      if (_sharedModelId) {
+        await _loadSharedModel(_sharedModelId, _sharedModelApi);
+        return;
+      }
       const name = window.__RHV_PACKAGE_NAME__ || 'model.rhv';
       let bytes;
       if (_hasEncryptedPackage) {
@@ -164,9 +172,44 @@ if (_hasPlainPackage || _hasEncryptedPackage) {
       await loadSession(file);
     } catch (e) {
       console.error('[App] Failed to load embedded package:', e);
+      if (_sharedModelId) alert(`Could not open this Drakon share link. ${e.message || ''}`.trim());
       document.getElementById('loading')?.classList.add('hidden');
     }
   })();
+}
+
+function getSharedModelApiOrigin() {
+  const value = new URLSearchParams(window.location.search).get('api');
+  if (!value) return null;
+  try {
+    const origin = new URL(value);
+    // Shares are issued only by the Drakon Cloudflare Worker. Limiting the
+    // bootstrap source prevents an arbitrary link from turning the viewer into
+    // a general cross-origin file fetcher.
+    if (origin.protocol !== 'https:' || !origin.hostname.endsWith('.workers.dev')) return null;
+    return origin.origin;
+  } catch {
+    return null;
+  }
+}
+
+async function _loadSharedModel(shareId, apiOrigin) {
+  if (!/^[A-Za-z0-9_-]{24}$/.test(shareId) || !apiOrigin) {
+    throw new Error('The share link is invalid.');
+  }
+  const response = await fetch(`${apiOrigin}/v1/shares/${encodeURIComponent(shareId)}`, {
+    cache: 'no-store',
+    credentials: 'omit',
+  });
+  if (!response.ok) {
+    let message = 'This share link is unavailable.';
+    try { message = (await response.json()).error || message; } catch { /* retain fallback */ }
+    throw new Error(message);
+  }
+  const filename = response.headers.get('X-Drakon-Filename') || 'design.3dm';
+  const file = new File([await response.blob()], filename, { type: 'application/octet-stream' });
+  if (filename.toLowerCase().endsWith('.rhv')) await loadSession(file);
+  else await handleFile(file, rhinoLoader, gltfLoader);
 }
 
 // Base64 → bytes.
