@@ -1,12 +1,12 @@
 /* ── Design Tokens ── */
 :root {
-  --bg:                 #10141d;
-  --surface:            rgba(20, 26, 37, 0.93);
+  --bg:                 #0c0b09;
+  --surface:            rgba(19, 16, 12, 0.94);
   --surface-hi:         rgba(255, 255, 255, 0.05);
-  --border:             #20293a;
-  --primary:            #00b4d8;
-  --primary-dim:        rgba(0, 180, 216, 0.15);
-  --primary-hi:         #0096c7;
+  --border:             #35281c;
+  --primary:            #f59e0b;
+  --primary-dim:        rgba(245, 158, 11, 0.16);
+  --primary-hi:         #d97706;
   --text:               #e4e4e7;
   --text-2:             #8fa0b5;
   --text-3:             #3a4759;
@@ -14,8 +14,8 @@
   --mode-h:             62px;
   --r:                  10px;
   --r-sm:               7px;
-  --panel-bg:           #151b26;
-  --panel-border-color: #20293a;
+  --panel-bg:           #17120e;
+  --panel-border-color: #35281c;
 }
 
 /* ── Light Theme ── */
@@ -27,27 +27,27 @@
   --text:        #1c1c24;
   --text-2:      #5a5a6e;
   --text-3:      #aaaabc;
-  --primary:     #2563eb;
-  --primary-dim: rgba(37,99,235,0.12);
-  --primary-hi:  #1d4ed8;
+  --primary:     #b45309;
+  --primary-dim: rgba(180,83,9,0.12);
+  --primary-hi:  #92400e;
   --panel-bg:           #e8e8ec;
   --panel-border-color: rgba(0,0,0,0.10);
 }
 
 /* ── Dark Theme (explicit — prevents @media light from bleeding) ── */
 [data-theme="dark"] {
-  --bg:                 #10141d;
-  --surface:            rgba(20, 26, 37, 0.93);
+  --bg:                 #0c0b09;
+  --surface:            rgba(19, 16, 12, 0.94);
   --surface-hi:         rgba(255, 255, 255, 0.05);
-  --border:             #20293a;
-  --primary:            #00b4d8;
-  --primary-dim:        rgba(0, 180, 216, 0.15);
-  --primary-hi:         #0096c7;
+  --border:             #35281c;
+  --primary:            #f59e0b;
+  --primary-dim:        rgba(245, 158, 11, 0.16);
+  --primary-hi:         #d97706;
   --text:               #e4e4e7;
   --text-2:             #8fa0b5;
   --text-3:             #3a4759;
-  --panel-bg:           #151b26;
-  --panel-border-color: #20293a;
+  --panel-bg:           #17120e;
+  --panel-border-color: #35281c;
 }
 
 /* ── Reset ── */
@@ -135,7 +135,7 @@ input[type="file"] { display: none; }
   border-radius: var(--r-sm);
 }
 .icon-btn.primary:hover  { background: var(--primary-hi); color: #fff; }
-.icon-btn.primary:active { background: #1d4ed8; }
+.icon-btn.primary:active { background: #d97706; }
 
 /* ── Settings Panel ── */
 #settings-panel {
@@ -760,8 +760,8 @@ body.dark-theme .dark-only {
   flex: 1;
   height: 3px;
   background: linear-gradient(to right,
-    #3b82f6 0%,
-    #3b82f6 var(--fill, 50%),
+    #f59e0b 0%,
+    #f59e0b var(--fill, 50%),
     rgba(255,255,255,0.14) var(--fill, 50%),
     rgba(255,255,255,0.14) 100%
   );
@@ -859,8 +859,8 @@ body.dark-theme .dark-only {
   flex: 1;
   height: 3px;
   background: linear-gradient(to right,
-    #3b82f6 0%,
-    #3b82f6 var(--fill, 50%),
+    #f59e0b 0%,
+    #f59e0b var(--fill, 50%),
     rgba(255,255,255,0.14) var(--fill, 50%),
     rgba(255,255,255,0.14) 100%
   );
@@ -1266,6 +1266,28 @@ input[type="range"]::-moz-range-thumb {
 }
 .footer-logo:hover {
   opacity: 1;
+}
+.drakon-brand {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--text);
+  text-decoration: none;
+  letter-spacing: 0.1em;
+  transition: color 0.15s ease;
+}
+.drakon-brand:hover { color: var(--primary); }
+.drakon-brand-name {
+  font-size: 1rem;
+  font-weight: 750;
+  line-height: 1;
+}
+.drakon-brand-name span { color: var(--primary); }
+.drakon-brand-product {
+  color: var(--text-2);
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.24em;
 }
 .footer-logo.dark-only {
   display: none;
@@ -1764,8 +1786,8 @@ body.dark-theme .footer-logo.light-only {
   width: 100%;
   height: 3px;
   background: linear-gradient(to right,
-    #3b82f6 0%,
-    #3b82f6 var(--fill, 0%),
+    #f59e0b 0%,
+    #f59e0b var(--fill, 0%),
     rgba(255,255,255,0.14) var(--fill, 0%),
     rgba(255,255,255,0.14) 100%
   );
@@ -1844,7 +1866,7 @@ body.dark-theme .footer-logo.light-only {
 }
 
 /* ── Interactive watermark (Floating bottom right) ── */
-#byrhinoview-watermark {
+#drakon3d-watermark {
   position: fixed;
   bottom: 16px;
   right: 20px;
@@ -1858,22 +1880,22 @@ body.dark-theme .footer-logo.light-only {
   user-select: none;
   transition: color 0.2s;
 }
-#byrhinoview-watermark a {
+#drakon3d-watermark a {
   color: inherit;
   text-decoration: none;
   cursor: pointer;
   transition: color 0.2s;
 }
-#byrhinoview-watermark a:hover {
+#drakon3d-watermark a:hover {
   text-decoration: underline;
 }
-#byrhinoview-watermark:hover {
+#drakon3d-watermark:hover {
   color: rgba(255, 255, 255, 0.95); /* 어두운 배경에서 호버 시 매우 밝고 선명한 흰색 */
 }
-:not([data-theme="dark"]) #byrhinoview-watermark:hover {
+:not([data-theme="dark"]) #drakon3d-watermark:hover {
   color: rgba(0, 0, 0, 0.85) !important; /* 밝은 배경에서 호버 시 더욱 또렷한 검은색 */
 }
-body.light-theme #byrhinoview-watermark:hover {
+body.light-theme #drakon3d-watermark:hover {
   color: rgba(0, 0, 0, 0.85) !important; /* 밝은 배경에서 호버 시 더욱 또렷한 검은색 */
 }
 
@@ -1886,9 +1908,9 @@ body.light-theme #byrhinoview-watermark:hover {
     --surface: rgba(255, 255, 255, 0.94);
     --surface-hi: rgba(0, 0, 0, 0.04);
     --border: rgba(0, 0, 0, 0.08);
-    --primary: #2563eb;
-    --primary-dim: rgba(37, 99, 235, 0.10);
-    --primary-hi: #1d4ed8;
+    --primary: #b45309;
+    --primary-dim: rgba(180, 83, 9, 0.10);
+    --primary-hi: #d97706;
     --text: #1f2937;
     --text-2: #6b7280;
     --text-3: #9ca3af;
@@ -1934,7 +1956,7 @@ body.light-theme #byrhinoview-watermark:hover {
   :not([data-theme="dark"]) .sliders-grid input[type="range"] { background: rgba(0, 0, 0, 0.08) !important; }
   :not([data-theme="dark"]) .layer-editable-name { color: #1f2937 !important; }
   :not([data-theme="dark"]) .layer-editable-name:focus { background: rgba(0, 0, 0, 0.04) !important; }
-  :not([data-theme="dark"]) #byrhinoview-watermark { color: rgba(0, 0, 0, 0.45) !important; }
+  :not([data-theme="dark"]) #drakon3d-watermark { color: rgba(0, 0, 0, 0.45) !important; }
   :not([data-theme="dark"]) #empty-state { color: #6b7280 !important; }
 
   /* Popups premium white styling */
@@ -1990,9 +2012,9 @@ body.light-theme {
   --surface: rgba(255, 255, 255, 0.94);
   --surface-hi: rgba(0, 0, 0, 0.04);
   --border: rgba(0, 0, 0, 0.08);
-  --primary: #2563eb;
-  --primary-dim: rgba(37, 99, 235, 0.10);
-  --primary-hi: #1d4ed8;
+  --primary: #b45309;
+  --primary-dim: rgba(180, 83, 9, 0.10);
+  --primary-hi: #d97706;
   --text: #1f2937;
   --text-2: #6b7280;
   --text-3: #9ca3af;
@@ -2003,18 +2025,18 @@ body.light-theme {
 body.dark-theme {
   /* Kept in sync with [data-theme="dark"] above so the body's --bg doesn't
      drift warm (#2a2b2f reads as brownish on AMOLED). */
-  --bg:                 #10141d;
-  --surface:            rgba(20, 26, 37, 0.93);
+  --bg:                 #0c0b09;
+  --surface:            rgba(19, 16, 12, 0.94);
   --surface-hi:         rgba(255, 255, 255, 0.05);
-  --border:             #20293a;
-  --primary:            #00b4d8;
-  --primary-dim:        rgba(0, 180, 216, 0.15);
-  --primary-hi:         #0096c7;
+  --border:             #35281c;
+  --primary:            #f59e0b;
+  --primary-dim:        rgba(245, 158, 11, 0.16);
+  --primary-hi:         #d97706;
   --text:               #e4e4e7;
   --text-2:             #8fa0b5;
   --text-3:             #3a4759;
-  --panel-bg:           #151b26;
-  --panel-border-color: #20293a;
+  --panel-bg:           #17120e;
+  --panel-border-color: #35281c;
 }
 
 body.light-theme .left-sidebar-header h2 { color: #111827 ; }
@@ -2055,7 +2077,7 @@ body.light-theme .setting-item-panel input[type="checkbox"]:not(:checked) { back
 body.light-theme .sliders-grid input[type="range"] { background: rgba(0, 0, 0, 0.08) ; }
 body.light-theme .layer-editable-name { color: #1f2937 ; }
 body.light-theme .layer-editable-name:focus { background: rgba(0, 0, 0, 0.04) ; }
-body.light-theme #byrhinoview-watermark { color: rgba(0, 0, 0, 0.45) ; }
+body.light-theme #drakon3d-watermark { color: rgba(0, 0, 0, 0.45) ; }
 body.light-theme #empty-state { color: #6b7280 ; }
 body.light-theme #loading {
   background: rgba(255, 255, 255, 0.75) ;
@@ -2853,7 +2875,7 @@ body.light-theme .color-circle {
   .bottom-tools-bar {
     bottom: 52px !important; /* Push up slightly to prevent intersection */
   }
-  #byrhinoview-watermark {
+  #drakon3d-watermark {
     bottom: 18px !important;
     right: auto !important;
     left: 50% !important;

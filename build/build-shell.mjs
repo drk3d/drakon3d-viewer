@@ -1,6 +1,6 @@
 // build/build-shell.mjs
 // Produces www/viewer-shell.html — a fully self-contained, offline-capable
-// byRhinoView viewer with NO external dependencies (three.js, app modules,
+// Drakon3D Viewer with NO external dependencies (three.js, app modules,
 // CSS, and coloris are all inlined). The Export Package feature fetches this
 // shell at runtime and injects a base64 .rhv payload via window.__RHV_PACKAGE__.
 //
@@ -118,6 +118,7 @@ html = await minifyHtml(html, {
   keepClosingSlash: true,
   caseSensitive: true,
 });
+html = html.trimEnd();
 
 writeFileSync(resolve(www, 'viewer-shell.html'), html, 'utf8');
 console.log(`[build] wrote www/viewer-shell.html (${beforeKB} KB → ${(html.length / 1024).toFixed(0)} KB minified)`);

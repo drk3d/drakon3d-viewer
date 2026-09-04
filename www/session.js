@@ -30,7 +30,7 @@ const LEGACY_MIN_SCHEMA   = 3;
 // decide whether a published viewer-shell.html is newer, so bump all three together.
 const APP_VERSION         = '1.0.0';
 
-// Tagged so the loadSession catch can show the specific "update byRhinoView"
+// Tagged so the loadSession catch can show the specific viewer-update
 // message instead of the generic corrupt-file alert.
 function versionError(message) {
   const e = new Error(message);
@@ -353,7 +353,7 @@ async function buildSessionBuffer(customFileName = null) {
       // Our output stays renderable by any viewer that understands schema 3
       // (unified geometry + annotations); schema 4 only added provenance.
       minViewerSchema:     MIN_VIEWER_SCHEMA,
-      producer:            { name: 'byRhinoView.Viewer', version: APP_VERSION, host: navigator.userAgent },
+      producer:            { name: 'Drakon3D.Viewer', version: APP_VERSION, host: navigator.userAgent },
       displayMode:         S.currentMode,
       settings,
       cameraState,
@@ -585,7 +585,7 @@ export async function saveSession(customFileName = null, pickLocation = false) {
       try {
         const opts = {
           suggestedName: baseName + '.rhv',
-          types: [{ description: 'byRhinoView Session', accept: { 'application/octet-stream': ['.rhv'] } }],
+          types: [{ description: 'Drakon3D Viewer Session', accept: { 'application/octet-stream': ['.rhv'] } }],
         };
         if (S.currentFileHandle) opts.startIn = S.currentFileHandle; // same folder
         writeHandle = await window.showSaveFilePicker(opts);

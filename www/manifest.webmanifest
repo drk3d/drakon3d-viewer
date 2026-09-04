@@ -1,14 +1,14 @@
 {
-  "name": "byRhinoView",
-  "short_name": "byRhinoView",
-  "description": "Web viewer for Rhino 3DM and other CAD/3D files",
+  "name": "Drakon3D Viewer",
+  "short_name": "Drakon3D",
+  "description": "A local-first web viewer for Rhino 3DM and other CAD/3D files",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#10141d",
-  "theme_color": "#10141d",
+  "background_color": "#0c0b09",
+  "theme_color": "#0c0b09",
   "orientation": "any",
-  "lang": "ko",
+  "lang": "en",
   "icons": [
     {
       "src": "images/favicon.svg",

@@ -1,7 +1,7 @@
 {
-  "name": "byrhinoview",
+  "name": "drakon3d-viewer",
   "version": "1.0.0",
-  "description": "",
+  "description": "A Drakon3D-branded, local-first CAD web viewer.",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",

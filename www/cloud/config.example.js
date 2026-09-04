@@ -7,9 +7,9 @@
 //      allowed JavaScript origin / HTTP referrer.
 //
 // All three values below are domain-scoped public identifiers. They are safe
-// to ship in client code AS LONG AS the corresponding console has the
-// allowed JavaScript origin restricted to your domain. Replace each empty
-// string with the value from the provider's console.
+// to ship in client code only when the corresponding console restricts the
+// allowed JavaScript origin to viewer.drakon3d.com. Replace each empty string
+// with a Drakon-owned value from the provider's console.
 //
 // ──────────────────────────────────────────────────────────────────────────
 // Google Drive
@@ -18,17 +18,17 @@
 //      "Google Picker API".
 //   3. APIs & Services → Credentials → "+ CREATE CREDENTIALS"
 //        a. API Key — restrict by HTTP referrer:
-//             https://www.plusplastic.com/byRhinoView/*
+//             https://viewer.drakon3d.com/*
 //             http://localhost:8080/*   (optional, dev)
 //           Then under "API restrictions" select "Restrict key" and pick
 //           Google Drive API + Google Picker API only.
 //        b. OAuth client ID → Application type: Web application
 //             Authorized JavaScript origins:
-//               https://www.plusplastic.com
+//               https://viewer.drakon3d.com
 //               http://localhost:8080   (or whatever you use locally)
 //             Authorized redirect URIs (only required if you ever leave the
 //             implicit/token flow — GIS token client does not need one):
-//               https://www.plusplastic.com/byRhinoView/
+//               https://viewer.drakon3d.com/
 //   4. OAuth consent screen — add 'drive.file' scope; for production add
 //      your logo and homepage URL. drive.file is non-sensitive so no
 //      verification is required beyond brand info.
@@ -44,7 +44,7 @@ export const GOOGLE_SCOPES    = 'https://www.googleapis.com/auth/drive.file';
 //      and work/school accounts" (multi-tenant + personal).
 //   2. Authentication → Add a platform → Single-page application
 //      Redirect URI:
-//        https://www.plusplastic.com/byRhinoView/
+//        https://viewer.drakon3d.com/
 //        http://localhost:8080/   (dev)
 //   3. API permissions → Microsoft Graph → Delegated → Files.Read → Grant.
 //   4. Copy the Application (client) ID below.
@@ -56,7 +56,7 @@ export const ONEDRIVE_CLIENT_ID = '';   // e.g. '12345678-1234-1234-1234-1234567
 //   1. https://www.dropbox.com/developers/apps → Create app
 //        Choose: Scoped access · App folder OR Full Dropbox · name it.
 //   2. Settings tab → "Chooser/Saver/Embedder domains" → add:
-//        www.plusplastic.com
+//        viewer.drakon3d.com
 //        localhost   (dev)
 //   3. Permissions tab → enable files.metadata.read + files.content.read
 //      → Submit.

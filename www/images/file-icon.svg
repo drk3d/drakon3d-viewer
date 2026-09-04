@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   .rhv file-type icon used by the PWA file_handlers manifest entry.
-  Shows a document (folded corner) with the byRhinoView green cube and an
+  Shows a document (folded corner) with the Drakon3D amber mark and an
   ".rhv" label so explorer-style thumbnails read at a glance.
 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="512" height="512">
@@ -21,10 +21,10 @@
     stroke-linejoin="round"
     d="M32,4 v8 h8 z" />
 
-  <!-- byRhinoView cube mark -->
+  <!-- Drakon3D viewer mark -->
   <g transform="translate(16,18)">
     <path
-      fill="#00c420"
+      fill="#f59e0b"
       d="M14.27,2.40 L9.31,-0.24 a2.4,2.4 0 0 0 -2.06,0 L2.29,2.40
          a2.4,2.4 0 0 0 -1.03,1.78 v5.03 a2.4,2.4 0 0 0 1.03,1.78
          l4.96,2.64 a2.4,2.4 0 0 0 2.06,0 l4.96,-2.64

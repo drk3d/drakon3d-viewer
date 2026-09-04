@@ -250,10 +250,10 @@ export const S = {
   edgeWeight: null,
 
   // ── Theme ────────────────────────────────────────────────────────────────
-  THEME_KEY:    'byrhinoview_theme',
+  THEME_KEY:    'drakon3d_viewer_theme',
   currentTheme: (() => {
     try {
-      return localStorage.getItem('byrhinoview_theme') || 'system';
+      return localStorage.getItem('drakon3d_viewer_theme') || 'system';
     } catch (e) {
       return 'system';
     }

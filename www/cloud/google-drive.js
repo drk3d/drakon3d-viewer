@@ -90,7 +90,7 @@ function isFirefox() {
 }
 
 function maybeShowFirefoxNotice() {
-  const KEY = 'byrhino_fx_gdrive_notice_v2';
+  const KEY = 'drakon3d_fx_gdrive_notice_v1';
   if (!isFirefox() || localStorage.getItem(KEY)) return true;
   const proceed = confirm(t('cloud.fx_notice'));
   if (proceed) localStorage.setItem(KEY, '1');

@@ -1,4 +1,4 @@
-// i18n.js — byRhinoView internationalization module
+// i18n.js — Drakon3D Viewer internationalization module
 // Supports 12 languages matching Rhino3D: en, ko, fr, de, es, it, ja, zh-CN, zh-TW, pt-BR, cs, pl
 
 export const TRANSLATIONS = {
@@ -107,9 +107,9 @@ export const TRANSLATIONS = {
     'msg.no_render_mesh': '{n} object(s) have no render mesh — shown as wireframe only. To see them shaded, switch to a shaded display mode in Rhino and save the file again (or turn off "Save Small").',
     'msg.load_3dm_failed':    'Failed to load the 3DM file. The file may be damaged or in an unsupported format.',
     'msg.process_3dm_failed': 'An error occurred while processing the 3DM file: {err}',
-    'msg.rhv_newer_container': 'This .rhv file uses a newer container format (v{found}) than this viewer supports (v{supported}). Please update byRhinoView.',
-    'msg.rhv_newer_schema':    'This .rhv file was written by a newer version of byRhinoView (schema v{found}, this viewer supports v{supported}). Please update byRhinoView to open it.',
-    'msg.rhv_newer_minor':     'This .rhv file was written by a newer version of byRhinoView. It has been opened, but some settings were ignored.',
+    'msg.rhv_newer_container': 'This .rhv file uses a newer container format (v{found}) than this viewer supports (v{supported}). Please update Drakon3D Viewer.',
+    'msg.rhv_newer_schema':    'This .rhv file was written by a newer version of Drakon3D Viewer (schema v{found}, this viewer supports v{supported}). Please update Drakon3D Viewer to open it.',
+    'msg.rhv_newer_minor':     'This .rhv file was written by a newer version of Drakon3D Viewer. It has been opened, but some settings were ignored.',
     'msg.load_session_failed': 'Failed to load the session file. The file may be damaged or incomplete.',
     'msg.edges_deferred': 'This model needs {triangles} triangles of edges calculated ({meshes} objects), so the edge overlay was left off to keep loading fast. Turn on "Edges" in Settings if you need it.',
     'msg.edges_precomputed_angle': 'Nothing in this model derives its edges from an angle: they either come from Rhino as exact edges, or the objects are meshes with no edges to find.',
@@ -319,9 +319,9 @@ export const TRANSLATIONS = {
     'msg.no_render_mesh': '{n}개 객체에 렌더 메시가 없어 와이어프레임으로 표시됩니다. 셰이딩으로 보시려면 라이노에서 셰이딩 표시 모드로 전환한 뒤 파일을 다시 저장하시거나, "최소 저장(Save Small)"을 끄고 저장해 주세요.',
     'msg.load_3dm_failed':    '3DM 파일을 불러오지 못했습니다. 파일이 손상되었거나 지원되지 않는 형식일 수 있습니다.',
     'msg.process_3dm_failed': '3DM 파일을 처리하는 중 오류가 발생했습니다: {err}',
-    'msg.rhv_newer_container': '이 .rhv 파일은 이 뷰어가 지원하는 컨테이너 형식(v{supported})보다 새로운 형식(v{found})을 사용합니다. byRhinoView를 업데이트해 주세요.',
-    'msg.rhv_newer_schema':    '이 .rhv 파일은 더 새로운 버전의 byRhinoView로 저장되었습니다(스키마 v{found}, 이 뷰어는 v{supported} 지원). 파일을 열려면 byRhinoView를 업데이트해 주세요.',
-    'msg.rhv_newer_minor':     '이 .rhv 파일은 더 새로운 버전의 byRhinoView로 저장되었습니다. 파일은 열렸지만 일부 설정은 무시되었습니다.',
+    'msg.rhv_newer_container': '이 .rhv 파일은 이 뷰어가 지원하는 컨테이너 형식(v{supported})보다 새로운 형식(v{found})을 사용합니다. Drakon3D Viewer를 업데이트해 주세요.',
+    'msg.rhv_newer_schema':    '이 .rhv 파일은 더 새로운 버전의 Drakon3D Viewer로 저장되었습니다(스키마 v{found}, 이 뷰어는 v{supported} 지원). 파일을 열려면 Drakon3D Viewer를 업데이트해 주세요.',
+    'msg.rhv_newer_minor':     '이 .rhv 파일은 더 새로운 버전의 Drakon3D Viewer로 저장되었습니다. 파일은 열렸지만 일부 설정은 무시되었습니다.',
     'msg.load_session_failed': '세션 파일을 불러오지 못했습니다. 파일이 손상되었거나 불완전할 수 있습니다.',
     'msg.edges_deferred': '이 모델은 엣지를 {triangles}개 삼각형({meshes}개 객체)에 대해 계산해야 하므로, 로딩 속도를 위해 엣지 표시를 끈 상태로 열었습니다. 필요하시면 설정에서 "엣지"를 켜 주세요.',
     'msg.edges_precomputed_angle': '이 모델에는 각도로 엣지를 계산하는 개체가 없습니다. 라이노의 정확한 엣지를 쓰거나, 메시 개체라 찾을 엣지가 없습니다.',
@@ -2527,7 +2527,7 @@ export function setLang(code) {
   if (TRANSLATIONS[code]) {
     currentLang = code;
     try {
-      localStorage.setItem('byrhinoview_lang', code);
+      localStorage.setItem('drakon3d_viewer_lang', code);
     } catch (e) {
       console.warn('Failed to save language to localStorage:', e);
     }
@@ -2562,7 +2562,7 @@ export function applyI18n() {
 export function initI18n() {
   let saved = null;
   try {
-    saved = localStorage.getItem('byrhinoview_lang');
+    saved = localStorage.getItem('drakon3d_viewer_lang');
   } catch (e) {
     console.warn('Failed to read language from localStorage:', e);
   }

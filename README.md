@@ -1,6 +1,8 @@
-# byRhinoView
+# Drakon3D Viewer
 
-A premium, lightweight, zero-install 3D Rhino & CAD Web Viewer designed for seamless model interaction directly in the web browser. 
+A local-first 3D Rhino & CAD web viewer for Drakon3D.
+
+This project is a branded fork of [plusplastic/byRhinoView](https://github.com/plusplastic/byRhinoView). It retains the upstream MIT license and notices; Drakon3D changes the presentation, hosting, and integration configuration.
 
 웹 브라우저에서 직접 매끄럽고 빠른 3D Rhino 및 CAD 모델 뷰잉과 상호작용을 지원하는 고성능 경량 웹 뷰어 솔루션입니다.
 

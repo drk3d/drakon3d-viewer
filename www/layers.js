@@ -586,14 +586,14 @@ const defaultSwatches = [
 
 let customSwatches = [];
 try {
-  const saved = localStorage.getItem('byrhinoview_custom_swatches');
+  const saved = localStorage.getItem('drakon3d_viewer_custom_swatches');
   if (saved) {
     customSwatches = JSON.parse(saved);
     // If user has old swatches count (< 12), auto-upgrade so they get the even layout instantly
     if (customSwatches.length < 12 && !customSwatches.some(c => c.toLowerCase() === '#7209b7')) {
       customSwatches.push('#7209b7');
       try {
-        localStorage.setItem('byrhinoview_custom_swatches', JSON.stringify(customSwatches));
+        localStorage.setItem('drakon3d_viewer_custom_swatches', JSON.stringify(customSwatches));
       } catch (err) {}
     }
   } else {
@@ -776,7 +776,7 @@ function buildSwatchesUI(swatchesContainer) {
           if (activeColor && !customSwatches.some(c => c.toLowerCase() === activeColor.toLowerCase())) {
             customSwatches.push(activeColor);
             try {
-              localStorage.setItem('byrhinoview_custom_swatches', JSON.stringify(customSwatches));
+              localStorage.setItem('drakon3d_viewer_custom_swatches', JSON.stringify(customSwatches));
             } catch (err) {}
             
             Coloris({ swatches: customSwatches });
@@ -825,7 +825,7 @@ function removeSwatch(color) {
   if (index > -1) {
     customSwatches.splice(index, 1);
     try {
-      localStorage.setItem('byrhinoview_custom_swatches', JSON.stringify(customSwatches));
+      localStorage.setItem('drakon3d_viewer_custom_swatches', JSON.stringify(customSwatches));
     } catch (err) {}
     
     Coloris({ swatches: customSwatches });

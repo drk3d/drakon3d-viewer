@@ -1,9 +1,9 @@
 // cloud/config.js — credentials for cloud storage providers.
 //
 // All three values below are domain-scoped public identifiers. They are safe
-// to ship in client code AS LONG AS the corresponding console has the
-// allowed JavaScript origin restricted to your domain. Replace each empty
-// string with the value from the provider's console.
+// to ship in client code only when the corresponding console restricts the
+// allowed JavaScript origin to viewer.drakon3d.com. Replace each empty string
+// with a Drakon-owned value from the provider's console.
 //
 // ──────────────────────────────────────────────────────────────────────────
 // Google Drive
@@ -22,17 +22,17 @@
 //           Drive data access still requires an OAuth token per user.
 //        b. OAuth client ID → Application type: Web application
 //             Authorized JavaScript origins:
-//               https://www.plusplastic.com
+//               https://viewer.drakon3d.com
 //               http://localhost:5173   (or whatever you use locally)
 //             Authorized redirect URIs (only required if you ever leave the
 //             implicit/token flow — GIS token client does not need one):
-//               https://www.plusplastic.com/byRhinoView/
+//               https://viewer.drakon3d.com/
 //   4. OAuth consent screen — add 'drive.file' scope; for production add
 //      your logo and homepage URL. drive.file is non-sensitive so no
 //      verification is required beyond brand info.
 // ──────────────────────────────────────────────────────────────────────────
-export const GOOGLE_CLIENT_ID = '795850727996-981q7t4r52qtd0pgibk593l15im8n3o2.apps.googleusercontent.com';   // e.g. '1234-abc.apps.googleusercontent.com'
-export const GOOGLE_API_KEY   = 'AIzaSyBmVo4EBPnjfMYdr-dNnx8GlKb20HQWZuI';   // e.g. 'AIzaSy…'
+export const GOOGLE_CLIENT_ID = '';   // e.g. '1234-abc.apps.googleusercontent.com'
+export const GOOGLE_API_KEY   = '';   // e.g. 'AIzaSy…'
 export const GOOGLE_SCOPES    = 'https://www.googleapis.com/auth/drive.file';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -42,25 +42,25 @@ export const GOOGLE_SCOPES    = 'https://www.googleapis.com/auth/drive.file';
 //      and work/school accounts" (multi-tenant + personal).
 //   2. Authentication → Add a platform → Single-page application
 //      Redirect URI:
-//        https://www.plusplastic.com/byRhinoView/
+//        https://viewer.drakon3d.com/
 //        http://localhost:5173/   (dev)
 //   3. API permissions → Microsoft Graph → Delegated → Files.Read → Grant.
 //   4. Copy the Application (client) ID below.
 // ──────────────────────────────────────────────────────────────────────────
-export const ONEDRIVE_CLIENT_ID = '9438b685-6087-4545-b2dd-3e1e3011bcd5';   // e.g. '12345678-1234-1234-1234-1234567890ab'
+export const ONEDRIVE_CLIENT_ID = '';   // e.g. '12345678-1234-1234-1234-1234567890ab'
 
 // ──────────────────────────────────────────────────────────────────────────
 // Dropbox
 //   1. https://www.dropbox.com/developers/apps → Create app
 //        Choose: Scoped access · App folder OR Full Dropbox · name it.
 //   2. Settings tab → "Chooser/Saver/Embedder domains" → add:
-//        www.plusplastic.com
+//        viewer.drakon3d.com
 //        localhost   (dev)
 //   3. Permissions tab → enable files.metadata.read + files.content.read
 //      → Submit.
 //   4. Copy the App key below.
 // ──────────────────────────────────────────────────────────────────────────
-export const DROPBOX_APP_KEY = 'asva3kpyp805xdc';   // e.g. 'abcd1234efgh5678'
+export const DROPBOX_APP_KEY = '';   // e.g. 'abcd1234efgh5678'
 
 // Extensions exposed in the cloud pickers. Keep in sync with
 // loaders.js → handleFile() supportedExtensions.
