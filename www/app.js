@@ -139,6 +139,7 @@ const _sharedModelId       = new URLSearchParams(window.location.search).get('sh
 // This is deliberately fixed in the published viewer. It keeps links clean
 // (`?share=<id>`) and prevents a link from selecting an arbitrary file source.
 const _sharedModelApi      = 'https://drakon3d-share.lingering-voice-78d0.workers.dev';
+const _viewerHomeUrl       = 'https://viewer.drakon3d.com/';
 
 if (_hasPlainPackage || _hasEncryptedPackage || _sharedModelId) {
   // This is a delivered review artifact, not an authoring session — hide the
@@ -174,15 +175,30 @@ if (_hasPlainPackage || _hasEncryptedPackage || _sharedModelId) {
       await loadSession(file);
     } catch (e) {
       console.error('[App] Failed to load embedded package:', e);
+      // An expired (or already-cleaned-up) link must not leave its recipient
+      // on a confusing empty viewer. Password failures deliberately stay on
+      // this page so the recipient can enter the password supplied by sender.
+      if (_sharedModelId && e instanceof _ShareLinkError && (e.status === 404 || e.status === 410)) {
+        window.location.replace(_viewerHomeUrl);
+        return;
+      }
       if (_sharedModelId) alert(`Could not open this Drakon share link. ${e.message || ''}`.trim());
       document.getElementById('loading')?.classList.add('hidden');
     }
   })();
 }
 
+class _ShareLinkError extends Error {
+  constructor(message, status) {
+    super(message);
+    this.name = 'ShareLinkError';
+    this.status = status;
+  }
+}
+
 async function _loadSharedModel(shareId, apiOrigin) {
   if (!/^[A-Za-z0-9_-]{24}$/.test(shareId) || !apiOrigin) {
-    throw new Error('The share link is invalid.');
+    throw new _ShareLinkError('The share link is invalid.', 404);
   }
   let password = null;
   let attempt = 0;
@@ -205,7 +221,7 @@ async function _loadSharedModel(shareId, apiOrigin) {
   if (!response.ok) {
     let message = 'This share link is unavailable.';
     try { message = (await response.json()).error || message; } catch { /* retain fallback */ }
-    throw new Error(message);
+    throw new _ShareLinkError(message, response.status);
   }
   const filename = response.headers.get('X-Drakon-Filename') || 'design.3dm';
   const file = new File([await response.blob()], filename, { type: 'application/octet-stream' });

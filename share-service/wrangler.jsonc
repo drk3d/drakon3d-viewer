@@ -5,12 +5,28 @@
   "compatibility_date": "2026-09-04",
   "workers_dev": true,
   "vars": {
-    "VIEWER_ORIGIN": "https://viewer.drakon3d.com"
+    "VIEWER_ORIGIN": "https://viewer.drakon3d.com",
+    "DRAKON_SHARE_MAX_LIVE_BYTES": "8589934592",
+    "DRAKON_SHARE_LIMITS_JSON": "{\"trial\":{\"active\":3,\"total\":3},\"educational\":{\"active\":10},\"lab\":{\"active\":10},\"commercial\":{\"active\":10},\"commercialPro\":{\"active\":30}}"
   },
   "r2_buckets": [
     {
       "binding": "SHARES",
       "bucket_name": "drakon3d-shares"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "SHARE_QUOTAS",
+        "class_name": "ShareQuotaCoordinator"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "share-quota-v1",
+      "new_sqlite_classes": ["ShareQuotaCoordinator"]
     }
   ]
 }
