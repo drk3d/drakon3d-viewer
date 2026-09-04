@@ -1268,27 +1268,18 @@ input[type="range"]::-moz-range-thumb {
   opacity: 1;
 }
 .drakon-brand {
-  display: inline-flex;
-  flex-direction: column;
-  gap: 2px;
-  color: var(--text);
-  text-decoration: none;
-  letter-spacing: 0.1em;
-  transition: color 0.15s ease;
+  display: inline-block;
+  line-height: 0;
+  max-width: 100%;
 }
-.drakon-brand:hover { color: var(--primary); }
-.drakon-brand-name {
-  font-size: 1rem;
-  font-weight: 750;
-  line-height: 1;
+.drakon-brand-image {
+  display: block;
+  width: min(185px, 100%);
+  height: auto;
+  opacity: 0.88;
+  transition: opacity 0.15s ease, filter 0.15s ease;
 }
-.drakon-brand-name span { color: var(--primary); }
-.drakon-brand-product {
-  color: var(--text-2);
-  font-size: 0.56rem;
-  font-weight: 700;
-  letter-spacing: 0.24em;
-}
+.drakon-brand:hover .drakon-brand-image { opacity: 1; filter: brightness(1.08); }
 .footer-logo.dark-only {
   display: none;
 }
@@ -1865,40 +1856,6 @@ body.dark-theme .footer-logo.light-only {
   display: block;
 }
 
-/* ── Interactive watermark (Floating bottom right) ── */
-#drakon3d-watermark {
-  position: fixed;
-  bottom: 16px;
-  right: 20px;
-  font-size: 0.68rem; /* 조금 더 작고 컴팩트하게 조율 */
-  font-weight: 500;
-  letter-spacing: 0.05em;
-  color: rgba(255, 255, 255, 0.55); /* 어두운 배경에서 한층 더 선명하고 밝은 기본 색상 */
-  z-index: 5;
-  pointer-events: auto; /* Clickable link */
-  font-family: 'Noto Sans', sans-serif;
-  user-select: none;
-  transition: color 0.2s;
-}
-#drakon3d-watermark a {
-  color: inherit;
-  text-decoration: none;
-  cursor: pointer;
-  transition: color 0.2s;
-}
-#drakon3d-watermark a:hover {
-  text-decoration: underline;
-}
-#drakon3d-watermark:hover {
-  color: rgba(255, 255, 255, 0.95); /* 어두운 배경에서 호버 시 매우 밝고 선명한 흰색 */
-}
-:not([data-theme="dark"]) #drakon3d-watermark:hover {
-  color: rgba(0, 0, 0, 0.85) !important; /* 밝은 배경에서 호버 시 더욱 또렷한 검은색 */
-}
-body.light-theme #drakon3d-watermark:hover {
-  color: rgba(0, 0, 0, 0.85) !important; /* 밝은 배경에서 호버 시 더욱 또렷한 검은색 */
-}
-
 /* ── Light Mode Color Overrides ── */
 /* ── Light Mode Color Overrides (Prefers & Class based) ── */
 @media (prefers-color-scheme: light) {
@@ -1956,7 +1913,6 @@ body.light-theme #drakon3d-watermark:hover {
   :not([data-theme="dark"]) .sliders-grid input[type="range"] { background: rgba(0, 0, 0, 0.08) !important; }
   :not([data-theme="dark"]) .layer-editable-name { color: #1f2937 !important; }
   :not([data-theme="dark"]) .layer-editable-name:focus { background: rgba(0, 0, 0, 0.04) !important; }
-  :not([data-theme="dark"]) #drakon3d-watermark { color: rgba(0, 0, 0, 0.45) !important; }
   :not([data-theme="dark"]) #empty-state { color: #6b7280 !important; }
 
   /* Popups premium white styling */
@@ -2077,7 +2033,6 @@ body.light-theme .setting-item-panel input[type="checkbox"]:not(:checked) { back
 body.light-theme .sliders-grid input[type="range"] { background: rgba(0, 0, 0, 0.08) ; }
 body.light-theme .layer-editable-name { color: #1f2937 ; }
 body.light-theme .layer-editable-name:focus { background: rgba(0, 0, 0, 0.04) ; }
-body.light-theme #drakon3d-watermark { color: rgba(0, 0, 0, 0.45) ; }
 body.light-theme #empty-state { color: #6b7280 ; }
 body.light-theme #loading {
   background: rgba(255, 255, 255, 0.75) ;
@@ -2868,21 +2823,6 @@ body.dark-theme .bottom-tools-bar {
 /* Clear contrast borders for color swatches in light mode */
 body.light-theme .color-circle {
   border: 2px solid rgba(0, 0, 0, 0.12) !important;
-}
-
-/* ── Mobile Responsive Layout adjustments (Prevent watermark overlap) ── */
-@media (max-width: 560px) {
-  .bottom-tools-bar {
-    bottom: 52px !important; /* Push up slightly to prevent intersection */
-  }
-  #drakon3d-watermark {
-    bottom: 18px !important;
-    right: auto !important;
-    left: 50% !important;
-    transform: translateX(-50%) !important;
-    letter-spacing: 0.05em;
-    text-align: center;
-  }
 }
 
 /* ── Dynamic Bottom Bar Contrast Adjustments ── */
