@@ -21,7 +21,7 @@ export default {
 
     const match = url.pathname.match(/^\/v1\/shares\/([A-Za-z0-9_-]{24})$/);
     if (match && request.method === 'GET') {
-      return getShare(match[1], env, origin, ctx);
+      return getShare(match[1], request, env, origin, ctx);
     }
 
     return json({ error: 'Not found.' }, 404, cors(origin, env));
@@ -78,7 +78,7 @@ function shareUrl(request, env, id) {
   return viewerUrl.toString();
 }
 
-async function getShare(id, env, origin, ctx) {
+async function getShare(id, request, env, origin, ctx) {
   const key = `shares/${id}.3dm`;
   const object = await env.SHARES.get(key);
   if (!object) return json({ error: 'This share link is unavailable.' }, 404, cors(origin, env));
@@ -181,7 +181,7 @@ function readPassword(request) {
     if (bytes.length < MIN_PASSWORD_BYTES || bytes.length > MAX_PASSWORD_BYTES) {
       return { error: `Share passwords must be between ${MIN_PASSWORD_BYTES} and ${MAX_PASSWORD_BYTES} bytes.` };
     }
-    return { value: new TextDecoder('utf-8', { fatal: true }).decode(bytes) };
+    return { value: new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(bytes) };
   } catch {
     return { error: 'The share password is invalid.' };
   }
