@@ -136,7 +136,9 @@ animate();
 const _hasPlainPackage     = typeof window.__RHV_PACKAGE__ === 'string' && window.__RHV_PACKAGE__.length;
 const _hasEncryptedPackage = window.__RHV_PACKAGE_ENCRYPTED__ && typeof window.__RHV_PACKAGE_ENCRYPTED__.data === 'string';
 const _sharedModelId       = new URLSearchParams(window.location.search).get('share');
-const _sharedModelApi      = getSharedModelApiOrigin();
+// This is deliberately fixed in the published viewer. It keeps links clean
+// (`?share=<id>`) and prevents a link from selecting an arbitrary file source.
+const _sharedModelApi      = 'https://drakon3d-share.lingering-voice-78d0.workers.dev';
 
 if (_hasPlainPackage || _hasEncryptedPackage || _sharedModelId) {
   // This is a delivered review artifact, not an authoring session — hide the
@@ -178,29 +180,28 @@ if (_hasPlainPackage || _hasEncryptedPackage || _sharedModelId) {
   })();
 }
 
-function getSharedModelApiOrigin() {
-  const value = new URLSearchParams(window.location.search).get('api');
-  if (!value) return null;
-  try {
-    const origin = new URL(value);
-    // Shares are issued only by the Drakon Cloudflare Worker. Limiting the
-    // bootstrap source prevents an arbitrary link from turning the viewer into
-    // a general cross-origin file fetcher.
-    if (origin.protocol !== 'https:' || !origin.hostname.endsWith('.workers.dev')) return null;
-    return origin.origin;
-  } catch {
-    return null;
-  }
-}
-
 async function _loadSharedModel(shareId, apiOrigin) {
   if (!/^[A-Za-z0-9_-]{24}$/.test(shareId) || !apiOrigin) {
     throw new Error('The share link is invalid.');
   }
-  const response = await fetch(`${apiOrigin}/v1/shares/${encodeURIComponent(shareId)}`, {
-    cache: 'no-store',
-    credentials: 'omit',
-  });
+  let password = null;
+  let attempt = 0;
+  let response;
+  while (true) {
+    const headers = password == null ? {} : {
+      'X-Drakon-Share-Password': _passwordToBase64Url(password),
+    };
+    response = await fetch(`${apiOrigin}/v1/shares/${encodeURIComponent(shareId)}`, {
+      cache: 'no-store',
+      credentials: 'omit',
+      headers,
+    });
+    if (response.status !== 401) break;
+
+    password = await _promptForSharePassword(attempt > 0);
+    if (password == null) throw new Error('A password is required to open this share link.');
+    attempt += 1;
+  }
   if (!response.ok) {
     let message = 'This share link is unavailable.';
     try { message = (await response.json()).error || message; } catch { /* retain fallback */ }
@@ -210,6 +211,63 @@ async function _loadSharedModel(shareId, apiOrigin) {
   const file = new File([await response.blob()], filename, { type: 'application/octet-stream' });
   if (filename.toLowerCase().endsWith('.rhv')) await loadSession(file);
   else await handleFile(file, rhinoLoader, gltfLoader);
+}
+
+function _passwordToBase64Url(password) {
+  const bytes = new TextEncoder().encode(password);
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function _promptForSharePassword(isRetry) {
+  document.getElementById('loading')?.classList.add('hidden');
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    Object.assign(overlay.style, {
+      position: 'fixed', inset: '0', zIndex: '10000', display: 'grid',
+      placeItems: 'center', padding: '20px', background: 'rgba(0, 0, 0, 0.52)',
+    });
+    const panel = document.createElement('form');
+    Object.assign(panel.style, {
+      width: 'min(360px, 100%)', boxSizing: 'border-box', padding: '24px', borderRadius: '12px',
+      background: '#1b1b1d', color: '#f3f3f3', boxShadow: '0 18px 60px rgba(0,0,0,.45)',
+      font: '14px/1.4 system-ui, sans-serif',
+    });
+    const title = document.createElement('div');
+    title.textContent = 'Password-protected Drakon share';
+    title.style.cssText = 'font-size:17px;font-weight:600;margin-bottom:8px';
+    const message = document.createElement('div');
+    message.textContent = isRetry ? 'That password was not accepted. Try again.' : 'Enter the password supplied by the sender.';
+    message.style.cssText = 'color:#c7c7c9;margin-bottom:16px';
+    const input = document.createElement('input');
+    input.type = 'password';
+    input.autocomplete = 'current-password';
+    input.placeholder = 'Password';
+    input.required = true;
+    input.style.cssText = 'width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #5a5a5d;border-radius:7px;background:#101011;color:#fff;font:inherit';
+    const actions = document.createElement('div');
+    actions.style.cssText = 'display:flex;justify-content:flex-end;gap:10px;margin-top:18px';
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.textContent = 'Cancel';
+    cancel.style.cssText = 'padding:8px 12px;border:0;border-radius:6px;background:#444;color:#fff;font:inherit;cursor:pointer';
+    const submit = document.createElement('button');
+    submit.type = 'submit';
+    submit.textContent = 'Open viewer';
+    submit.style.cssText = 'padding:8px 12px;border:0;border-radius:6px;background:#efefef;color:#181819;font:inherit;font-weight:600;cursor:pointer';
+    const finish = value => { overlay.remove(); resolve(value); };
+    cancel.addEventListener('click', () => finish(null));
+    panel.addEventListener('submit', event => {
+      event.preventDefault();
+      if (input.value) finish(input.value);
+    });
+    actions.append(cancel, submit);
+    panel.append(title, message, input, actions);
+    overlay.append(panel);
+    document.body.append(overlay);
+    input.focus();
+  });
 }
 
 // Base64 → bytes.

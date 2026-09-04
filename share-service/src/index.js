@@ -1,6 +1,11 @@
 const MAX_MODEL_BYTES = 100 * 1024 * 1024;
 const SHARE_TTL_HOURS = 14 * 24;
 const SHARE_ID_BYTES = 18;
+const PASSWORD_SALT_BYTES = 16;
+const PASSWORD_HASH_BYTES = 32;
+const PASSWORD_ITERATIONS = 600000;
+const MIN_PASSWORD_BYTES = 8;
+const MAX_PASSWORD_BYTES = 128;
 
 export default {
   async fetch(request, env, ctx) {
@@ -40,9 +45,13 @@ async function createShare(request, env, origin) {
   }
 
   const filename = safeFilename(request.headers.get('X-Drakon-Filename'));
+  const password = readPassword(request);
+  if (password.error) return json({ error: password.error }, 400, cors(origin, env));
+
   const now = new Date();
   const expiresAt = new Date(now.getTime() + SHARE_TTL_HOURS * 60 * 60 * 1000);
   const id = randomId();
+  const passwordMetadata = password.value ? await passwordProtectionMetadata(password.value) : {};
 
   await env.SHARES.put(`shares/${id}.3dm`, request.body, {
     httpMetadata: {
@@ -52,6 +61,7 @@ async function createShare(request, env, origin) {
     customMetadata: {
       expiresAt: expiresAt.toISOString(),
       filename,
+      ...passwordMetadata,
     },
   });
 
@@ -65,10 +75,6 @@ async function createShare(request, env, origin) {
 function shareUrl(request, env, id) {
   const viewerUrl = new URL(requiredViewerOrigin(env));
   viewerUrl.searchParams.set('share', id);
-  // The API endpoint is public but account-specific. Carrying it in the link
-  // lets the static GitHub Pages viewer open shares without embedding a
-  // Cloudflare account identifier in its source.
-  viewerUrl.searchParams.set('api', new URL(request.url).origin);
   return viewerUrl.toString();
 }
 
@@ -81,6 +87,13 @@ async function getShare(id, env, origin, ctx) {
   if (!Number.isFinite(expiresAt) || Date.now() >= expiresAt) {
     ctx.waitUntil(env.SHARES.delete(key));
     return json({ error: 'This share link has expired.' }, 410, cors(origin, env));
+  }
+
+  if (object.customMetadata?.passwordHash) {
+    const password = readPassword(request);
+    if (password.error || !password.value || !await isCorrectPassword(password.value, object.customMetadata)) {
+      return json({ error: 'This share link is password protected.' }, 401, cors(origin, env));
+    }
   }
 
   const headers = new Headers(cors(origin, env));
@@ -98,7 +111,7 @@ function preflight(origin, env) {
   if (!isViewerOrigin(origin, env)) return new Response(null, { status: 403 });
   const headers = cors(origin, env);
   headers.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  headers.set('Access-Control-Allow-Headers', 'Content-Type');
+  headers.set('Access-Control-Allow-Headers', 'Content-Type, X-Drakon-Share-Password');
   headers.set('Access-Control-Max-Age', '86400');
   return new Response(null, { status: 204, headers });
 }
@@ -154,6 +167,77 @@ function randomId() {
   let binary = '';
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function readPassword(request) {
+  const encoded = request.headers.get('X-Drakon-Share-Password');
+  if (!encoded) return { value: null };
+  if (!/^[A-Za-z0-9_-]{1,512}$/.test(encoded)) {
+    return { error: 'The share password is invalid.' };
+  }
+
+  try {
+    const bytes = fromBase64Url(encoded);
+    if (bytes.length < MIN_PASSWORD_BYTES || bytes.length > MAX_PASSWORD_BYTES) {
+      return { error: `Share passwords must be between ${MIN_PASSWORD_BYTES} and ${MAX_PASSWORD_BYTES} bytes.` };
+    }
+    return { value: new TextDecoder('utf-8', { fatal: true }).decode(bytes) };
+  } catch {
+    return { error: 'The share password is invalid.' };
+  }
+}
+
+async function passwordProtectionMetadata(password) {
+  const salt = crypto.getRandomValues(new Uint8Array(PASSWORD_SALT_BYTES));
+  const hash = await derivePasswordHash(password, salt, PASSWORD_ITERATIONS);
+  return {
+    passwordSalt: toBase64Url(salt),
+    passwordHash: toBase64Url(hash),
+    passwordIterations: String(PASSWORD_ITERATIONS),
+  };
+}
+
+async function isCorrectPassword(password, metadata) {
+  const iterations = Number.parseInt(metadata.passwordIterations || '', 10);
+  if (!Number.isSafeInteger(iterations) || iterations < 100000 || iterations > 1000000) return false;
+
+  try {
+    const expected = fromBase64Url(metadata.passwordHash);
+    const salt = fromBase64Url(metadata.passwordSalt);
+    const actual = await derivePasswordHash(password, salt, iterations);
+    return constantTimeBytesEqual(actual, expected);
+  } catch {
+    return false;
+  }
+}
+
+async function derivePasswordHash(password, salt, iterations) {
+  const passwordKey = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits'],
+  );
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', hash: 'SHA-256', salt, iterations }, passwordKey, PASSWORD_HASH_BYTES * 8,
+  );
+  return new Uint8Array(bits);
+}
+
+function constantTimeBytesEqual(left, right) {
+  if (left.length !== right.length) return false;
+  let difference = 0;
+  for (let index = 0; index < left.length; index += 1) difference |= left[index] ^ right[index];
+  return difference === 0;
+}
+
+function toBase64Url(bytes) {
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function fromBase64Url(value) {
+  const padding = '='.repeat((4 - (value.length % 4)) % 4);
+  const binary = atob(value.replace(/-/g, '+').replace(/_/g, '/') + padding);
+  return Uint8Array.from(binary, character => character.charCodeAt(0));
 }
 
 function json(data, status = 200, headers = undefined) {
