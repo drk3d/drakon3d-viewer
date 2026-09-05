@@ -445,8 +445,12 @@ export function updatePropertiesPanel() {
     const getMeshRenderedColor = (o) => {
       const li = (o.userData.attributes?.layerIndex) ?? 0;
       const layer = S.parsedLayers.find(l => l.index === li);
-      // Priority: object-level customMaterial > layer customMaterial (when ByLayer) > rendered/original material
+      // Priority: Viewer object override > imported object material > layer
+      // material (when ByLayer) > rendered/original material.
       if (o.userData.customMaterial?.color) return o.userData.customMaterial.color;
+      if (!o.userData.isMaterialByLayer && o.userData.rhinoObjectMaterial?.color) {
+        return o.userData.rhinoObjectMaterial.color;
+      }
       if (o.userData.isMaterialByLayer && !o.userData.customMaterial && layer?.customMaterial?.color) {
         return layer.customMaterial.color;
       }
@@ -472,8 +476,12 @@ export function updatePropertiesPanel() {
       const li = (o.userData.attributes?.layerIndex) ?? 0;
       const layer = S.parsedLayers.find(l => l.index === li);
       const orig = o.userData.renderedMaterial || o.userData.originalMaterial;
-      // Priority: object customMaterial > layer customMaterial (ByLayer) > rendered/original
+      // Priority: Viewer object override > imported object material > layer
+      // material (when ByLayer) > rendered/original material.
       if (o.userData.customMaterial && o.userData.customMaterial[prop] !== undefined) return o.userData.customMaterial[prop];
+      if (!o.userData.isMaterialByLayer && o.userData.rhinoObjectMaterial?.[prop] !== undefined) {
+        return o.userData.rhinoObjectMaterial[prop];
+      }
       if (o.userData.isMaterialByLayer && !o.userData.customMaterial && layer?.customMaterial?.[prop] !== undefined) return layer.customMaterial[prop];
       return orig?.[prop] ?? def;
     };
@@ -1249,11 +1257,12 @@ export function ensureCustomMaterial(obj) {
         mapName:    lcm.mapName    ?? (orig?.map?.name || (orig?.map ? 'Texture' : 'None'))
       };
     } else {
+      const rhino = obj.userData.rhinoObjectMaterial;
       obj.userData.customMaterial = {
-        color:      orig?.color ? ('#' + orig.color.getHexString()) : '#ffffff',
-        roughness:  orig?.roughness ?? 0.5,
-        metalness:  orig?.metalness ?? 0.0,
-        opacity:    orig?.opacity   ?? 1.0,
+        color:      rhino?.color ?? (orig?.color ? ('#' + orig.color.getHexString()) : '#ffffff'),
+        roughness:  rhino?.roughness ?? orig?.roughness ?? 0.5,
+        metalness:  rhino?.metalness ?? orig?.metalness ?? 0.0,
+        opacity:    rhino?.opacity ?? orig?.opacity ?? 1.0,
         mapTexture: orig?.map ?? null,
         mapName:    orig?.map?.name || (orig?.map ? 'Texture' : 'None')
       };

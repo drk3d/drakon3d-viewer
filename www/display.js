@@ -571,9 +571,13 @@ export function applyDisplayMode() {
 
       case 'rendered': {
         const base = child.userData.renderedMaterial || orig;
-        // Resolve the effective custom material first — it decides shareability.
-        // Priority: object-level customMaterial > layer customMaterial (when ByLayer) > none
+        // Resolve the effective material first — it decides shareability.
+        // Priority: Viewer object override > imported object material > layer
+        // material (when ByLayer) > none.
         let effectiveCustom = child.userData.customMaterial;
+        if (!effectiveCustom && !child.userData.isMaterialByLayer) {
+          effectiveCustom = child.userData.rhinoObjectMaterial || null;
+        }
         // Switching an object to ByLayer has to *detach* it from the material it
         // carried, not just stop overriding one — in Rhino the object then uses the
         // layer's material and nothing of its own survives. Its base material here is
@@ -1218,7 +1222,10 @@ function toPhysical(standard) {
 
 export function applyCustomToMaterial(mat, custom) {
   if (!custom || !mat) return;
-  if (custom.color     !== undefined) mat.color?.set(custom.color);
+  // A Rhino material can have no usable colour channel (for example an older
+  // reflective material with only a shine value). Keep the loader's existing
+  // colour in that case rather than asking Three.js to set a colour from null.
+  if (custom.color != null) mat.color?.set(custom.color);
   if (custom.roughness !== undefined && mat.roughness !== undefined) mat.roughness = custom.roughness;
   if (custom.metalness !== undefined && mat.metalness !== undefined) mat.metalness = custom.metalness;
   if (custom.opacity   !== undefined) {

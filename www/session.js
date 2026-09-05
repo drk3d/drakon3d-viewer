@@ -215,7 +215,8 @@ function restoreTextureMimeTypes(originals) {
 const ROOT_USERDATA_STRIP   = ['materials', 'layers', 'groups', 'settings', 'warnings'];
 const ROOT_ONLY_STRIP       = ['objectType'];
 const MESH_USERDATA_STRIP   = ['originalMaterial', 'renderedMaterial',
-                                'shadedMaterial', 'materialColor'];
+                                'shadedMaterial', 'materialColor',
+                                'rhinoObjectMaterial'];
 
 function stripExportUserData(model) {
   const restore = []; // { obj, key, value }
@@ -411,7 +412,13 @@ async function buildSessionBuffer(customFileName = null) {
         m.envMap = null;
         m.envMapIntensity = 1.0;
 
-        applyCustomToMaterial(m, child.userData.customMaterial);
+        // A direct legacy Rhino material is restored by the Viewer from its
+        // parsed material table. Bake that same conversion into an exported
+        // session so its gold/metal finish survives the .rhv round trip.
+        const importedObjectMaterial = !child.userData.isMaterialByLayer
+          ? child.userData.rhinoObjectMaterial
+          : null;
+        applyCustomToMaterial(m, child.userData.customMaterial || importedObjectMaterial);
         child.material = m;
       }
     });

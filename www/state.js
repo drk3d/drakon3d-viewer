@@ -34,6 +34,10 @@ export const S = {
 
   // ── Layers ───────────────────────────────────────────────────────────────
   parsedLayers:    [],
+  // Rhino material table, keyed by its document material index.  The Viewer
+  // uses this to supplement older 3DM materials that Three.js cannot fully
+  // translate (notably object-assigned metals).
+  parsedMaterials: {},
   layerNodeByIndex: {},
 
   // ── Interaction ──────────────────────────────────────────────────────────

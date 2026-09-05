@@ -839,6 +839,7 @@ export async function preprocess3dm(file, skipLayerParse) {
       } catch (fe) { console.warn('[pre] file info err:', fe); }
 
       S.parsedLayers = [];
+      S.parsedMaterials = {};
       try {
         // ── Build material lookup table from doc.materials() ─────────────────
         const matLookup = {};
@@ -862,29 +863,34 @@ export async function preprocess3dm(file, skipLayerParse) {
 
               // Extract base color — PBR base color may be white (#ffffff)
               // so we preserve white. Only skip pure black (0,0,0) which means "unset".
+              //
+              // Older Rhino render materials frequently leave diffuseColor black
+              // and expose their actual appearance through previewColor or
+              // reflectionColor instead.  This is especially common for metals.
+              // Prefer the real diffuse channel, then use those explicit material
+              // colours as a faithful legacy fallback.
               let mColor = null;
+              const colorToHex = (c, scale = 255) => {
+                if (!c) return null;
+                const r = Math.round((c.r ?? c.R ?? 0) * scale);
+                const g = Math.round((c.g ?? c.G ?? 0) * scale);
+                const b = Math.round((c.b ?? c.B ?? 0) * scale);
+                const isUnset = r < 3 && g < 3 && b < 3;
+                return isUnset
+                  ? null
+                  : `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
+              };
               if (isPbrSupported && pbr) {
                 try {
-                  const bc = pbr.baseColor;
-                  if (bc) {
-                    const r = Math.round((bc.r ?? bc.R ?? 0) * 255);
-                    const g = Math.round((bc.g ?? bc.G ?? 0) * 255);
-                    const b = Math.round((bc.b ?? bc.B ?? 0) * 255);
-                    const isUnset = r < 3 && g < 3 && b < 3;
-                    if (!isUnset) mColor = `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
-                  }
+                  mColor = colorToHex(pbr.baseColor, 255);
                 } catch {}
-              } else {
+              }
+              if (!mColor) {
                 try {
-                  const dc = m.diffuseColor;
-                  if (dc) {
-                    const r = dc.r ?? dc.R ?? 0;
-                    const g = dc.g ?? dc.G ?? 0;
-                    const b = dc.b ?? dc.B ?? 0;
-                    // Only skip black (truly unset — Rhino default color)
-                    const isUnset = r < 3 && g < 3 && b < 3;
-                    if (!isUnset) mColor = `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
-                  }
+                  mColor = colorToHex(m.diffuseColor)
+                    || colorToHex(m.previewColor)
+                    || colorToHex(m.reflectionColor)
+                    || colorToHex(m.specularColor);
                 } catch {}
               }
 
@@ -954,6 +960,9 @@ export async function preprocess3dm(file, skipLayerParse) {
             try { mats.delete(); } catch {}
           }
         } catch (me) { console.warn('[pre] material table parse err:', me); }
+        // Keep the material table beyond layer parsing: object-level Rhino
+        // materials are resolved later, after Three.js has created the meshes.
+        S.parsedMaterials = matLookup;
 
         const layers = doc.layers();
         for (let i = 0; i < layers.count; i++) {
@@ -2319,6 +2328,18 @@ export function postProcessModel(model, addEdgesFlag, colorsAreSRGBStoredAsLinea
     child.userData.isMaterialByLayer = matFromLayer && !child.userData.customMaterial;
     // Preserve the original Rhino MaterialSource so Reset can restore it.
     child.userData.originalIsMaterialByLayer = matFromLayer;
+    // Three.js selects a direct Rhino material, but its legacy path does not
+    // translate shine/reflectivity into metalness and roughness.  Attach the
+    // parsed record so Rendered mode can apply the same conversion used for
+    // materials assigned through a layer.  It is deliberately separate from
+    // customMaterial, which represents an edit made inside the Viewer.
+    const objectMaterialIndex = attrs.materialIndex;
+    const objectMaterial = !matFromLayer
+      && typeof objectMaterialIndex === 'number'
+      && objectMaterialIndex >= 0
+      ? S.parsedMaterials?.[objectMaterialIndex]
+      : null;
+    child.userData.rhinoObjectMaterial = objectMaterial ? { ...objectMaterial } : null;
 
     // Helper: extract RGB from Color object (handles both {r,g,b} and {R,G,B})
     const colRGB = (c) => c && {
@@ -2481,6 +2502,7 @@ export async function handleFile(file, rhinoLoader, gltfLoader, fileHandle = nul
   resetSettingsToDefault();
   clearCurrentModel();
   S.modelUnit = 'Unknown';
+  S.parsedMaterials = {};
   showLoading('Reading file…');
   document.getElementById('empty-state')?.classList.add('hidden');
 
