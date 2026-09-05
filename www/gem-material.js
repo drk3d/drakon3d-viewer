@@ -43,7 +43,7 @@ import {
 const GEMSTONE_PATTERN = /\b(?:almandite|amethyst|aquamarine|aventurine|chalcedony|citrine|diamond|emerald|garnet|hiddenite|kunzite|precious\s+beryl|quartz|ruby|sapphire|topaz)\b/i;
 const GEM_REFLECTION_URL = typeof __DRAKON_GEM_REFLECTION_URL__ !== 'undefined'
   ? __DRAKON_GEM_REFLECTION_URL__
-  : './assets/diamond-top-view.png';
+  : './assets/diamond-top-view.png?v=20260906-diamond-test';
 const GEM_REFLECTION_BLUR_PX = 16;
 
 const GEM_VERTEX_SHADER = /* glsl */ `
