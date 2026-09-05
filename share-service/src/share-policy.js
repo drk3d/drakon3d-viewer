@@ -24,7 +24,8 @@ const DEFAULT_LIMITS = Object.freeze({
 });
 
 export const DEFAULT_MAX_MODEL_BYTES = 100 * 1024 * 1024;
-export const DEFAULT_SHARE_TTL_HOURS = 14 * 24;
+export const DEFAULT_SHARE_TTL_DAYS = 7;
+export const MAX_SHARE_TTL_DAYS = 14;
 // The 8 GiB guard leaves practical headroom under the R2 free-tier storage
 // allowance and is a service-wide protection in addition to each licence cap.
 export const DEFAULT_MAX_LIVE_BYTES = 8 * 1024 * 1024 * 1024;
@@ -48,7 +49,12 @@ export function readShareConfiguration(env) {
       1 * 1024 * 1024,
       DEFAULT_MAX_MODEL_BYTES,
     ),
-    ttlHours: readInteger(env.DRAKON_SHARE_TTL_HOURS, DEFAULT_SHARE_TTL_HOURS, 1, 31 * 24),
+    defaultTtlDays: readInteger(
+      env.DRAKON_SHARE_DEFAULT_TTL_DAYS,
+      DEFAULT_SHARE_TTL_DAYS,
+      1,
+      MAX_SHARE_TTL_DAYS,
+    ),
     maxLiveBytes: readInteger(
       env.DRAKON_SHARE_MAX_LIVE_BYTES,
       DEFAULT_MAX_LIVE_BYTES,

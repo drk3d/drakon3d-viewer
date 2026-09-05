@@ -1,4 +1,9 @@
-import { readShareConfiguration, relationshipId, resolveLicenseSharePolicy } from './share-policy.js';
+import {
+  MAX_SHARE_TTL_DAYS,
+  readShareConfiguration,
+  relationshipId,
+  resolveLicenseSharePolicy,
+} from './share-policy.js';
 import { ShareQuotaCoordinator } from './share-quota-coordinator.js';
 
 const SHARE_ID_BYTES = 18;
@@ -57,8 +62,11 @@ async function createShare(request, env, origin) {
   const password = readPassword(request);
   if (password.error) return json({ error: password.error }, 400, cors(origin, env));
 
+  const lifetime = readShareLifetime(request, configuration.defaultTtlDays);
+  if (lifetime.error) return json({ error: lifetime.error }, 400, cors(origin, env));
+
   const filename = safeFilename(request.headers.get('X-Drakon-Filename'));
-  const expiresAt = new Date(Date.now() + configuration.ttlHours * 60 * 60 * 1000);
+  const expiresAt = new Date(Date.now() + lifetime.days * 24 * 60 * 60 * 1000);
   const id = randomId();
   const licenseKey = await sha256Hex(authorization.license.id);
   const reservation = await quotaRequest(env, {
@@ -123,6 +131,22 @@ function shareUrl(env, id) {
   const viewerUrl = new URL(requiredViewerOrigin(env));
   viewerUrl.searchParams.set('share', id);
   return viewerUrl.toString();
+}
+
+function readShareLifetime(request, defaultDays) {
+  const requested = request.headers.get('X-Drakon-Expires-In-Days');
+  if (requested == null || requested.trim() === '') return { days: defaultDays };
+
+  // This is enforced on the Worker, not merely in the Rhino command, so a
+  // modified plug-in cannot create a longer-lived public share.
+  if (!/^\d{1,2}$/.test(requested.trim())) {
+    return { error: `Share expiry must be a whole number between 1 and ${MAX_SHARE_TTL_DAYS} days.` };
+  }
+  const days = Number.parseInt(requested, 10);
+  if (days < 1 || days > MAX_SHARE_TTL_DAYS) {
+    return { error: `Share expiry must be between 1 and ${MAX_SHARE_TTL_DAYS} days.` };
+  }
+  return { days };
 }
 
 async function createThumbnail(id, request, env, origin) {

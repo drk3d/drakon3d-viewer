@@ -17,9 +17,11 @@ Rhino plug-in.
 | Commercial Pro | 30 active links |
 | Expired, suspended, unsupported or offline | No new links |
 
-Links expire after 14 days. They remain available for their scheduled lifetime
-if a licence later expires; the user simply cannot create a new link. The
-viewer redirects expired or unavailable share links to
+Links expire after **7 days by default**. At link creation, `DkShare` lets the
+user choose any whole number of days from **1 to 14**. The service enforces the
+14-day maximum itself, so it cannot be bypassed by changing the plug-in. Links
+remain available for their scheduled lifetime if a licence later expires; the
+user simply cannot create a new link. The viewer redirects expired or unavailable share links to
 `https://viewer.drakon3d.com/`.
 
 The service retains an absolute 100 MB model limit and a global 8 GiB live-data
