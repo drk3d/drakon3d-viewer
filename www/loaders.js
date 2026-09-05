@@ -854,7 +854,19 @@ export async function preprocess3dm(file, skipLayerParse) {
               let isPbrSupported = false;
               let pbr = null;
               try {
-                const pb = m.physicallyBased();
+                let pb = m.physicallyBased();
+                // Rhino's stock jewellery materials can be stored in the legacy
+                // material format even though Rhino itself renders them as PBR.
+                // In particular, a direct object material then arrives at
+                // Three.js as a pale, non-PBR surface while the same material on
+                // a layer is already PBR. Let Rhino's own converter normalise the
+                // record before we read or later copy it to the clean document.
+                if (pb && !pb.supported && typeof m.toPhysicallyBased === 'function') {
+                  try { pb.delete?.(); } catch {}
+                  pb = null;
+                  m.toPhysicallyBased();
+                  pb = m.physicallyBased();
+                }
                 if (pb && pb.supported) {
                   isPbrSupported = true;
                   pbr = pb;
@@ -955,6 +967,7 @@ export async function preprocess3dm(file, skipLayerParse) {
                   matLookup[ownIdx] = matEntry;
                 }
               } catch {}
+              try { pbr?.delete?.(); } catch {}
               try { m.delete(); } catch {}
             }
             try { mats.delete(); } catch {}
@@ -1133,6 +1146,18 @@ export async function preprocess3dm(file, skipLayerParse) {
       if (srcMaterials) {
         for (let i = 0; i < srcMaterials.count; i++) {
           const mat = srcMaterials.get(i);
+          // Keep the data given to Three.js in the same PBR form used above.
+          // The conversion is Rhino's built-in conversion, not a Viewer colour
+          // guess, so object and layer assignments produce the same material.
+          try {
+            let pbr = mat.physicallyBased();
+            if (pbr && !pbr.supported && typeof mat.toPhysicallyBased === 'function') {
+              try { pbr.delete?.(); } catch {}
+              mat.toPhysicallyBased();
+              pbr = null;
+            }
+            try { pbr?.delete?.(); } catch {}
+          } catch {}
           try { cleanDoc.materials().add(mat); } catch {}
           mat.delete();
         }
