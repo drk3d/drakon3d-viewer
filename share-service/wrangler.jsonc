@@ -6,6 +6,7 @@
   "workers_dev": true,
   "vars": {
     "VIEWER_ORIGIN": "https://viewer.drakon3d.com",
+    "SHARE_PUBLIC_ORIGIN": "https://share.drakon3d.com",
     "DRAKON_SHARE_MAX_LIVE_BYTES": "8589934592",
     "DRAKON_SHARE_LIMITS_JSON": "{\"trial\":{\"active\":3,\"total\":3},\"educational\":{\"active\":10},\"lab\":{\"active\":10},\"commercial\":{\"active\":10},\"commercialPro\":{\"active\":30}}"
   },

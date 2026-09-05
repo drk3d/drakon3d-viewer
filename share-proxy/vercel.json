@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    {
+      "source": "/s/:shareId",
+      "destination": "https://drakon3d-share.lingering-voice-78d0.workers.dev/s/:shareId"
+    },
+    {
+      "source": "/v1/:path*",
+      "destination": "https://drakon3d-share.lingering-voice-78d0.workers.dev/v1/:path*"
+    }
+  ]
+}

@@ -192,7 +192,12 @@ async function getShareLandingPage(id, request, env, ctx) {
 
   const viewerUrl = new URL(requiredViewerOrigin(env));
   viewerUrl.searchParams.set('share', id);
-  const previewUrl = new URL(`/v1/shares/${id}/thumbnail`, new URL(request.url).origin).toString();
+  // The landing page can be served through the branded reverse proxy even
+  // while the storage Worker continues to run on workers.dev.  Keep the
+  // preview URL on that public host so social-card crawlers receive an image
+  // from the same share address they requested.
+  const publicOrigin = optionalShareOrigin(env) || new URL(request.url).origin;
+  const previewUrl = new URL(`/v1/shares/${id}/thumbnail`, publicOrigin).toString();
   const title = `${safeHtmlTitle(model.customMetadata?.filename || 'Drakon 3D design')} | Drakon 3D Viewer`;
   return new Response(shareLandingHtml(title, previewUrl, viewerUrl.toString()), {
     headers: {
