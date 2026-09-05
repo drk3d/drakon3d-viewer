@@ -142,6 +142,14 @@ const _sharedModelApi      = 'https://drakon3d-share.lingering-voice-78d0.worker
 const _viewerHomeUrl       = 'https://viewer.drakon3d.com/';
 
 if (_hasPlainPackage || _hasEncryptedPackage || _sharedModelId) {
+  // A public Drakon Share is a review session, not an author's workspace.
+  // Keep the regular Viewer unchanged, but do not offer third-party cloud
+  // pickers to a recipient who arrived through a share link.
+  if (_sharedModelId) {
+    ['btn-open-gdrive', 'btn-open-dropbox']
+      .forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+  }
+
   // This is a delivered review artifact, not an authoring session — hide the
   // save/export actions that don't make sense here (and Export Package can't
   // work standalone, since it fetches the viewer shell that only exists on the
