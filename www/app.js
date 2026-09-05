@@ -788,9 +788,15 @@ function init() {
   S.envMaps.sunset  = makeSunsetEnv(pmrem);
   S.envMaps.night   = makeGradientEnv(pmrem, '#020202', '#080808', '#141414', '#020202');
 
-  S.environmentMap = S.envMaps.studio;
+  // Jewelry Studio is loaded asynchronously from the bundled HDR. Reuse the
+  // procedural Studio preset as an immediate fallback so the Viewer never
+  // starts unlit on a slow connection or when opened offline.
+  S.envMaps.jewelry = S.envMaps.studio;
+  S.currentEnvPreset = 'jewelry';
+  S.environmentMap = S.envMaps.jewelry;
   S.scene.environment = S.environmentMap;
   pmrem.dispose();
+  loadJewelryStudioEnvironment();
 
   const bgSel = document.getElementById('bg-type-select');
   if (bgSel) {
@@ -798,7 +804,7 @@ function init() {
     document.getElementById('picker-c1')?.classList.remove('hidden');
     document.getElementById('picker-c2')?.classList.add('hidden');
     document.getElementById('bg-radial-section')?.classList.add('hidden');
-    document.querySelector('.env-preset-btn[data-preset="studio"]')?.classList.add('active');
+    document.querySelector('.env-preset-btn[data-preset="jewelry"]')?.classList.add('active');
   }
 
   initI18n();
@@ -841,6 +847,31 @@ function init() {
   } else {
     hideLoading();
   }
+}
+
+function loadJewelryStudioEnvironment() {
+  const pmrem = new THREE.PMREMGenerator(S.renderer);
+  pmrem.compileEquirectangularShader();
+
+  new RGBELoader().load('./assets/dk-studio.hdr', texture => {
+    const environment = pmrem.fromEquirectangular(texture).texture;
+    texture.dispose();
+    pmrem.dispose();
+    S.envMaps.jewelry = environment;
+
+    if (S.currentEnvPreset === 'jewelry') {
+      S.environmentMap = environment;
+      if (['arctic', 'rendered'].includes(S.currentMode)) {
+        S.scene.environment = environment;
+      }
+      if (document.getElementById('bg-type-select')?.value === 'hdr') {
+        applySceneBackground();
+      }
+    }
+  }, undefined, error => {
+    pmrem.dispose();
+    console.warn('[Environment] Jewelry Studio HDR could not be loaded; using Studio.', error);
+  });
 }
 
 // ── Custom photography studio softbox environment generator ────────────────

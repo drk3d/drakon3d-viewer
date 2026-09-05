@@ -291,7 +291,7 @@ async function buildSessionBuffer(customFileName = null) {
       measurementScale:   parseFloat(document.getElementById('sl-measure-scale')?.value ?? 1.0),
       annotationScale:    parseFloat(document.getElementById('sl-annotation-scale')?.value ?? 1.0),
       hdrRotation:        parseInt(document.getElementById('sl-hdr-rotation')?.value ?? 59),
-      envPreset:          document.getElementById('env-preset-select')?.value || 'studio',
+      envPreset:          document.getElementById('env-preset-select')?.value || 'jewelry',
       bgType:             document.getElementById('bg-type-select')?.value || 'solid',
       bgC1:               document.getElementById('bg-panel-c1')?.value || '#2a2b2f',
       bgC2:               document.getElementById('bg-panel-c2')?.value || '#18181c',
@@ -1006,8 +1006,8 @@ export async function loadSession(file, fileHandle = null) {
           if (hasPreset) {
             envSel.value = s.envPreset;
           } else {
-            console.warn(`[Session Import] Environment preset '${s.envPreset}' is not loaded. Falling back to default 'studio'.`);
-            envSel.value = 'studio';
+            console.warn(`[Session Import] Environment preset '${s.envPreset}' is not loaded. Falling back to default 'jewelry'.`);
+            envSel.value = 'jewelry';
           }
           envSel.dispatchEvent(new Event('change'));
         }

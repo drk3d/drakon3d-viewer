@@ -28,7 +28,7 @@ export const S = {
   // ── Environment ──────────────────────────────────────────────────────────
   environmentMap:    null,
   envMaps:           {},
-  currentEnvPreset:  'studio',
+  currentEnvPreset:  'jewelry',
   envAsBackground:   false,
   hdrRotation:       59,
 
