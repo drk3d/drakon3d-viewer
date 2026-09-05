@@ -29,6 +29,10 @@ export class ShareQuotaCoordinator {
         await this.cleanupExpired(Date.now());
         return quotaJson(await this.reserve(body));
       }
+      if (action === 'status') {
+        await this.cleanupExpired(Date.now());
+        return quotaJson(await this.status(body));
+      }
       if (action === 'confirm') return quotaJson(await this.confirm(body));
       if (action === 'reservePreview') return quotaJson(await this.reservePreview(body));
       if (action === 'releasePreview') return quotaJson(await this.releasePreview(body));
@@ -154,11 +158,21 @@ export class ShareQuotaCoordinator {
       await transaction.put(key, share);
       await transaction.put(storageKey, license);
       await transaction.put(GLOBAL_KEY, global);
-      return { ok: true };
+      return { ok: true, activeCount: license.activeCount, totalExports: license.totalExports };
     });
 
     if (result.ok) await this.scheduleNextAlarm();
     return result;
+  }
+
+  async status(body) {
+    const licenseKeyValue = typeof body?.licenseKey === 'string' && /^[a-f0-9]{64}$/.test(body.licenseKey)
+      ? body.licenseKey
+      : null;
+    if (!licenseKeyValue) return { ok: false, status: 400, error: 'Invalid share status request.' };
+
+    const license = (await this.ctx.storage.get(licenseKey(licenseKeyValue))) || emptyLicenseState();
+    return { ok: true, activeCount: license.activeCount, totalExports: license.totalExports };
   }
 
   async reservePreview(body) {

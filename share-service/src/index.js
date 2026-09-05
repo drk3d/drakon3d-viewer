@@ -24,6 +24,7 @@ export default {
 
     if (request.method === 'OPTIONS') return preflight(origin, env);
     if (url.pathname === '/health') return json({ ok: true });
+    if (url.pathname === '/v1/share-status' && request.method === 'GET') return getShareStatus(request, env, origin);
     if (url.pathname === '/v1/shares' && request.method === 'POST') return createShare(request, env, origin);
 
     const match = url.pathname.match(/^\/v1\/shares\/([A-Za-z0-9_-]{24})$/);
@@ -89,6 +90,7 @@ async function createShare(request, env, origin) {
     return json({ error: 'Password-protected shares are temporarily unavailable. Please try again shortly.' }, 503, cors(origin, env));
   }
   let stored = false;
+  let confirmed = null;
   try {
     const storedObject = await env.SHARES.put(`shares/${id}.3dm`, request.body, {
       httpMetadata: {
@@ -111,7 +113,7 @@ async function createShare(request, env, origin) {
     }
     stored = true;
 
-    const confirmed = await quotaRequest(env, { action: 'confirm', shareId: id });
+    confirmed = await quotaRequest(env, { action: 'confirm', shareId: id });
     if (!confirmed.ok) throw new Error('The share service could not confirm the uploaded model.');
   } catch (error) {
     // A failed cleanup is still safe: the Durable Object removes an abandoned
@@ -121,7 +123,37 @@ async function createShare(request, env, origin) {
     return json({ error: 'The shared model could not be stored. Please try again.' }, 503, cors(origin, env));
   }
 
-  return json({ id, url: shareUrl(env, id), expiresAt: expiresAt.toISOString() }, 201, cors(origin, env));
+  return json({
+    id,
+    url: shareUrl(env, id),
+    expiresAt: expiresAt.toISOString(),
+    activeLinks: confirmed.activeCount,
+    activeLinkLimit: authorization.policy.active,
+    exportCount: authorization.policy.total == null ? null : confirmed.totalExports,
+    exportLimit: authorization.policy.total,
+  }, 201, cors(origin, env));
+}
+
+async function getShareStatus(request, env, origin) {
+  const configuration = readShareConfiguration(env);
+  const authorization = await validateUploadLicense(request, configuration);
+  if (!authorization.ok) {
+    return json({ error: authorization.error, code: authorization.code }, authorization.status, cors(origin, env));
+  }
+
+  const licenseKey = await sha256Hex(authorization.license.id);
+  const usage = await quotaRequest(env, { action: 'status', licenseKey });
+  if (!usage.ok) {
+    return json({ error: usage.error }, usage.status || 503, cors(origin, env));
+  }
+
+  return json({
+    plan: authorization.policy.label,
+    activeLinks: usage.activeCount,
+    activeLinkLimit: authorization.policy.active,
+    exportCount: authorization.policy.total == null ? null : usage.totalExports,
+    exportLimit: authorization.policy.total,
+  }, 200, cors(origin, env));
 }
 
 function shareUrl(env, id) {
