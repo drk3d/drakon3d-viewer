@@ -68,13 +68,20 @@ async function createShare(request, env, origin) {
   const passwordMetadata = password.value ? await passwordProtectionMetadata(password.value) : {};
   let stored = false;
   try {
-    await env.SHARES.put(`shares/${id}.3dm`, request.body, {
+    const storedObject = await env.SHARES.put(`shares/${id}.3dm`, request.body, {
       httpMetadata: {
         contentType: 'application/octet-stream',
         contentDisposition: `inline; filename="${filename}"`,
       },
       customMetadata: { expiresAt: expiresAt.toISOString(), filename, ...passwordMetadata },
     });
+    if (!storedObject || storedObject.size <= 0) {
+      // Do not leave a link—or even a quota reservation—for an empty body,
+      // including a malformed request that lied about Content-Length.
+      await env.SHARES.delete(`shares/${id}.3dm`);
+      await quotaRequest(env, { action: 'cancel', shareId: id });
+      return json({ error: 'An empty model cannot be shared.' }, 400, cors(origin, env));
+    }
     stored = true;
 
     const confirmed = await quotaRequest(env, { action: 'confirm', shareId: id });
