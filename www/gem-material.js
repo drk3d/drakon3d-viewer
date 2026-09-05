@@ -83,6 +83,7 @@ const GEM_FRAGMENT_SHADER = /* glsl */ `
   uniform BVH bvh;
   uniform float bounces;
   uniform float ior;
+  uniform float rayOffset;
   uniform float aberrationStrength;
   uniform vec3 color;
   uniform mat4 modelMatrix;
@@ -100,10 +101,9 @@ const GEM_FRAGMENT_SHADER = /* glsl */ `
     mat4 modelMatrixInverse
   ) {
     rayDirection = refract( rayDirection, normal, 1.0 / refractionIndex );
-    rayOrigin = vWorldPosition + rayDirection * 0.001;
-
-    rayOrigin = ( modelMatrixInverse * vec4( rayOrigin, 1.0 ) ).xyz;
+    rayOrigin = ( modelMatrixInverse * vec4( vWorldPosition, 1.0 ) ).xyz;
     rayDirection = normalize( ( modelMatrixInverse * vec4( rayDirection, 0.0 ) ).xyz );
+    rayOrigin += rayDirection * rayOffset;
 
     for ( float bounce = 0.0; bounce < 3.0; bounce ++ ) {
       if ( bounce >= bounces ) break;
@@ -127,7 +127,7 @@ const GEM_FRAGMENT_SHADER = /* glsl */ `
 
       if ( distanceToFace <= 0.000001 ) break;
 
-      vec3 hitPosition = rayOrigin + rayDirection * max( distanceToFace - 0.001, 0.0 );
+      vec3 hitPosition = rayOrigin + rayDirection * distanceToFace;
       vec3 exitDirection = refract( rayDirection, faceNormal, refractionIndex );
 
       if ( length( exitDirection ) > 0.0 ) {
@@ -136,7 +136,7 @@ const GEM_FRAGMENT_SHADER = /* glsl */ `
       }
 
       rayDirection = reflect( rayDirection, faceNormal );
-      rayOrigin = hitPosition + rayDirection * 0.01;
+      rayOrigin = hitPosition + rayDirection * rayOffset;
     }
 
     return normalize( ( modelMatrix * vec4( rayDirection, 0.0 ) ).xyz );
@@ -376,6 +376,15 @@ export function createGemstoneMaterial({ mesh, sourceMaterial, kind, renderer })
     return null;
   }
 
+  // The reference diamond uses 0.001 units after each ray hit, but Rhino files
+  // may contain stones ranging from fractions of a millimetre to many metres.
+  // Scale the epsilon to this mesh so it is large enough to leave the current
+  // face without jumping across a neighbouring facet in small gemstones.
+  if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+  const geometrySize = new THREE.Vector3();
+  mesh.geometry.boundingBox.getSize(geometrySize);
+  const rayOffset = Math.max(geometrySize.length() * 0.0001, 1e-7);
+
   const material = new THREE.ShaderMaterial({
     name: `Drakon ${kind} Gemstone`,
     uniforms: {
@@ -385,6 +394,7 @@ export function createGemstoneMaterial({ mesh, sourceMaterial, kind, renderer })
       reflectionMix: { value: 0.82 },
       bvh: { value: resource.uniform },
       bounces: { value: 3.0 },
+      rayOffset: { value: rayOffset },
       // Diamond's measured IOR is ~2.417. The same baseline looks convincing
       // for the coloured faceted stones in this first shared shader.
       ior: { value: 2.417 },
