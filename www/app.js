@@ -17,7 +17,7 @@ import { initI18n, setLang, applyI18n, t, currentLang } from './i18n.js';
 
 import { S } from './state.js';
 import { updateSliderFill, updateAllSliderFills, updateSelectIcon, showLoading, hideLoading, bindSliderDblClickInput, beginSave } from './helpers.js';
-import { setupLights, updateSunLight, updateShadowCasting, addGroundPlane, removeGroundPlane, computeVisibleBoundingBox } from './lighting.js';
+import { setupLights, updateSunLight, updateShadowCasting, addGroundPlane, removeGroundPlane, computeVisibleBoundingBox } from './lighting.js?v=20260905-2';
 import { switchToOrtho, switchToPersp, switchToTwoPoint, apply2PointConstraints, installTwoPointDragHandler, setViewPreset, setWalkthroughMode, triggerCameraTransition, fitCameraToBox, fitCameraToObject, fitCameraToSelected, saveCustomView, renderNamedViewsUI, updateAdaptiveClipping } from './camera.js';
 import { applySceneBackground, applyFileBackground, applyDisplayMode, applyLayerColorsToModel, recreateAllEdges, setEdgeAngleUniform } from './display.js';
 import { renderLayerUI, updateLayerVisibility } from './layers.js';
@@ -555,6 +555,11 @@ function init() {
   
   // Render gizmo helper in the arc overlay scene so it is never clipped
   S.arcOverlayScene.add(S.clippingTransformControls.getHelper());
+  // TransformControls owns a semi-transparent centre picker. Keep the complete
+  // helper dormant until the clipping tool explicitly attaches it; otherwise
+  // that picker can appear as a grey diamond at the world origin.
+  S.clippingTransformControls.getHelper().visible = false;
+  S.clippingTransformControls.enabled = false;
 
   // ── Gumball Transform Controls Setup ──
   S.gumballTransformControls = new TransformControls(S.camera, S.renderer.domElement);
@@ -565,6 +570,8 @@ function init() {
   S.gumballTransformControls.showY = true;
   S.gumballTransformControls.showZ = true;
   S.arcOverlayScene.add(S.gumballTransformControls.getHelper());
+  S.gumballTransformControls.getHelper().visible = false;
+  S.gumballTransformControls.enabled = false;
 
   // Hide negative direction handles for gumball
   try {
@@ -574,7 +581,8 @@ function init() {
         child.name === 'XY' || child.name === 'YZ' || child.name === 'XZ' ||
         child.name.includes('XY') || child.name.includes('YZ') || child.name.includes('XZ')
       );
-      if (isPlane) {
+      const isCenter = child.name === 'XYZ';
+      if (isPlane || isCenter) {
         child.userData.isPlaneHandle = true;
       }
 
@@ -584,7 +592,7 @@ function init() {
       const isGeometryNeg = (center.x < -0.02 || center.y < -0.02 || center.z < -0.02);
       const isPositionNeg = (child.position.x < -0.02 || child.position.y < -0.02 || child.position.z < -0.02);
       
-      const shouldHide = isPlane || isGeometryNeg || isPositionNeg;
+      const shouldHide = isPlane || isCenter || isGeometryNeg || isPositionNeg;
       if (shouldHide) {
         child.layers.set(31); // hidden layer
         const mat = child.material;
@@ -681,7 +689,8 @@ function init() {
         child.name === 'XY' || child.name === 'YZ' || child.name === 'XZ' ||
         child.name.includes('XY') || child.name.includes('YZ') || child.name.includes('XZ')
       );
-      if (isPlane) {
+      const isCenter = child.name === 'XYZ';
+      if (isPlane || isCenter) {
         child.userData.isPlaneHandle = true;
       }
 
@@ -691,7 +700,7 @@ function init() {
       const isGeometryNeg = (center.x < -0.02 || center.y < -0.02 || center.z < -0.02);
       const isPositionNeg = (child.position.x < -0.02 || child.position.y < -0.02 || child.position.z < -0.02);
       
-      const shouldHide = isPlane || isGeometryNeg || isPositionNeg;
+      const shouldHide = isPlane || isCenter || isGeometryNeg || isPositionNeg;
       if (shouldHide) {
         child.layers.set(31); // Move to hidden layer so camera never renders it!
         const mat = child.material;
@@ -2312,6 +2321,7 @@ function bindUI() {
     if (S.clippingTransformControls) {
       S.clippingTransformControls.detach();
       S.clippingTransformControls.getHelper().visible = false;
+      S.clippingTransformControls.enabled = false;
     }
     // Clean up arc handles from overlay scene
     S.clippingArcHandles.forEach(h => {

@@ -1339,6 +1339,7 @@ export function setupGumballHelper() {
   // 4. Attach S.gumballTransformControls to S.gumballHelper
   if (S.gumballTransformControls) {
     S.gumballTransformControls.size = 0.65;
+    S.gumballTransformControls.enabled = true;
     S.gumballTransformControls.attach(S.gumballHelper);
     S.gumballTransformControls.getHelper().visible = true;
   }
@@ -1348,6 +1349,7 @@ export function clearGumballHelper() {
   if (S.gumballTransformControls) {
     S.gumballTransformControls.detach();
     S.gumballTransformControls.getHelper().visible = false;
+    S.gumballTransformControls.enabled = false;
   }
 
   if (S.gumballArcHandles) {

@@ -103,7 +103,7 @@ html = html.replace(/<script type="importmap">[\s\S]*?<\/script>\s*/, '');
 // inlined bundle. A __RHV_PACKAGE__ placeholder is injected just before it so
 // the Export Package output can carry its model inline.
 html = html.replace(
-  /<script type="module" src="app\.js"><\/script>/,
+  /<script type="module" src="app\.js(?:\?[^\"]*)?"><\/script>/,
   () => `<script id="rhv-package">/*__RHV_PACKAGE__*/</script>\n<script type="module" id="app-bundle">${appBundle}</script>`
 );
 
