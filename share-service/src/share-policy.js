@@ -24,7 +24,7 @@ const DEFAULT_LIMITS = Object.freeze({
 });
 
 export const DEFAULT_MAX_MODEL_BYTES = 100 * 1024 * 1024;
-export const DEFAULT_SHARE_TTL_DAYS = 7;
+export const DEFAULT_SHARE_TTL_DAYS = 3;
 export const MAX_SHARE_TTL_DAYS = 14;
 // The 8 GiB guard leaves practical headroom under the R2 free-tier storage
 // allowance and is a service-wide protection in addition to each licence cap.

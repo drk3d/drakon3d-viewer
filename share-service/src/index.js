@@ -254,7 +254,7 @@ async function getShareLandingPage(id, request, env, ctx) {
   // from the same share address they requested.
   const publicOrigin = optionalShareOrigin(env) || new URL(request.url).origin;
   const previewUrl = new URL(`/v1/shares/${id}/thumbnail`, publicOrigin).toString();
-  const title = `${safeHtmlTitle(model.customMetadata?.filename || 'Drakon 3D design')} | Drakon 3D Viewer`;
+  const title = 'Drakon3D Viewer';
   return new Response(shareLandingHtml(title, previewUrl, viewerUrl.toString()), {
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
