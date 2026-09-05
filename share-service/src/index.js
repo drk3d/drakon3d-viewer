@@ -4,9 +4,11 @@ import { ShareQuotaCoordinator } from './share-quota-coordinator.js';
 const SHARE_ID_BYTES = 18;
 const PASSWORD_SALT_BYTES = 16;
 const PASSWORD_HASH_BYTES = 32;
+const PASSWORD_HASH_VERSION = '2';
 const PASSWORD_ITERATIONS = 600000;
 const MIN_PASSWORD_BYTES = 8;
 const MAX_PASSWORD_BYTES = 128;
+const MAX_PREVIEW_BYTES = 4 * 1024 * 1024;
 
 export { ShareQuotaCoordinator };
 
@@ -21,6 +23,13 @@ export default {
 
     const match = url.pathname.match(/^\/v1\/shares\/([A-Za-z0-9_-]{24})$/);
     if (match && request.method === 'GET') return getShare(match[1], request, env, origin, ctx);
+
+    const thumbnailMatch = url.pathname.match(/^\/v1\/shares\/([A-Za-z0-9_-]{24})\/thumbnail$/);
+    if (thumbnailMatch && request.method === 'POST') return createThumbnail(thumbnailMatch[1], request, env, origin);
+    if (thumbnailMatch && request.method === 'GET') return getThumbnail(thumbnailMatch[1], env, ctx);
+
+    const landingMatch = url.pathname.match(/^\/s\/([A-Za-z0-9_-]{24})$/);
+    if (landingMatch && request.method === 'GET') return getShareLandingPage(landingMatch[1], request, env, ctx);
     return json({ error: 'Not found.' }, 404, cors(origin, env));
   },
 };
@@ -65,7 +74,12 @@ async function createShare(request, env, origin) {
     return json({ error: reservation.error, code: reservation.code }, reservation.status || 503, cors(origin, env));
   }
 
-  const passwordMetadata = password.value ? await passwordProtectionMetadata(password.value) : {};
+  let passwordMetadata;
+  try {
+    passwordMetadata = password.value ? await passwordProtectionMetadata(password.value, env) : {};
+  } catch {
+    return json({ error: 'Password-protected shares are temporarily unavailable. Please try again shortly.' }, 503, cors(origin, env));
+  }
   let stored = false;
   try {
     const storedObject = await env.SHARES.put(`shares/${id}.3dm`, request.body, {
@@ -73,7 +87,12 @@ async function createShare(request, env, origin) {
         contentType: 'application/octet-stream',
         contentDisposition: `inline; filename="${filename}"`,
       },
-      customMetadata: { expiresAt: expiresAt.toISOString(), filename, ...passwordMetadata },
+      customMetadata: {
+        expiresAt: expiresAt.toISOString(),
+        filename,
+        ownerLicenseKey: licenseKey,
+        ...passwordMetadata,
+      },
     });
     if (!storedObject || storedObject.size <= 0) {
       // Do not leave a link—or even a quota reservation—for an empty body,
@@ -98,24 +117,104 @@ async function createShare(request, env, origin) {
 }
 
 function shareUrl(env, id) {
+  const shareOrigin = optionalShareOrigin(env);
+  if (shareOrigin) return new URL(`/s/${id}`, shareOrigin).toString();
+
   const viewerUrl = new URL(requiredViewerOrigin(env));
   viewerUrl.searchParams.set('share', id);
   return viewerUrl.toString();
+}
+
+async function createThumbnail(id, request, env, origin) {
+  const contentLength = Number.parseInt(request.headers.get('Content-Length') || '', 10);
+  if (!Number.isSafeInteger(contentLength) || contentLength <= 0 || contentLength > MAX_PREVIEW_BYTES) {
+    return json({ error: 'The preview image is invalid.' }, 400, cors(origin, env));
+  }
+  if (request.headers.get('Content-Type')?.toLowerCase().split(';')[0].trim() !== 'image/png' || !request.body) {
+    return json({ error: 'The preview image must be a PNG.' }, 400, cors(origin, env));
+  }
+
+  const configuration = readShareConfiguration(env);
+  const authorization = await validateUploadLicense(request, configuration);
+  if (!authorization.ok) return json({ error: authorization.error, code: authorization.code }, authorization.status, cors(origin, env));
+
+  const model = await env.SHARES.head(`shares/${id}.3dm`);
+  if (!model || isExpired(model)) return json({ error: 'This share link is unavailable.' }, 404, cors(origin, env));
+  const licenseKey = await sha256Hex(authorization.license.id);
+  if (model.customMetadata?.ownerLicenseKey !== licenseKey) {
+    return json({ error: 'Only the owner can add a preview image.' }, 403, cors(origin, env));
+  }
+
+  const reservation = await quotaRequest(env, {
+    action: 'reservePreview',
+    shareId: id,
+    size: contentLength,
+    maxLiveBytes: configuration.maxLiveBytes,
+  });
+  if (!reservation.ok) return json({ error: reservation.error }, reservation.status || 503, cors(origin, env));
+
+  try {
+    const storedPreview = await env.SHARES.put(`shares/${id}.png`, request.body, {
+      httpMetadata: { contentType: 'image/png', contentDisposition: 'inline' },
+      customMetadata: { expiresAt: model.customMetadata.expiresAt },
+    });
+    if (!storedPreview || storedPreview.size <= 0) throw new Error('Preview image was empty.');
+    return json({ ok: true }, 201, cors(origin, env));
+  } catch {
+    await quotaRequest(env, { action: 'releasePreview', shareId: id });
+    return json({ error: 'The preview image could not be stored.' }, 503, cors(origin, env));
+  }
+}
+
+async function getThumbnail(id, env, ctx) {
+  const model = await env.SHARES.head(`shares/${id}.3dm`);
+  if (!model || isExpired(model)) {
+    if (model && isExpired(model)) ctx.waitUntil(releaseShareQuota(env, id));
+    return json({ error: 'This share link is unavailable.' }, 404);
+  }
+
+  const preview = await env.SHARES.get(`shares/${id}.png`);
+  if (!preview) return json({ error: 'This share has no preview image.' }, 404);
+  const headers = new Headers();
+  preview.writeHttpMetadata(headers);
+  headers.set('Content-Type', 'image/png');
+  headers.set('Cache-Control', 'public, max-age=600');
+  headers.set('X-Content-Type-Options', 'nosniff');
+  return new Response(preview.body, { headers });
+}
+
+async function getShareLandingPage(id, request, env, ctx) {
+  const model = await env.SHARES.head(`shares/${id}.3dm`);
+  if (!model || isExpired(model)) {
+    if (model && isExpired(model)) ctx.waitUntil(releaseShareQuota(env, id));
+    return Response.redirect(requiredViewerOrigin(env), 302);
+  }
+
+  const viewerUrl = new URL(requiredViewerOrigin(env));
+  viewerUrl.searchParams.set('share', id);
+  const previewUrl = new URL(`/v1/shares/${id}/thumbnail`, new URL(request.url).origin).toString();
+  const title = `${safeHtmlTitle(model.customMetadata?.filename || 'Drakon 3D design')} | Drakon 3D Viewer`;
+  return new Response(shareLandingHtml(title, previewUrl, viewerUrl.toString()), {
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+    },
+  });
 }
 
 async function getShare(id, request, env, origin, ctx) {
   const object = await env.SHARES.get(`shares/${id}.3dm`);
   if (!object) return json({ error: 'This share link is unavailable.' }, 404, cors(origin, env));
 
-  const expiresAt = Date.parse(object.customMetadata?.expiresAt || '');
-  if (!Number.isFinite(expiresAt) || Date.now() >= expiresAt) {
+  if (isExpired(object)) {
     ctx.waitUntil(releaseShareQuota(env, id));
     return json({ error: 'This share link has expired.' }, 410, cors(origin, env));
   }
 
   if (object.customMetadata?.passwordHash) {
     const password = readPassword(request);
-    if (password.error || !password.value || !await isCorrectPassword(password.value, object.customMetadata)) {
+    if (password.error || !password.value || !await isCorrectPassword(password.value, object.customMetadata, env)) {
       return json({ error: 'This share link is password protected.' }, 401, cors(origin, env));
     }
   }
@@ -255,6 +354,32 @@ function requiredViewerOrigin(env) {
   return origin.replace(/\/$/, '');
 }
 
+function optionalShareOrigin(env) {
+  const value = env.SHARE_PUBLIC_ORIGIN;
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+function isExpired(object) {
+  const expiresAt = Date.parse(object?.customMetadata?.expiresAt || '');
+  return !Number.isFinite(expiresAt) || Date.now() >= expiresAt;
+}
+
+function safeHtmlTitle(value) {
+  return String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
+}
+
+function shareLandingHtml(title, previewUrl, viewerUrl) {
+  const escapedViewerUrl = safeHtmlTitle(viewerUrl);
+  const escapedPreviewUrl = safeHtmlTitle(previewUrl);
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><meta property="og:type" content="website"><meta property="og:title" content="${title}"><meta property="og:description" content="Open this Drakon 3D design in your browser."><meta property="og:image" content="${escapedPreviewUrl}"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="${title}"><meta name="twitter:image" content="${escapedPreviewUrl}"><meta http-equiv="refresh" content="0;url=${escapedViewerUrl}"><script>location.replace(${JSON.stringify(viewerUrl)})</script></head><body><p>Opening Drakon 3D Viewer… <a href="${escapedViewerUrl}">Continue</a></p></body></html>`;
+}
+
 function readBearerToken(authorization) {
   const match = typeof authorization === 'string' ? authorization.match(/^Bearer\s+([^\s]{1,8192})$/i) : null;
   return match ? match[1] : null;
@@ -318,13 +443,30 @@ function readPassword(request) {
   }
 }
 
-async function passwordProtectionMetadata(password) {
+async function passwordProtectionMetadata(password, env) {
   const salt = crypto.getRandomValues(new Uint8Array(PASSWORD_SALT_BYTES));
-  const hash = await derivePasswordHash(password, salt, PASSWORD_ITERATIONS);
-  return { passwordSalt: toBase64Url(salt), passwordHash: toBase64Url(hash), passwordIterations: String(PASSWORD_ITERATIONS) };
+  const hash = await derivePepperedPasswordHash(password, salt, env);
+  return {
+    passwordSalt: toBase64Url(salt),
+    passwordHash: toBase64Url(hash),
+    passwordHashVersion: PASSWORD_HASH_VERSION,
+  };
 }
 
-async function isCorrectPassword(password, metadata) {
+async function isCorrectPassword(password, metadata, env) {
+  // Shares created before this update retain their PBKDF2 verification data.
+  // New shares use a server-secret HMAC so password protection stays within
+  // the CPU allowance of the Cloudflare Worker plan.
+  if (metadata.passwordHashVersion === PASSWORD_HASH_VERSION) {
+    try {
+      const expected = fromBase64Url(metadata.passwordHash);
+      const salt = fromBase64Url(metadata.passwordSalt);
+      return constantTimeBytesEqual(await derivePepperedPasswordHash(password, salt, env), expected);
+    } catch {
+      return false;
+    }
+  }
+
   const iterations = Number.parseInt(metadata.passwordIterations || '', 10);
   if (!Number.isSafeInteger(iterations) || iterations < 100000 || iterations > 1000000) return false;
   try {
@@ -334,6 +476,25 @@ async function isCorrectPassword(password, metadata) {
   } catch {
     return false;
   }
+}
+
+async function derivePepperedPasswordHash(password, salt, env) {
+  const pepper = env.DRAKON_SHARE_PASSWORD_PEPPER;
+  if (typeof pepper !== 'string' || pepper.length < 32) throw new Error('Password pepper is unavailable.');
+
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(pepper),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const passwordBytes = new TextEncoder().encode(password);
+  const payload = new Uint8Array(1 + salt.length + passwordBytes.length);
+  payload[0] = 2;
+  payload.set(salt, 1);
+  payload.set(passwordBytes, 1 + salt.length);
+  return new Uint8Array(await crypto.subtle.sign('HMAC', key, payload));
 }
 
 async function derivePasswordHash(password, salt, iterations) {

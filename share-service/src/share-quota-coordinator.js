@@ -30,6 +30,8 @@ export class ShareQuotaCoordinator {
         return quotaJson(await this.reserve(body));
       }
       if (action === 'confirm') return quotaJson(await this.confirm(body));
+      if (action === 'reservePreview') return quotaJson(await this.reservePreview(body));
+      if (action === 'releasePreview') return quotaJson(await this.releasePreview(body));
       if (action === 'cancel' || action === 'release') return quotaJson(await this.release(body));
       if (action === 'cleanup') {
         await this.cleanupExpired(Date.now());
@@ -159,6 +161,49 @@ export class ShareQuotaCoordinator {
     return result;
   }
 
+  async reservePreview(body) {
+    const shareId = boundedId(body?.shareId);
+    const size = safeInteger(body?.size, 1, 4 * 1024 * 1024);
+    const maxLiveBytes = safeInteger(body?.maxLiveBytes, 1, 100 * 1024 * 1024 * 1024);
+    if (!shareId || !size || !maxLiveBytes) return { ok: false, status: 400, error: 'Invalid preview reservation.' };
+
+    return this.ctx.storage.transaction(async transaction => {
+      const key = shareKey(shareId);
+      const share = await transaction.get(key);
+      if (!share || share.state !== 'active') return { ok: false, status: 404, error: 'This share link is unavailable.' };
+      if (share.previewSize) return { ok: false, status: 409, error: 'A preview image already exists for this share.' };
+
+      const global = (await transaction.get(GLOBAL_KEY)) || emptyGlobalState();
+      if (global.activeBytes + global.pendingBytes + size > maxLiveBytes) {
+        return { ok: false, status: 503, error: 'Drakon Share is temporarily at capacity. Please try again later.' };
+      }
+
+      share.previewSize = size;
+      global.activeBytes += size;
+      await transaction.put(key, share);
+      await transaction.put(GLOBAL_KEY, global);
+      return { ok: true };
+    });
+  }
+
+  async releasePreview(body) {
+    const shareId = boundedId(body?.shareId);
+    if (!shareId) return { ok: false, status: 400, error: 'Invalid preview reference.' };
+
+    return this.ctx.storage.transaction(async transaction => {
+      const key = shareKey(shareId);
+      const share = await transaction.get(key);
+      if (!share?.previewSize) return { ok: true };
+
+      const global = (await transaction.get(GLOBAL_KEY)) || emptyGlobalState();
+      global.activeBytes = decrement(global.activeBytes, share.previewSize);
+      delete share.previewSize;
+      await transaction.put(key, share);
+      await transaction.put(GLOBAL_KEY, global);
+      return { ok: true };
+    });
+  }
+
   async release(body) {
     const shareId = boundedId(body?.shareId);
     if (!shareId) return { ok: false, status: 400, error: 'Invalid share reference.' };
@@ -169,7 +214,10 @@ export class ShareQuotaCoordinator {
     // Delete the R2 object before freeing its capacity. If R2 is temporarily
     // unavailable, the Durable Object alarm retries instead of allowing the
     // live storage total to drift upward unnoticed.
-    await this.env.SHARES.delete(`shares/${shareId}.3dm`);
+    await Promise.all([
+      this.env.SHARES.delete(`shares/${shareId}.3dm`),
+      this.env.SHARES.delete(`shares/${shareId}.png`),
+    ]);
     await this.removeShares([share]);
     return { ok: true };
   }
@@ -185,7 +233,10 @@ export class ShareQuotaCoordinator {
     if (due.length > 0) {
       // R2 delete is idempotent: this also removes a model whose upload
       // completed but whose client lost connection before confirmation.
-      await Promise.all(due.map(share => this.env.SHARES.delete(`shares/${share.shareId}.3dm`)));
+      await Promise.all(due.flatMap(share => [
+        this.env.SHARES.delete(`shares/${share.shareId}.3dm`),
+        this.env.SHARES.delete(`shares/${share.shareId}.png`),
+      ]));
       await this.removeShares(due);
     }
     await this.scheduleNextAlarm();
@@ -211,7 +262,7 @@ export class ShareQuotaCoordinator {
 
         if (share.state === 'active') {
           global.activeCount = decrement(global.activeCount);
-          global.activeBytes = decrement(global.activeBytes, share.size);
+          global.activeBytes = decrement(global.activeBytes, share.size + (share.previewSize || 0));
           license.activeCount = decrement(license.activeCount);
         } else {
           global.pendingCount = decrement(global.pendingCount);
