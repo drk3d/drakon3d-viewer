@@ -276,7 +276,12 @@ export function addGroundPlane(box) {
   const center = box.getCenter(new THREE.Vector3());
   const size   = box.getSize(new THREE.Vector3());
   const maxDim = Math.max(size.x, size.y, size.z);
-  const span   = Math.max(size.x, size.y) * 5;
+  // Size from the full 3D extent, not only X/Y. An upright or edge-on model can
+  // be tall in Z but narrow in both horizontal axes; the old calculation then
+  // produced a small shadow receiver whose square boundary was visible through
+  // the model. A max-dimension span keeps that boundary outside the fitted view
+  // regardless of the model's orientation.
+  const span   = maxDim * 5;
   const geo    = new THREE.PlaneGeometry(span, span);
   S.groundMesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial());
   S.groundMesh.position.set(center.x, center.y, box.min.z - Math.max(0.005, maxDim * 0.005));
