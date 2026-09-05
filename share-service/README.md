@@ -26,7 +26,7 @@ user simply cannot create a new link. The viewer redirects expired or unavailabl
 
 When a user runs `DkShare`, the command line shows their authenticated live
 allowance as `ActiveLinks=current/limit`. Trial licences also show their
-lifetime `Exports=current/limit` allowance. These counts are read from the
+lifetime `TrialLimits=current/limit` allowance. These counts are read from the
 quota coordinator after it removes any expired links.
 
 The service retains an absolute 100 MB model limit and a global 8 GiB live-data
