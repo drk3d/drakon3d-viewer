@@ -44,6 +44,7 @@ const GEMSTONE_PATTERN = /\b(?:almandite|amethyst|aquamarine|aventurine|chalcedo
 const GEM_REFLECTION_URL = typeof __DRAKON_GEM_REFLECTION_URL__ !== 'undefined'
   ? __DRAKON_GEM_REFLECTION_URL__
   : './assets/diamond-top-view.png';
+const GEM_REFLECTION_BLUR_PX = 16;
 
 const GEM_VERTEX_SHADER = /* glsl */ `
   varying vec3 vWorldPosition;
@@ -314,9 +315,28 @@ function getGemReflectionMap() {
 function loadGemReflectionMap() {
   if (reflectionMapPromise) return reflectionMapPromise;
 
-  reflectionMapPromise = new THREE.TextureLoader()
+  reflectionMapPromise = new THREE.ImageLoader()
     .loadAsync(GEM_REFLECTION_URL)
-    .then(texture => {
+    .then(image => {
+      // A jewellery photograph contains crisp colour boundaries between its
+      // photographed facets. Used unfiltered as a reflection card, those lines
+      // are refracted into the model and can look like extra mesh edges. Blur
+      // the source once when it loads, retaining the broad highlight pattern
+      // without adding dozens of texture samples to every rendered pixel.
+      const canvas = document.createElement('canvas');
+      canvas.width = image.naturalWidth || image.width;
+      canvas.height = image.naturalHeight || image.height;
+      const context = canvas.getContext('2d', { alpha: true });
+      let texture;
+      if (context) {
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        context.filter = `blur(${GEM_REFLECTION_BLUR_PX}px)`;
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        context.filter = 'none';
+        texture = new THREE.CanvasTexture(canvas);
+      } else {
+        texture = new THREE.Texture(image);
+      }
       texture.generateMipmaps = true;
       texture.minFilter = THREE.LinearMipmapLinearFilter;
       texture.magFilter = THREE.LinearFilter;
