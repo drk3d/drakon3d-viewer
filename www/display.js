@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { S } from './state.js';
 import { setupLights, updateGroundAppearance, applyFileSunSettings } from './lighting.js';
 import { isPageVisuallyDark } from './helpers.js';
+import { createGemstoneMaterial, gemstoneKindFromNames } from './gem-material.js';
 
 // ── Skybox sphere for rendered mode (bypasses tone mapping) ─────────────────
 // In rendered mode with ACES tone mapping, scene.background color gets compressed.
@@ -601,6 +602,17 @@ export function applyDisplayMode() {
           detachedFromOwnMaterial = !child.userData.originalIsMaterialByLayer;
         }
 
+        // Gemstone names come from the Rhino material table rather than from a
+        // colour guess. This lets a ruby keep its authored red or a sapphire its
+        // blue, while coloured metal and plastic continue through the regular PBR
+        // route. The same lookup works for object- and layer-assigned materials.
+        const gemstoneKind = gemstoneKindFromNames(
+          effectiveCustom?.name,
+          child.userData.rhinoObjectMaterial?.name,
+          base?.name,
+          child.userData.originalMaterial?.name
+        );
+
         const buildRendered = () => {
         let m = detachedFromOwnMaterial ? defaultLayerMaterial() : base.clone();
         // A standard material silently drops transmission, ior and clearcoat, so a
@@ -633,6 +645,22 @@ export function applyDisplayMode() {
         m.envMapIntensity = 1.0;
         applyCustomToMaterial(m, effectiveCustom);
         reconcileTransmission(m);
+
+        if (gemstoneKind) {
+          const gem = createGemstoneMaterial({
+            mesh: child,
+            sourceMaterial: m,
+            kind: gemstoneKind,
+            renderer: S.renderer
+          });
+          if (gem) {
+            // `m` is an unassigned clone at this point; dispose its GPU program
+            // before returning the purpose-built gem shader.
+            m.dispose();
+            return gem;
+          }
+        }
+
         // Transparency blends once in Rhino. Two-sided geometry blends it twice —
         // three.js draws back faces and then front faces — and on a closed solid
         // that is pure error, because the inside is never seen. Measured on a
@@ -827,7 +855,7 @@ function materialKey(mode, mesh, base) {
   const m = base;
   return [
     mode, layer,
-    m?.type, m?.color?.getHexString(), m?.opacity, m?.transparent, m?.depthWrite,
+    m?.type, m?.name, m?.color?.getHexString(), m?.opacity, m?.transparent, m?.depthWrite,
     m?.side, m?.roughness, m?.metalness, m?.emissive?.getHexString(),
     m?.map?.uuid ?? '-', m?.envMapIntensity,
     // Every image slot, not just the colour one. Two materials that differ only in

@@ -956,7 +956,18 @@ export async function preprocess3dm(file, skipLayerParse) {
                 } catch {}
               }
 
-              const matEntry = { color: mColor, roughness: mRoughness, metalness: mMetalness, opacity: mOpacity };
+              // Keep Rhino's material name alongside the PBR values. Rendered
+              // mode uses this explicit authoring signal to recognise gemstones;
+              // it never infers a gem from colour alone.
+              let mName = '';
+              try { mName = String(m.name ?? m.Name ?? '').trim(); } catch {}
+              const matEntry = {
+                name: mName,
+                color: mColor,
+                roughness: mRoughness,
+                metalness: mMetalness,
+                opacity: mOpacity
+              };
               // Always key by table position (renderMaterialIndex usually equals position).
               matLookup[mi] = matEntry;
               // Also key by the material's own index property as a fallback for documents
