@@ -699,7 +699,10 @@ export function applyDisplayMode() {
               (detachedFromOwnMaterial ? '|bylayer-default' : ''),
               buildRendered);
         if (edges) {
-          edges.visible = edgeOverlay;
+          // The refraction shader already reveals every physical facet. Rhino's
+          // CAD line overlay is not part of the material and reads as dark lines
+          // across/inside transparent stones, unlike the reference diamond demo.
+          edges.visible = gemstoneKind ? false : edgeOverlay;
           edges.material.color.setHex(0x000000);
           // renderOrder=1 + depthWrite:false ensures lines always draw on top
           // of face geometry, preventing fragmentation from z-fighting.

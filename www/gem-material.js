@@ -6,7 +6,6 @@ import {
   shaderStructs,
   shaderIntersectFunction
 } from 'three-mesh-bvh';
-import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 
 // Drakon gemstone refraction material
 //
@@ -33,7 +32,7 @@ import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 // THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 // This Viewer-specific version is plain Three.js (no React dependency), uses
-// the reference demo's CC0 Venice Sunset HDR with an offline lightbox fallback,
+// a neutral offline lightbox plus a view-facing jewellery reflection image,
 // and deliberately applies only to explicitly named gemstone materials. A gem
 // needs a closed, faceted render mesh: its internal BVH is what lets the shader
 // trace rays through the stone instead of behaving like ordinary glass.
@@ -42,6 +41,9 @@ import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 // chatoyant or layered stones (Pearl, Opal, Malachite, Jade and Lapis Lazuli)
 // deliberately stay on the regular Rhino/PBR material path.
 const GEMSTONE_PATTERN = /\b(?:almandite|amethyst|aquamarine|aventurine|chalcedony|citrine|diamond|emerald|garnet|hiddenite|kunzite|precious\s+beryl|quartz|ruby|sapphire|topaz)\b/i;
+const GEM_REFLECTION_URL = typeof __DRAKON_GEM_REFLECTION_URL__ !== 'undefined'
+  ? __DRAKON_GEM_REFLECTION_URL__
+  : './assets/diamond-top-view.png';
 
 const GEM_VERTEX_SHADER = /* glsl */ `
   varying vec3 vWorldPosition;
@@ -74,6 +76,9 @@ const GEM_FRAGMENT_SHADER = /* glsl */ `
   ${shaderIntersectFunction}
 
   uniform sampler2D envMap;
+  uniform sampler2D reflectionMap;
+  uniform float reflectionMapReady;
+  uniform float reflectionMix;
   uniform BVH bvh;
   uniform float bounces;
   uniform float ior;
@@ -137,7 +142,20 @@ const GEM_FRAGMENT_SHADER = /* glsl */ `
   }
 
   vec3 sampleEnvironment( vec3 direction ) {
-    return texture( envMap, equirectUv( direction ) ).rgb;
+    vec3 lightboxColor = texture( envMap, equirectUv( direction ) ).rgb;
+    if ( reflectionMapReady < 0.5 ) return lightboxColor;
+
+    // DiamondTopView.png is a normal square jewellery photograph, not a 2:1
+    // panorama. Projecting the exiting ray in camera space keeps the circular
+    // image undistorted and behaves like the reflection cards used in Rhino.
+    vec3 viewDirection = normalize( ( viewMatrix * vec4( direction, 0.0 ) ).xyz );
+    vec2 reflectionUv = viewDirection.xy * 0.5 + 0.5;
+    vec4 reflectionColor = texture( reflectionMap, reflectionUv );
+
+    // The source PNG has transparent corners. Its alpha naturally feathers
+    // back to the neutral lightbox instead of painting black into the stone.
+    float imageWeight = clamp( reflectionColor.a * reflectionMix, 0.0, 1.0 );
+    return mix( lightboxColor, reflectionColor.rgb, imageWeight );
   }
 
   void main() {
@@ -184,7 +202,8 @@ const GEM_FRAGMENT_SHADER = /* glsl */ `
 const gemBvhByGeometry = new WeakMap();
 const liveGemMaterials = new Set();
 let gemEnvironment = null;
-let referenceEnvironmentPromise = null;
+let gemReflectionMap = null;
+let reflectionMapPromise = null;
 
 /**
  * Returns the first explicitly named stone in a list of material names.
@@ -278,44 +297,46 @@ function createGemEnvironment() {
 function getGemEnvironment() {
   if (!gemEnvironment) {
     gemEnvironment = createGemEnvironment();
-    loadReferenceEnvironment();
   }
   return gemEnvironment;
 }
 
-function loadReferenceEnvironment() {
-  if (referenceEnvironmentPromise) return referenceEnvironmentPromise;
+function getGemReflectionMap() {
+  if (!gemReflectionMap) {
+    // A valid placeholder sampler is required while the external PNG loads.
+    // The shader ignores it until reflectionMapReady becomes 1.
+    gemReflectionMap = getGemEnvironment();
+    loadGemReflectionMap();
+  }
+  return gemReflectionMap;
+}
 
-  // This is the same CC0 Venice Sunset HDR used by the three-mesh-bvh diamond
-  // reference. It is hosted with the Viewer so rendering never depends on a
-  // third-party server; the generated lightbox above remains an instant/offline
-  // fallback while the 1K HDR is loading.
-  referenceEnvironmentPromise = new RGBELoader()
-    .loadAsync('./assets/venice_sunset_1k.hdr')
+function loadGemReflectionMap() {
+  if (reflectionMapPromise) return reflectionMapPromise;
+
+  reflectionMapPromise = new THREE.TextureLoader()
+    .loadAsync(GEM_REFLECTION_URL)
     .then(texture => {
-      texture.mapping = THREE.EquirectangularReflectionMapping;
       texture.generateMipmaps = true;
       texture.minFilter = THREE.LinearMipmapLinearFilter;
       texture.magFilter = THREE.LinearFilter;
+      texture.colorSpace = THREE.SRGBColorSpace;
       texture.needsUpdate = true;
 
-      const previousEnvironment = gemEnvironment;
-      gemEnvironment = texture;
+      gemReflectionMap = texture;
       for (const material of liveGemMaterials) {
-        material.uniforms.envMap.value = texture;
+        material.uniforms.reflectionMap.value = texture;
+        material.uniforms.reflectionMapReady.value = 1.0;
         material.uniformsNeedUpdate = true;
-      }
-      if (previousEnvironment && previousEnvironment !== texture) {
-        previousEnvironment.dispose();
       }
       return texture;
     })
     .catch(error => {
-      console.warn('[gem] Reference HDR could not be loaded; using the built-in lightbox.', error);
-      return gemEnvironment;
+      console.warn('[gem] Diamond reflection image could not be loaded; using the built-in lightbox.', error);
+      return gemReflectionMap;
     });
 
-  return referenceEnvironmentPromise;
+  return reflectionMapPromise;
 }
 
 /**
@@ -339,6 +360,9 @@ export function createGemstoneMaterial({ mesh, sourceMaterial, kind, renderer })
     name: `Drakon ${kind} Gemstone`,
     uniforms: {
       envMap: { value: getGemEnvironment() },
+      reflectionMap: { value: getGemReflectionMap() },
+      reflectionMapReady: { value: gemReflectionMap === gemEnvironment ? 0.0 : 1.0 },
+      reflectionMix: { value: 0.82 },
       bvh: { value: resource.uniform },
       bounces: { value: 3.0 },
       // Diamond's measured IOR is ~2.417. The same baseline looks convincing

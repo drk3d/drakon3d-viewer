@@ -408,7 +408,11 @@ function init() {
 
   S.camera = S.perspCamera;
 
-  S.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, stencil: true });
+  // Hardware MSAA produces false internal-ray hits along interpolated facet
+  // boundaries in the BVH gemstone shader (the upstream diamond reference
+  // disables it for the same reason). The compositor's SMAA pass below keeps
+  // the complete Viewer smooth without corrupting gemstone edges.
+  S.renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true, stencil: true });
   S.renderer.setPixelRatio(window.devicePixelRatio);
   S.renderer.setSize(window.innerWidth, window.innerHeight);
   S.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -417,14 +421,11 @@ function init() {
   S.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   container.appendChild(S.renderer.domElement);
 
-  // EffectComposer with MSAA render target (samples:4).
-  // Hardware MSAA on the RT fixes thin-line aliasing that SMAA alone cannot solve
-  // (SMAA blends 1px lines with neighbors, reducing their apparent weight).
-  // GTAOPass reads depth — depth resolve from MSAA RT works in WebGL2;
-  // if GTAO is enabled and depth sampling breaks, fall back by switching to a
-  // plain RT at that time. GTAO is disabled by default so this is safe.
+  // Use a non-multisampled composition target. MSAA here would still corrupt
+  // BVH facet rays even with renderer antialiasing disabled; the final SMAA pass
+  // handles visual smoothing after all scene and outline passes are composed.
   S.msaaTarget = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
-    samples: 4
+    samples: 0
   });
   S.composer = new EffectComposer(S.renderer, S.msaaTarget);
   S.composer.setPixelRatio(window.devicePixelRatio);
@@ -523,8 +524,8 @@ function init() {
   S.cgPass = new ShaderPass(ColorGradingShader);
   S.composer.addPass(S.cgPass);
 
-  // SMAA — software AA pass; secondary to the MSAA render target.
-  // Helps smooth post-process artifacts (OutlinePass edges, etc) that MSAA misses.
+  // SMAA — software antialiasing for the final composed image. This replaces
+  // hardware MSAA so BVH gemstone facet boundaries remain numerically stable.
   S.smaaPass = new SMAAPass(window.innerWidth, window.innerHeight);
   S.composer.addPass(S.smaaPass);
 

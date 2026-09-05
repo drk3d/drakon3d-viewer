@@ -14,6 +14,7 @@ import { dirname, resolve } from 'node:path';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '..');
 const www = resolve(root, 'www');
+const gemReflectionDataUrl = `data:image/png;base64,${readFileSync(resolve(www, 'assets/diamond-top-view.png')).toString('base64')}`;
 
 // ── 1. Bundle the app (entry: app.js) into a single IIFE ─────────────────────
 const result = await build({
@@ -29,6 +30,11 @@ const result = await build({
   alias: {
     // three-mesh-bvh is a local prebuilt module, not an npm dep
     'three-mesh-bvh': resolve(www, 'libs/three-mesh-bvh.js'),
+  },
+  define: {
+    // Keep exported single-file viewer packages visually identical to the
+    // hosted Viewer; the normal web app loads this asset as a separate file.
+    __DRAKON_GEM_REFLECTION_URL__: JSON.stringify(gemReflectionDataUrl),
   },
   logLevel: 'info',
 });
