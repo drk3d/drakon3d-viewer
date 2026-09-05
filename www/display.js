@@ -680,7 +680,15 @@ export function applyDisplayMode() {
         // already part of the key — but its *contents* go in too, so editing a
         // layer's material does not hand back the cached material built from the
         // previous settings.
-        child.material = child.userData.customMaterial
+        // A refraction material contains a BVH built from this exact mesh. It can
+        // never be shared with another object merely because both objects use the
+        // same Rhino material or layer: doing that makes every stone after the
+        // first trace rays against the first stone's geometry and render nearly
+        // black. Object overrides were already unique; named gems must be too.
+        const needsUniqueRenderedMaterial = Boolean(
+          child.userData.customMaterial || gemstoneKind
+        );
+        child.material = needsUniqueRenderedMaterial
           ? buildRendered()
           : shareMaterial(
               materialKey('rendered', child, base) + '|' +

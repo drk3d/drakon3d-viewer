@@ -6,6 +6,7 @@ import {
   shaderStructs,
   shaderIntersectFunction
 } from 'three-mesh-bvh';
+import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 
 // Drakon gemstone refraction material
 //
@@ -31,11 +32,11 @@ import {
 // TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
 // THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
-// This Viewer-specific version is plain Three.js (no React dependency), uses a
-// fixed lightbox environment, and deliberately applies only to explicitly named
-// gemstone materials.  A gem needs a closed, faceted render mesh: its internal
-// BVH is what lets the shader trace rays through the stone instead of behaving
-// like ordinary transparent glass.
+// This Viewer-specific version is plain Three.js (no React dependency), uses
+// the reference demo's CC0 Venice Sunset HDR with an offline lightbox fallback,
+// and deliberately applies only to explicitly named gemstone materials. A gem
+// needs a closed, faceted render mesh: its internal BVH is what lets the shader
+// trace rays through the stone instead of behaving like ordinary glass.
 
 // Initial Drakon catalogue: faceted, transparent stones only. Opaque, milky,
 // chatoyant or layered stones (Pearl, Opal, Malachite, Jade and Lapis Lazuli)
@@ -150,10 +151,23 @@ const GEM_FRAGMENT_SHADER = /* glsl */ `
       vModelMatrixInverse
     );
 
-    // Fast chroma keeps the first release practical on mobile: it uses one
-    // internal ray trace and separates the red/blue environment lookups.
-    vec3 redRay = normalize( greenRay + vec3( aberrationStrength * 0.5 ) );
-    vec3 blueRay = normalize( greenRay - vec3( aberrationStrength * 0.5 ) );
+    // Match the reference implementation's full chromatic refraction. Red,
+    // green and blue use slightly different IOR values and each ray is traced
+    // through the stone; simple UV offsets were faster but visibly flatter.
+    vec3 redRay = totalInternalReflection(
+      rayOrigin,
+      incomingRay,
+      vWorldNormal,
+      max( ior * ( 1.0 - aberrationStrength ), 1.0 ),
+      vModelMatrixInverse
+    );
+    vec3 blueRay = totalInternalReflection(
+      rayOrigin,
+      incomingRay,
+      vWorldNormal,
+      max( ior * ( 1.0 + aberrationStrength ), 1.0 ),
+      vModelMatrixInverse
+    );
     vec3 refractedColor = vec3(
       sampleEnvironment( redRay ).r,
       sampleEnvironment( greenRay ).g,
@@ -168,7 +182,9 @@ const GEM_FRAGMENT_SHADER = /* glsl */ `
 `;
 
 const gemBvhByGeometry = new WeakMap();
+const liveGemMaterials = new Set();
 let gemEnvironment = null;
+let referenceEnvironmentPromise = null;
 
 /**
  * Returns the first explicitly named stone in a list of material names.
@@ -191,7 +207,9 @@ function getGemBvh(geometry) {
   // Do not build on the render geometry itself: MeshBVH may reorder its index
   // buffer, while the Viewer still needs that original topology for edges and
   // selection. A de-indexed clone also gives one watertight BVH root per stone.
-  const bvhGeometry = geometry.clone().toNonIndexed();
+  const bvhGeometry = geometry.index
+    ? geometry.clone().toNonIndexed()
+    : geometry.clone();
   const bvh = new MeshBVH(bvhGeometry, { strategy: SAH, maxLeafTris: 1 });
   const uniform = new MeshBVHUniformStruct();
   uniform.updateFrom(bvh);
@@ -258,8 +276,46 @@ function createGemEnvironment() {
 }
 
 function getGemEnvironment() {
-  if (!gemEnvironment) gemEnvironment = createGemEnvironment();
+  if (!gemEnvironment) {
+    gemEnvironment = createGemEnvironment();
+    loadReferenceEnvironment();
+  }
   return gemEnvironment;
+}
+
+function loadReferenceEnvironment() {
+  if (referenceEnvironmentPromise) return referenceEnvironmentPromise;
+
+  // This is the same CC0 Venice Sunset HDR used by the three-mesh-bvh diamond
+  // reference. It is hosted with the Viewer so rendering never depends on a
+  // third-party server; the generated lightbox above remains an instant/offline
+  // fallback while the 1K HDR is loading.
+  referenceEnvironmentPromise = new RGBELoader()
+    .loadAsync('./assets/venice_sunset_1k.hdr')
+    .then(texture => {
+      texture.mapping = THREE.EquirectangularReflectionMapping;
+      texture.generateMipmaps = true;
+      texture.minFilter = THREE.LinearMipmapLinearFilter;
+      texture.magFilter = THREE.LinearFilter;
+      texture.needsUpdate = true;
+
+      const previousEnvironment = gemEnvironment;
+      gemEnvironment = texture;
+      for (const material of liveGemMaterials) {
+        material.uniforms.envMap.value = texture;
+        material.uniformsNeedUpdate = true;
+      }
+      if (previousEnvironment && previousEnvironment !== texture) {
+        previousEnvironment.dispose();
+      }
+      return texture;
+    })
+    .catch(error => {
+      console.warn('[gem] Reference HDR could not be loaded; using the built-in lightbox.', error);
+      return gemEnvironment;
+    });
+
+  return referenceEnvironmentPromise;
 }
 
 /**
@@ -284,7 +340,7 @@ export function createGemstoneMaterial({ mesh, sourceMaterial, kind, renderer })
     uniforms: {
       envMap: { value: getGemEnvironment() },
       bvh: { value: resource.uniform },
-      bounces: { value: 2.0 },
+      bounces: { value: 3.0 },
       // Diamond's measured IOR is ~2.417. The same baseline looks convincing
       // for the coloured faceted stones in this first shared shader.
       ior: { value: 2.417 },
@@ -301,12 +357,14 @@ export function createGemstoneMaterial({ mesh, sourceMaterial, kind, renderer })
 
   material.userData.__drakonGemMaterial = true;
   material.userData.gemstoneKind = kind;
+  liveGemMaterials.add(material);
   resource.references++;
 
   let released = false;
   material.addEventListener('dispose', () => {
     if (released) return;
     released = true;
+    liveGemMaterials.delete(material);
     resource.references--;
     if (resource.references <= 0) {
       resource.uniform.dispose();
