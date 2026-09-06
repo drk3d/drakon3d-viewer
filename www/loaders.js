@@ -3,7 +3,7 @@ import { S } from './state.js';
 import { applyDisplayMode, applyFileBackground, applyLayerColorsToModel,
          addEdges, isEdgeEligible, applyEdgeAngleFilter, fixMaterialTransparency,
          clearTechnicalOutlines, clearSharedMaterials } from './display.js';
-import { setupModelShadowFrustum, addGroundPlane, removeGroundPlane, computeVisibleBoundingBox } from './lighting.js?v=20260906-2';
+import { setupModelShadowFrustum, addGroundPlane, removeGroundPlane, computeVisibleBoundingBox } from './lighting.js';
 import { fitCameraToObject, fitCameraToBox } from './camera.js';
 import { renderLayerUI, updateLayerVisibility } from './layers.js';
 import { createAnnotationSprites } from './annotations.js';

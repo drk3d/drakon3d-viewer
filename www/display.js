@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { S } from './state.js';
-import { setupLights, updateGroundAppearance, applyFileSunSettings } from './lighting.js?v=20260906-2';
+import { setupLights, updateGroundAppearance, applyFileSunSettings } from './lighting.js';
 import { isPageVisuallyDark } from './helpers.js';
 import { createGemstoneMaterial, gemstoneKindFromNames } from './gem-material.js';
 
