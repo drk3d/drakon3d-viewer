@@ -16,16 +16,16 @@ const POLICY_IDS = Object.freeze({
 });
 
 const DEFAULT_LIMITS = Object.freeze({
-  trial: { active: 3, total: 3, label: 'Trial' },
+  trial: { active: 5, total: 5, label: 'Trial' },
   educational: { active: 10, total: null, label: 'Educational' },
-  lab: { active: 10, total: null, label: 'Lab' },
+  lab: { active: 20, total: null, label: 'Lab' },
   commercial: { active: 10, total: null, label: 'Commercial' },
   commercialPro: { active: 30, total: null, label: 'Commercial Pro' },
 });
 
 export const DEFAULT_MAX_MODEL_BYTES = 100 * 1024 * 1024;
 export const DEFAULT_SHARE_TTL_DAYS = 3;
-export const MAX_SHARE_TTL_DAYS = 14;
+export const MAX_SHARE_TTL_DAYS = 15;
 // The 8 GiB guard leaves practical headroom under the R2 free-tier storage
 // allowance and is a service-wide protection in addition to each licence cap.
 export const DEFAULT_MAX_LIVE_BYTES = 8 * 1024 * 1024 * 1024;

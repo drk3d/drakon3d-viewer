@@ -13,22 +13,22 @@ a value hidden in the Rhino plug-in.
 
 | Licence | Allowance |
 |---|---:|
-| Trial | 3 exports total for the entire trial (up to 3 live at once) |
+| Trial | 5 exports total for the entire trial (up to 5 live at once) |
 | Educational | 10 active links |
-| Lab | 10 active links |
+| Lab | 20 active links |
 | Commercial | 10 active links |
 | Commercial Pro | 30 active links |
 | Expired, suspended, unsupported or offline | No new links |
 
 Links expire after **3 days by default**. At link creation, `DkShare` lets the
-user choose any whole number of days from **1 to 14**. The service enforces the
-14-day maximum itself, so it cannot be bypassed by changing the plug-in. Links
+user choose any whole number of days from **1 to 15**. The service enforces the
+15-day maximum itself, so it cannot be bypassed by changing the plug-in. Links
 remain available for their scheduled lifetime if a licence later expires; the
 user simply cannot create a new link. The viewer redirects expired or unavailable share links to
 `https://viewer.drakon3d.com/`.
 
 When a user runs `DkShare`, the command line shows their authenticated live
-allowance as `ActiveLinks=current/limit`. Trial licences also show their
+allowance as `ActiveLinks=current/limit`. Trial licences show only their
 lifetime `TrialLimits=current/limit` allowance. These counts are read from the
 quota coordinator after it removes any expired links.
 
@@ -81,9 +81,9 @@ example, the current values are:
 
 ```json
 {
-  "trial": { "active": 3, "total": 3 },
+  "trial": { "active": 5, "total": 5 },
   "educational": { "active": 10 },
-  "lab": { "active": 10 },
+  "lab": { "active": 20 },
   "commercial": { "active": 10 },
   "commercialPro": { "active": 30 }
 }
