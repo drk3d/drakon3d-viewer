@@ -31,6 +31,17 @@ const result = await build({
     // three-mesh-bvh is a local prebuilt module, not an npm dep
     'three-mesh-bvh': resolve(www, 'libs/three-mesh-bvh.js'),
   },
+  plugins: [{
+    // Browsers use query strings to invalidate cached ES modules. Strip that
+    // suffix only while bundling the offline shell so esbuild resolves the
+    // corresponding local source file.
+    name: 'local-module-cache-busters',
+    setup(build) {
+      build.onResolve({ filter: /^\.\.?\/.*\?v=/ }, args => ({
+        path: resolve(args.resolveDir, args.path.replace(/\?v=.*$/, '')),
+      }));
+    },
+  }],
   define: {
     // Keep exported single-file viewer packages visually identical to the
     // hosted Viewer; the normal web app loads this asset as a separate file.
@@ -103,7 +114,7 @@ html = html.replace(/<script type="importmap">[\s\S]*?<\/script>\s*/, '');
 // inlined bundle. A __RHV_PACKAGE__ placeholder is injected just before it so
 // the Export Package output can carry its model inline.
 html = html.replace(
-  /<script type="module" src="app\.js"><\/script>/,
+  /<script type="module" src="app\.js[^"]*"><\/script>/,
   () => `<script id="rhv-package">/*__RHV_PACKAGE__*/</script>\n<script type="module" id="app-bundle">${appBundle}</script>`
 );
 
