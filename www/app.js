@@ -610,8 +610,12 @@ function init() {
   S.clippingTransformControls.showY = true;
   S.clippingTransformControls.showZ = true;
   
-  // Render gizmo helper in the arc overlay scene so it is never clipped
-  S.arcOverlayScene.add(S.clippingTransformControls.getHelper());
+  // Do not leave a detached TransformControls helper in the overlay scene.
+  // Its semi-transparent XYZ centre handle otherwise renders at the world
+  // origin as a small grey diamond. setupClippingHelper() adds it only while
+  // the clipping widget is actually active.
+  S.clippingTransformControls.getHelper().visible = false;
+  S.clippingTransformControls.enabled = false;
 
   // ── Gumball Transform Controls Setup ──
   S.gumballTransformControls = new TransformControls(S.camera, S.renderer.domElement);
@@ -621,7 +625,10 @@ function init() {
   S.gumballTransformControls.showX = true;
   S.gumballTransformControls.showY = true;
   S.gumballTransformControls.showZ = true;
-  S.arcOverlayScene.add(S.gumballTransformControls.getHelper());
+  // setupGumballHelper() adds this helper only while Move is active. Keeping a
+  // detached helper in the scene exposes the same centre handle at the origin.
+  S.gumballTransformControls.getHelper().visible = false;
+  S.gumballTransformControls.enabled = false;
 
   // Hide negative direction handles for gumball
   try {
@@ -2370,7 +2377,10 @@ function bindUI() {
   function deactivateClippingHelper() {
     if (S.clippingTransformControls) {
       S.clippingTransformControls.detach();
-      S.clippingTransformControls.getHelper().visible = false;
+      const helper = S.clippingTransformControls.getHelper();
+      helper.visible = false;
+      helper.parent?.remove(helper);
+      S.clippingTransformControls.enabled = false;
     }
     // Clean up arc handles from overlay scene
     S.clippingArcHandles.forEach(h => {

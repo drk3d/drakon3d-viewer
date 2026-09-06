@@ -82,7 +82,10 @@ export function deactivateAllTools() {
     document.getElementById('btn-gumball')?.classList.remove('active');
     if (S.gumballTransformControls) {
       S.gumballTransformControls.detach();
-      S.gumballTransformControls.getHelper().visible = false;
+      const helper = S.gumballTransformControls.getHelper();
+      helper.visible = false;
+      helper.parent?.remove(helper);
+      S.gumballTransformControls.enabled = false;
     }
     if (S.gumballArcHandles) {
       S.gumballArcHandles.forEach(h => {
@@ -984,7 +987,12 @@ export function updateClippingPlane() {
 }
 
 export function setupClippingHelper() {
-  if (S.clippingTransformControls) S.clippingTransformControls.detach();
+  if (S.clippingTransformControls) {
+    S.clippingTransformControls.detach();
+    const helper = S.clippingTransformControls.getHelper();
+    helper.visible = false;
+    helper.parent?.remove(helper);
+  }
 
   // Remove old arc handles from the overlay scene
   S.clippingArcHandles.forEach(h => {
@@ -1024,6 +1032,9 @@ export function setupClippingHelper() {
   updateClippingHelperPose();
 
   if (S.clippingTransformControls) {
+    const helper = S.clippingTransformControls.getHelper();
+    if (helper.parent !== S.arcOverlayScene) S.arcOverlayScene.add(helper);
+    S.clippingTransformControls.enabled = true;
     S.clippingTransformControls.attach(S.clippingHelper);
   }
 

@@ -1274,7 +1274,13 @@ export function ensureCustomMaterial(obj) {
 // ── Gumball Helpers ────────────────────────────────────────────────────────────
 
 export function setupGumballHelper() {
-  if (S.gumballTransformControls) S.gumballTransformControls.detach();
+  if (S.gumballTransformControls) {
+    S.gumballTransformControls.detach();
+    const helper = S.gumballTransformControls.getHelper();
+    helper.visible = false;
+    helper.parent?.remove(helper);
+    S.gumballTransformControls.enabled = false;
+  }
 
   // Remove old arc handles
   if (S.gumballArcHandles) {
@@ -1339,15 +1345,21 @@ export function setupGumballHelper() {
   // 4. Attach S.gumballTransformControls to S.gumballHelper
   if (S.gumballTransformControls) {
     S.gumballTransformControls.size = 0.65;
+    const helper = S.gumballTransformControls.getHelper();
+    if (helper.parent !== S.arcOverlayScene) S.arcOverlayScene.add(helper);
+    S.gumballTransformControls.enabled = true;
     S.gumballTransformControls.attach(S.gumballHelper);
-    S.gumballTransformControls.getHelper().visible = true;
+    helper.visible = true;
   }
 }
 
 export function clearGumballHelper() {
   if (S.gumballTransformControls) {
     S.gumballTransformControls.detach();
-    S.gumballTransformControls.getHelper().visible = false;
+    const helper = S.gumballTransformControls.getHelper();
+    helper.visible = false;
+    helper.parent?.remove(helper);
+    S.gumballTransformControls.enabled = false;
   }
 
   if (S.gumballArcHandles) {
