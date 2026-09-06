@@ -415,23 +415,19 @@ async function validateUploadLicense(request, configuration) {
     Authorization: `Bearer ${userToken}`,
   };
   const scope = { product: configuration.keygenProductId, fingerprint, machine: machineId };
-  let validation = await keygenValidate(endpoint, headers, scope);
+  let validation = await keygenValidateWithRequiredScopes(endpoint, headers, scope);
 
-  // Some valid Drakon policies additionally require explicit policy or user
-  // scope. Those values come only from Keygen's response for this license.
-  for (let attempt = 0; attempt < 2 && validation.response?.ok && validation.result?.meta?.valid !== true; attempt += 1) {
-    const code = keygenCode(validation.result);
-    const license = validation.result?.data;
-    let changed = false;
-    if (code === 'POLICY_SCOPE_REQUIRED' && !scope.policy) {
-      const policyId = relationshipId(license, 'policy');
-      if (policyId) { scope.policy = policyId; changed = true; }
-    } else if (code === 'USER_SCOPE_REQUIRED' && !scope.user) {
-      const userId = relationshipId(license, 'owner') || relationshipId(license, 'user');
-      if (userId) { scope.user = userId; changed = true; }
+  // OVERDUE is a license check-in status, not a machine-heartbeat status.
+  // The plug-in has already supplied its signed-in user's token and exact
+  // license ID. Check in that same license, then validate it again. This keeps
+  // public sharing tied to the existing active Drakon session without asking
+  // the user to perform a second login or weakening expiry/suspension checks.
+  if (validation.response?.ok && keygenCode(validation.result) === 'OVERDUE') {
+    const checkInEndpoint = `https://api.keygen.sh/v1/accounts/${encodeURIComponent(configuration.keygenAccountId)}/licenses/${encodeURIComponent(licenseId)}/actions/check-in`;
+    const checkIn = await keygenCheckIn(checkInEndpoint, headers);
+    if (checkIn.response?.ok) {
+      validation = await keygenValidateWithRequiredScopes(endpoint, headers, scope);
     }
-    if (!changed) break;
-    validation = await keygenValidate(endpoint, headers, scope);
   }
 
   if (!validation.response) {
@@ -474,6 +470,40 @@ async function keygenValidate(endpoint, headers, scope) {
     });
     let result = null;
     try { result = await response.json(); } catch { /* handled as invalid below */ }
+    return { response, result };
+  } catch {
+    return { response: null, result: null };
+  }
+}
+
+async function keygenValidateWithRequiredScopes(endpoint, headers, scope) {
+  let validation = await keygenValidate(endpoint, headers, scope);
+
+  // Some valid Drakon policies additionally require explicit policy or user
+  // scope. Those values come only from Keygen's response for this license.
+  for (let attempt = 0; attempt < 2 && validation.response?.ok && validation.result?.meta?.valid !== true; attempt += 1) {
+    const code = keygenCode(validation.result);
+    const license = validation.result?.data;
+    let changed = false;
+    if (code === 'POLICY_SCOPE_REQUIRED' && !scope.policy) {
+      const policyId = relationshipId(license, 'policy');
+      if (policyId) { scope.policy = policyId; changed = true; }
+    } else if (code === 'USER_SCOPE_REQUIRED' && !scope.user) {
+      const userId = relationshipId(license, 'owner') || relationshipId(license, 'user');
+      if (userId) { scope.user = userId; changed = true; }
+    }
+    if (!changed) break;
+    validation = await keygenValidate(endpoint, headers, scope);
+  }
+
+  return validation;
+}
+
+async function keygenCheckIn(endpoint, headers) {
+  try {
+    const response = await fetch(endpoint, { method: 'POST', headers });
+    let result = null;
+    try { result = await response.json(); } catch { /* response status is sufficient */ }
     return { response, result };
   } catch {
     return { response: null, result: null };
