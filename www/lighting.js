@@ -198,6 +198,23 @@ export function updateGroundAppearance() {
 
   S.groundMesh.material.dispose();
 
+  // In Render/Shaded mode the ground is only a shadow receiver, not a visible
+  // floor. Without an enabled sun there is no real shadow for it to receive,
+  // while leaving it in the scene still feeds its depth/normal into GTAO/SSAO.
+  // That post-process intersection appears as a small grey diamond at the model
+  // centre (especially through rings and other open forms). Exclude the receiver
+  // completely in that state; object-to-object ambient occlusion remains active.
+  // Arctic deliberately keeps its visible white floor even without the sun.
+  if (S.currentMode !== 'arctic' && !hasShadowCaster) {
+    S.groundMesh.material = new THREE.MeshBasicMaterial({ visible: false });
+    S.groundMesh.visible = false;
+    S.groundMesh.receiveShadow = false;
+    if (!modeUsesSSAO) S.ssaoPass.enabled = false;
+    return;
+  }
+
+  S.groundMesh.visible = true;
+
   if (S.currentMode === 'arctic') {
     if (hasShadowCaster) {
       // Use ShadowMaterial to overlay a clean shadow on the background,
