@@ -1940,19 +1940,14 @@ export async function preprocess3dm(file, skipLayerParse) {
   return fileData;
 }
 
-// GTAOPass.setSceneClipBox transforms the box to view-space when populating
-// the shader uniforms, which expands the box past the world origin for any
-// off-origin model and reintroduces the ghost-AO patch at (0,0,0). Overwriting
-// the uniforms with the world-space box right after setSceneClipBox keeps the
-// shader's sampling clip true to the actual model extent.
-function applyGtaoClipBox(box) {
+// Do not enable GTAOPass's optional scene clip box. Its fragment shader uses
+// `discard` outside the box; in a persistent composer target that leaves a
+// small projected patch from a previous AO frame at the orbit target. As the
+// camera moves, the patch reads as a floating grey square beneath the model.
+// GTAO already ignores background-depth pixels, so the clip box is unnecessary.
+function applyGtaoClipBox(_box) {
   if (!S.gtaoPass) return;
-  S.gtaoPass.setSceneClipBox(box);
-  const u = S.gtaoPass.gtaoMaterial?.uniforms;
-  if (u?.sceneBoxMin && u?.sceneBoxMax && !box.isEmpty()) {
-    u.sceneBoxMin.value.copy(box.min);
-    u.sceneBoxMax.value.copy(box.max);
-  }
+  S.gtaoPass.setSceneClipBox();
 }
 
 // ── Wireframe fallback: attach line geometry for Brep/Extrusion objects that
