@@ -220,7 +220,9 @@ export function updateGroundAppearance() {
     if (!modeUsesSSAO) S.ssaoPass.enabled = false;
   } else if (useAmbientShadow) {
     S.groundMesh.material = new THREE.MeshStandardMaterial({
-      color: 0xffffff, opacity: 0.1, transparent: true,
+      // Keep the ground in the depth/normal passes so SSAO can create a
+      // contact shadow, but do not draw the receiver itself as a gray square.
+      color: 0xffffff, opacity: 0, transparent: true, depthWrite: true,
       roughness: 1.0, metalness: 0.0
     });
     S.groundMesh.receiveShadow = false;
