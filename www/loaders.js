@@ -2603,63 +2603,72 @@ export async function handleFile(file, rhinoLoader, gltfLoader, fileHandle = nul
   setProgress(25);
   const url = URL.createObjectURL(processedBlob);
 
-  rhinoLoader.load(
-    url,
-    object => {
-      try {
-        URL.revokeObjectURL(url);
-        clearCurrentModel();
-        S.currentModel = object;
-        S.scene.add(S.currentModel);
-        document.getElementById('empty-state')?.classList.add('hidden');
-        setToolbarModelState(true);
-        attachWireframeFallback(S.currentModel);
-        // Both must precede postProcessModel: it decides edge extraction and the
-        // heavy-model deferral from what is already present and how each object
-        // is typed.
-        restoreSubDObjectType(S.currentModel);
-        attachBrepEdges(S.currentModel);
-        postProcessModel(S.currentModel, extractEdges);
-        applyLayerColorsToModel(S.currentModel);
-        updateLayerVisibility();
-        const box = computeVisibleBoundingBox(S.currentModel);
-        fitCameraToBox(box, false);
-        setupModelShadowFrustum(box);
-        applyGtaoClipBox(box);
-        if (S.groundEnabled) addGroundPlane(box);
-        applyFileBackground();
-        if (S.fileSkylightEnabled) {
-          changeDisplayMode('rendered');
-        } else {
-          applyDisplayMode();
+  // Rhino3dmLoader uses callbacks. Return a Promise that settles only after
+  // geometry and all post-processing are complete; callers such as DkShare
+  // must not begin the RHV export while the model is still loading.
+  return new Promise(resolve => {
+    rhinoLoader.load(
+      url,
+      object => {
+        let loaded = false;
+        try {
+          URL.revokeObjectURL(url);
+          clearCurrentModel();
+          S.currentModel = object;
+          S.scene.add(S.currentModel);
+          document.getElementById('empty-state')?.classList.add('hidden');
+          setToolbarModelState(true);
+          attachWireframeFallback(S.currentModel);
+          // Both must precede postProcessModel: it decides edge extraction and the
+          // heavy-model deferral from what is already present and how each object
+          // is typed.
+          restoreSubDObjectType(S.currentModel);
+          attachBrepEdges(S.currentModel);
+          postProcessModel(S.currentModel, extractEdges);
+          applyLayerColorsToModel(S.currentModel);
+          updateLayerVisibility();
+          const box = computeVisibleBoundingBox(S.currentModel);
+          fitCameraToBox(box, false);
+          setupModelShadowFrustum(box);
+          applyGtaoClipBox(box);
+          if (S.groundEnabled) addGroundPlane(box);
+          applyFileBackground();
+          if (S.fileSkylightEnabled) {
+            changeDisplayMode('rendered');
+          } else {
+            applyDisplayMode();
+          }
+          createAnnotationSprites();
+          renderNamedViewsUI();
+          setFileName(file.name);
+          showModelInfo(S.currentModel, file.size);
+          notifyIfEdgesDeferred();
+          if (S.missingRenderMeshCount > 0) {
+            // Non-blocking — those objects are now shown as wireframes from their
+            // edge curves, so the model is usable. We just inform the user.
+            showToast(t('msg.no_render_mesh').replace('{n}', S.missingRenderMeshCount));
+          }
+          loaded = true;
+        } catch (postErr) {
+          console.error('[load] post-processing crash:', postErr);
+          alert(t('msg.process_3dm_failed').replace('{err}', postErr?.message || postErr));
+          document.getElementById('empty-state')?.classList.remove('hidden');
+        } finally {
+          hideLoading();
+          resolve(loaded);
         }
-        createAnnotationSprites();
-        renderNamedViewsUI();
-        setFileName(file.name);
-        showModelInfo(S.currentModel, file.size);
-        notifyIfEdgesDeferred();
-        if (S.missingRenderMeshCount > 0) {
-          // Non-blocking — those objects are now shown as wireframes from their
-          // edge curves, so the model is usable. We just inform the user.
-          showToast(t('msg.no_render_mesh').replace('{n}', S.missingRenderMeshCount));
-        }
-      } catch (postErr) {
-        console.error('[load] post-processing crash:', postErr);
-        alert(t('msg.process_3dm_failed').replace('{err}', postErr?.message || postErr));
-        document.getElementById('empty-state')?.classList.remove('hidden');
-      } finally {
+      },
+      xhr => { if (xhr.total > 0) setProgress(25 + (xhr.loaded / xhr.total) * 70); },
+      err => {
+        console.error(err);
+        alert(t('msg.load_3dm_failed'));
         hideLoading();
+        URL.revokeObjectURL(url);
+        document.getElementById('empty-state')?.classList.remove('hidden');
+        resolve(false);
       }
-    },
-    xhr => { if (xhr.total > 0) setProgress(25 + (xhr.loaded / xhr.total) * 70); },
-    err => {
-      console.error(err);
-      alert(t('msg.load_3dm_failed'));
-      hideLoading();
-      URL.revokeObjectURL(url);
-      document.getElementById('empty-state')?.classList.remove('hidden');
-    }
-  );
+    );
+  });
 }
 
 export async function loadGeometryFromGLB(glbBuffer, fileName, fileSize) {

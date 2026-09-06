@@ -13,42 +13,51 @@ async function sha256Hex(value) {
 }
 
 async function makeEnvironment(originalSize = 128) {
+  const mainKey = `shares/${SHARE_ID}.3dm`;
+  const originalBytes = new Uint8Array(originalSize);
+  const originalObject = {
+    size: originalSize,
+    bytes: originalBytes,
+    customMetadata: {
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      filename: 'design.3dm',
+      format: '3dm',
+      passwordHash: 'protected',
+      prepareTokenHash: await sha256Hex(PREPARE_TOKEN),
+      prepareExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+    },
+    writeHttpMetadata() {},
+  };
+  const objects = new Map([[mainKey, originalObject]]);
   const state = {
     puts: [],
+    deletes: [],
     quotaRequests: [],
-    object: {
-      size: originalSize,
-      customMetadata: {
-        expiresAt: new Date(Date.now() + 60_000).toISOString(),
-        filename: 'design.3dm',
-        format: '3dm',
-        passwordHash: 'protected',
-        prepareTokenHash: await sha256Hex(PREPARE_TOKEN),
-        prepareExpiresAt: new Date(Date.now() + 60_000).toISOString(),
-      },
-      writeHttpMetadata() {},
-    },
   };
+  Object.defineProperty(state, 'object', { get: () => objects.get(mainKey) });
 
   const env = {
     VIEWER_ORIGIN,
     SHARES: {
-      async head() { return state.object; },
-      async get() {
-        return {
-          ...state.object,
-          body: new Uint8Array(state.object.size),
-        };
+      async head(key) { return objects.get(key) || null; },
+      async get(key) {
+        const object = objects.get(key);
+        return object ? { ...object, body: object.bytes } : null;
       },
       async put(key, body, options) {
         const bytes = new Uint8Array(await new Response(body).arrayBuffer());
         state.puts.push({ key, bytes, options });
-        state.object = {
+        objects.set(key, {
           size: bytes.length,
+          bytes,
           customMetadata: options.customMetadata,
           writeHttpMetadata() {},
-        };
+        });
         return { size: bytes.length };
+      },
+      async delete(key) {
+        state.deletes.push(key);
+        objects.delete(key);
       },
     },
     SHARE_QUOTAS: {
@@ -67,18 +76,19 @@ async function makeEnvironment(originalSize = 128) {
 }
 
 function request(path, { token = PREPARE_TOKEN, size = 64 } = {}) {
-  return new Request(`https://worker.example${path}`, {
+  const result = new Request(`https://worker.example${path}`, {
     method: 'POST',
     headers: {
       Origin: VIEWER_ORIGIN,
       'Content-Type': 'application/vnd.drakon.rhv',
-      'Content-Length': String(size),
       'X-Drakon-Prepare-Token': token,
       'X-Drakon-Filename': 'ring.rhv',
     },
     body: new Uint8Array(size),
     duplex: 'half',
   });
+  assert.equal(result.headers.get('Content-Length'), null);
+  return result;
 }
 
 test('a valid creator token atomically replaces a larger 3DM with RHV', async () => {
@@ -92,8 +102,10 @@ test('a valid creator token atomically replaces a larger 3DM with RHV', async ()
 
   assert.equal(response.status, 200);
   assert.equal(result.optimized, true);
-  assert.equal(state.puts.length, 1);
-  assert.equal(state.puts[0].key, `shares/${SHARE_ID}.3dm`);
+  assert.equal(state.puts.length, 2);
+  assert.match(state.puts[0].key, new RegExp(`^shares/${SHARE_ID}\\..+\\.rhv\\.tmp$`));
+  assert.equal(state.puts[1].key, `shares/${SHARE_ID}.3dm`);
+  assert.deepEqual(state.deletes, [state.puts[0].key]);
   assert.equal(state.object.customMetadata.format, 'rhv');
   assert.equal(state.object.customMetadata.filename, 'ring.rhv');
   assert.deepEqual(state.quotaRequests, [{
@@ -115,7 +127,8 @@ test('a compact file that is not smaller leaves the original 3DM untouched', asy
 
   assert.equal(response.status, 200);
   assert.equal(result.optimized, false);
-  assert.equal(state.puts.length, 0);
+  assert.equal(state.puts.length, 1);
+  assert.deepEqual(state.deletes, [state.puts[0].key]);
   assert.equal(state.object.customMetadata.format, '3dm');
 });
 

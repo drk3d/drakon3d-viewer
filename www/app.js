@@ -238,7 +238,9 @@ async function _loadSharedModel(shareId, apiOrigin, prepareToken = null) {
   const filename = response.headers.get('X-Drakon-Filename') || 'design.3dm';
   const file = new File([await response.blob()], filename, { type: 'application/octet-stream' });
   if (filename.toLowerCase().endsWith('.rhv')) await loadSession(file);
-  else await handleFile(file, rhinoLoader, gltfLoader);
+  else if (await handleFile(file, rhinoLoader, gltfLoader) === false) {
+    throw new _ShareLinkError('The shared 3DM could not be loaded.', 500);
+  }
   return { filename };
 }
 
@@ -288,7 +290,8 @@ async function _finalizeSharedModel(shareId, apiOrigin, prepareToken, sourceFile
     // the original 3DM usable instead of turning an optimisation failure into
     // a failed DkShare command.
     console.warn('[Drakon Share] RHV optimization was not completed:', error);
-    showToast('Share is ready. Compact RHV storage was not completed.');
+    const detail = error?.message || 'Unknown conversion error.';
+    showToast(`Share is ready in the original 3DM format. RHV conversion failed: ${detail}`);
   } finally {
     _removeSharePrepareToken();
     hideLoading();

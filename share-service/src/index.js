@@ -165,24 +165,43 @@ async function finalizeShare(id, request, env, origin) {
   }
 
   const contentType = request.headers.get('Content-Type')?.toLowerCase().split(';')[0].trim();
-  const contentLength = Number.parseInt(request.headers.get('Content-Length') || '', 10);
-  if (contentType !== 'application/vnd.drakon.rhv' || !request.body
-      || !Number.isSafeInteger(contentLength) || contentLength <= 0) {
+  if (contentType !== 'application/vnd.drakon.rhv' || !request.body) {
     return json({ error: 'A valid RHV model is required.' }, 400, cors(origin, env));
-  }
-  if (contentLength > configuration.maxModelBytes) {
-    return json({ error: 'The compact model exceeds the sharing limit.' }, 413, cors(origin, env));
-  }
-
-  // The optimisation must never consume more capacity than the original
-  // upload. If this particular model compresses better as 3DM, keep it.
-  if (contentLength >= model.size) {
-    return json({ ok: true, optimized: false, size: model.size, format: '3dm' }, 200, cors(origin, env));
   }
 
   const filename = safeFilename(request.headers.get('X-Drakon-Filename'), 'rhv');
+  const modelKey = `shares/${id}.3dm`;
+  const temporaryKey = `shares/${id}.${crypto.randomUUID()}.rhv.tmp`;
   try {
-    const storedObject = await env.SHARES.put(`shares/${id}.3dm`, request.body, {
+    // Browsers cannot set Content-Length themselves, and HTTP/2 is allowed to
+    // omit it. Stream the upload to a private temporary R2 object first, then
+    // use R2's authoritative stored size before replacing the public model.
+    const temporaryObject = await env.SHARES.put(temporaryKey, request.body, {
+      httpMetadata: {
+        contentType: 'application/vnd.drakon.rhv',
+        contentDisposition: `inline; filename="${filename}"`,
+      },
+      customMetadata: {
+        ...model.customMetadata,
+        filename,
+        format: 'rhv',
+        optimizedAt: new Date().toISOString(),
+      },
+    });
+    if (!temporaryObject || temporaryObject.size <= 0) throw new Error('The compact model was empty.');
+    if (temporaryObject.size > configuration.maxModelBytes) {
+      return json({ error: 'The compact model exceeds the sharing limit.' }, 413, cors(origin, env));
+    }
+
+    // The optimisation must never consume more capacity than the original
+    // upload. If this particular model compresses better as 3DM, keep it.
+    if (temporaryObject.size >= model.size) {
+      return json({ ok: true, optimized: false, size: model.size, format: '3dm' }, 200, cors(origin, env));
+    }
+
+    const compactObject = await env.SHARES.get(temporaryKey);
+    if (!compactObject?.body) throw new Error('The compact model could not be read back.');
+    const storedObject = await env.SHARES.put(modelKey, compactObject.body, {
       httpMetadata: {
         contentType: 'application/vnd.drakon.rhv',
         contentDisposition: `inline; filename="${filename}"`,
@@ -221,6 +240,11 @@ async function finalizeShare(id, request, env, origin) {
   } catch (error) {
     console.error('Drakon Share RHV finalization failed', error);
     return json({ error: 'The compact model could not be stored.' }, 503, cors(origin, env));
+  } finally {
+    // The temporary object is never public and should not count against live
+    // sharing capacity. A cleanup failure does not endanger the active share.
+    try { await env.SHARES.delete(temporaryKey); }
+    catch (error) { console.error('Drakon Share RHV temporary cleanup failed', error); }
   }
 }
 
