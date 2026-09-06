@@ -772,9 +772,7 @@
       "imports": {
         "three": "https://unpkg.com/three@0.169.0/build/three.module.js",
         "three/addons/": "https://unpkg.com/three@0.169.0/examples/jsm/",
-        "three-mesh-bvh": "./libs/three-mesh-bvh.js",
-        "./loaders.js": "./loaders.js?v=1692699",
-        "./lighting.js": "./lighting.js?v=d2604b8"
+        "three-mesh-bvh": "./libs/three-mesh-bvh.js"
       }
     }
   </script>
@@ -1052,27 +1050,5 @@
   </div>
 
   <script type="module" src="app.js"></script>
-  <script>
-    // GitHub Pages can retain an earlier loaders.js module for several minutes.
-    // Disable GTAO's obsolete scene-clip path at the pass itself as soon as the
-    // app creates it, so a cached loader cannot restore the centered grey patch.
-    (() => {
-      const started = Date.now();
-      const timer = setInterval(() => {
-        const pass = window._gtao;
-        if (!pass) {
-          if (Date.now() - started > 15000) clearInterval(timer);
-          return;
-        }
-        clearInterval(timer);
-        const clearClipBox = () => {
-          pass.gtaoMaterial.defines.SCENE_CLIP_BOX = 0;
-          pass.gtaoMaterial.needsUpdate = true;
-        };
-        clearClipBox();
-        pass.setSceneClipBox = clearClipBox;
-      }, 25);
-    })();
-  </script>
 </body>
 </html>
