@@ -253,7 +253,7 @@ function restoreExportUserData(restore) {
 // scene mutations (hidden outlines, swapped materials, stripped userData) are
 // restored before resolving and on every error path. Shared by saveSession()
 // (writes a .rhv) and exportPackage() (embeds into a self-contained .html).
-async function buildSessionBuffer(customFileName = null) {
+export async function buildSessionBuffer(customFileName = null) {
   const toHide = [];
   // Objects forced visible for the export because onlyVisible would otherwise
   // drop data that cannot be reconstructed — see the rhino-edges case below.
@@ -395,10 +395,20 @@ async function buildSessionBuffer(customFileName = null) {
         }
         return;
       }
+
+      // GLTFExporter skips invisible objects (and every descendant of an
+      // invisible group) by default. An RHV is a complete session, so keep
+      // hidden model geometry in the binary and restore its visibility from
+      // hiddenKeys / parsedLayers when the session opens.
+      const wasVisible = child.visible;
+      if (!wasVisible) {
+        toReveal.push(child);
+        child.visible = true;
+      }
       if (child.isMesh && child.userData.originalMaterial) {
         const key = getObjectKey(child);
         if (child.userData.customMaterial) data.customMaterials[key] = { ...child.userData.customMaterial };
-        if (!child.visible) data.hiddenKeys.push(key);
+        if (!wasVisible) data.hiddenKeys.push(key);
 
         // Keep track of active material to restore later
         activeMaterials.set(child, child.material);

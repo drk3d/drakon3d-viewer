@@ -16,13 +16,13 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { initI18n, setLang, applyI18n, t, currentLang } from './i18n.js';
 
 import { S } from './state.js';
-import { updateSliderFill, updateAllSliderFills, updateSelectIcon, showLoading, hideLoading, bindSliderDblClickInput, beginSave } from './helpers.js';
+import { updateSliderFill, updateAllSliderFills, updateSelectIcon, showLoading, hideLoading, showToast, bindSliderDblClickInput, beginSave } from './helpers.js';
 import { setupLights, updateSunLight, updateShadowCasting, addGroundPlane, removeGroundPlane, computeVisibleBoundingBox } from './lighting.js';
 import { switchToOrtho, switchToPersp, switchToTwoPoint, apply2PointConstraints, installTwoPointDragHandler, setViewPreset, setWalkthroughMode, triggerCameraTransition, fitCameraToBox, fitCameraToObject, fitCameraToSelected, saveCustomView, renderNamedViewsUI, updateAdaptiveClipping } from './camera.js';
 import { applySceneBackground, applyFileBackground, applyDisplayMode, applyLayerColorsToModel, recreateAllEdges, setEdgeAngleUniform } from './display.js';
 import { renderLayerUI, updateLayerVisibility } from './layers.js';
 import { createAnnotationSprites } from './annotations.js';
-import { saveSession, loadSession, exportPackage } from './session.js';
+import { saveSession, loadSession, exportPackage, buildSessionBuffer } from './session.js';
 import { handleFile, clearCurrentModel } from './loaders.js';
 import * as GoogleDrive from './cloud/google-drive.js';
 import * as OneDrive from './cloud/onedrive.js';
@@ -136,6 +136,7 @@ animate();
 const _hasPlainPackage     = typeof window.__RHV_PACKAGE__ === 'string' && window.__RHV_PACKAGE__.length;
 const _hasEncryptedPackage = window.__RHV_PACKAGE_ENCRYPTED__ && typeof window.__RHV_PACKAGE_ENCRYPTED__.data === 'string';
 const _sharedModelId       = new URLSearchParams(window.location.search).get('share');
+const _sharePrepareToken   = _readSharePrepareToken();
 // This is deliberately fixed in the published viewer. It keeps links clean
 // (`?share=<id>`) and prevents a link from selecting an arbitrary file source.
 const _sharedModelApi      = 'https://drakon3d-share.lingering-voice-78d0.workers.dev';
@@ -168,7 +169,10 @@ if (_hasPlainPackage || _hasEncryptedPackage || _sharedModelId) {
   (async () => {
     try {
       if (_sharedModelId) {
-        await _loadSharedModel(_sharedModelId, _sharedModelApi);
+        const sharedModel = await _loadSharedModel(_sharedModelId, _sharedModelApi, _sharePrepareToken);
+        if (_sharePrepareToken) {
+          await _finalizeSharedModel(_sharedModelId, _sharedModelApi, _sharePrepareToken, sharedModel.filename);
+        }
         return;
       }
       const name = window.__RHV_PACKAGE_NAME__ || 'model.rhv';
@@ -204,7 +208,7 @@ class _ShareLinkError extends Error {
   }
 }
 
-async function _loadSharedModel(shareId, apiOrigin) {
+async function _loadSharedModel(shareId, apiOrigin, prepareToken = null) {
   if (!/^[A-Za-z0-9_-]{24}$/.test(shareId) || !apiOrigin) {
     throw new _ShareLinkError('The share link is invalid.', 404);
   }
@@ -212,9 +216,9 @@ async function _loadSharedModel(shareId, apiOrigin) {
   let attempt = 0;
   let response;
   while (true) {
-    const headers = password == null ? {} : {
-      'X-Drakon-Share-Password': _passwordToBase64Url(password),
-    };
+    const headers = {};
+    if (prepareToken) headers['X-Drakon-Prepare-Token'] = prepareToken;
+    if (password != null) headers['X-Drakon-Share-Password'] = _passwordToBase64Url(password);
     response = await fetch(`${apiOrigin}/v1/shares/${encodeURIComponent(shareId)}`, {
       cache: 'no-store',
       credentials: 'omit',
@@ -235,6 +239,60 @@ async function _loadSharedModel(shareId, apiOrigin) {
   const file = new File([await response.blob()], filename, { type: 'application/octet-stream' });
   if (filename.toLowerCase().endsWith('.rhv')) await loadSession(file);
   else await handleFile(file, rhinoLoader, gltfLoader);
+  return { filename };
+}
+
+function _readSharePrepareToken() {
+  const value = new URLSearchParams(window.location.hash.replace(/^#/, '')).get('prepare');
+  return typeof value === 'string' && /^[A-Za-z0-9_-]{32}$/.test(value) ? value : null;
+}
+
+function _removeSharePrepareToken() {
+  const url = new URL(window.location.href);
+  const fragment = new URLSearchParams(url.hash.replace(/^#/, ''));
+  fragment.delete('prepare');
+  const remaining = fragment.toString();
+  url.hash = remaining ? `#${remaining}` : '';
+  window.history.replaceState(null, '', url.toString());
+}
+
+async function _finalizeSharedModel(shareId, apiOrigin, prepareToken, sourceFilename) {
+  try {
+    showLoading('Optimizing shared model…');
+    const baseName = (sourceFilename || 'design').replace(/\.(?:3dm|rhv)$/i, '') || 'design';
+    const { finalBuffer, finalName } = await buildSessionBuffer(baseName);
+    const response = await fetch(`${apiOrigin}/v1/shares/${encodeURIComponent(shareId)}/model`, {
+      method: 'POST',
+      cache: 'no-store',
+      credentials: 'omit',
+      headers: {
+        'Content-Type': 'application/vnd.drakon.rhv',
+        'X-Drakon-Prepare-Token': prepareToken,
+        'X-Drakon-Filename': encodeURIComponent(`${finalName}.rhv`),
+      },
+      body: finalBuffer,
+    });
+
+    let result = null;
+    try { result = await response.json(); } catch { /* handled below */ }
+    if (!response.ok) {
+      throw new Error(result?.error || 'The compact share could not be stored.');
+    }
+    if (result?.optimized === false) {
+      showToast('Share is ready. The original 3DM was already the smaller format.');
+    } else {
+      showToast('Share is ready and stored in the compact RHV format.');
+    }
+  } catch (error) {
+    // The public link was created before this best-effort conversion. Keep
+    // the original 3DM usable instead of turning an optimisation failure into
+    // a failed DkShare command.
+    console.warn('[Drakon Share] RHV optimization was not completed:', error);
+    showToast('Share is ready. Compact RHV storage was not completed.');
+  } finally {
+    _removeSharePrepareToken();
+    hideLoading();
+  }
 }
 
 function _passwordToBase64Url(password) {

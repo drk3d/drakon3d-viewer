@@ -1,10 +1,13 @@
 # Drakon3D public share service
 
-This Cloudflare Worker stores temporary `.3dm` snapshots for `DkShare` and
-returns them only to the Drakon3D Viewer. It is designed for a public Drakon
-release: a valid, online Drakon licence is checked by Keygen for **every new
-upload** and quotas are enforced by the service, not by a value hidden in the
-Rhino plug-in.
+This Cloudflare Worker stores temporary `DkShare` models and returns them only
+to the Drakon3D Viewer. A share begins as a `.3dm` so its public link works
+immediately. The creator's Viewer then converts the rendered scene to `.rhv`
+and atomically replaces the stored body when the RHV is smaller. Existing and
+failed-to-optimise shares remain valid `.3dm` files. The service is designed
+for a public Drakon release: a valid, online Drakon licence is checked by
+Keygen for **every new upload** and quotas are enforced by the service, not by
+a value hidden in the Rhino plug-in.
 
 ## Public sharing rules
 
@@ -42,7 +45,14 @@ headroom for ordinary service operation.
    reserves capacity in `ShareQuotaCoordinator` before writing to R2.
 4. The Durable Object keeps quota changes serialised, records trial exports,
    and uses alarms to remove expired uploads and release their quota.
-5. R2 lifecycle deletion at 15 days remains a second cleanup backstop.
+5. The Worker returns a 15-minute preparation URL whose high-entropy token is
+   carried in the URL fragment (and therefore is not sent as a referrer). The
+   normal public URL is still the only URL copied to the clipboard.
+6. The creator's Viewer loads the 3DM, exports its complete rendered session to
+   RHV, and posts it back with the preparation token. The Worker accepts the
+   replacement only when it is smaller and updates byte accounting without
+   consuming another link or trial export.
+7. R2 lifecycle deletion at 15 days remains a second cleanup backstop.
 
 Only small accounting records are kept in the Durable Object. Files remain in
 R2, so the licence layer can later be moved to another Drakon service or the

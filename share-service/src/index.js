@@ -7,6 +7,8 @@ import {
 import { ShareQuotaCoordinator } from './share-quota-coordinator.js';
 
 const SHARE_ID_BYTES = 18;
+const PREPARE_TOKEN_BYTES = 24;
+const PREPARE_TOKEN_TTL_MS = 15 * 60 * 1000;
 const PASSWORD_SALT_BYTES = 16;
 const PASSWORD_HASH_BYTES = 32;
 const PASSWORD_HASH_VERSION = '2';
@@ -29,6 +31,9 @@ export default {
 
     const match = url.pathname.match(/^\/v1\/shares\/([A-Za-z0-9_-]{24})$/);
     if (match && request.method === 'GET') return getShare(match[1], request, env, origin, ctx);
+
+    const modelMatch = url.pathname.match(/^\/v1\/shares\/([A-Za-z0-9_-]{24})\/model$/);
+    if (modelMatch && request.method === 'POST') return finalizeShare(modelMatch[1], request, env, origin);
 
     const thumbnailMatch = url.pathname.match(/^\/v1\/shares\/([A-Za-z0-9_-]{24})\/thumbnail$/);
     if (thumbnailMatch && request.method === 'POST') return createThumbnail(thumbnailMatch[1], request, env, origin);
@@ -66,9 +71,12 @@ async function createShare(request, env, origin) {
   const lifetime = readShareLifetime(request, configuration.defaultTtlDays);
   if (lifetime.error) return json({ error: lifetime.error }, 400, cors(origin, env));
 
-  const filename = safeFilename(request.headers.get('X-Drakon-Filename'));
+  const filename = safeFilename(request.headers.get('X-Drakon-Filename'), '3dm');
   const expiresAt = new Date(Date.now() + lifetime.days * 24 * 60 * 60 * 1000);
   const id = randomId();
+  const prepareToken = randomToken(PREPARE_TOKEN_BYTES);
+  const prepareTokenHash = await sha256Hex(prepareToken);
+  const prepareExpiresAt = new Date(Date.now() + PREPARE_TOKEN_TTL_MS).toISOString();
   const licenseKey = await sha256Hex(authorization.license.id);
   const reservation = await quotaRequest(env, {
     action: 'reserve',
@@ -100,7 +108,10 @@ async function createShare(request, env, origin) {
       customMetadata: {
         expiresAt: expiresAt.toISOString(),
         filename,
+        format: '3dm',
         ownerLicenseKey: licenseKey,
+        prepareTokenHash,
+        prepareExpiresAt,
         ...passwordMetadata,
       },
     });
@@ -126,12 +137,91 @@ async function createShare(request, env, origin) {
   return json({
     id,
     url: shareUrl(env, id),
+    prepareUrl: sharePrepareUrl(env, id, prepareToken),
     expiresAt: expiresAt.toISOString(),
     activeLinks: confirmed.activeCount,
     activeLinkLimit: authorization.policy.active,
     exportCount: authorization.policy.total == null ? null : confirmed.totalExports,
     exportLimit: authorization.policy.total,
   }, 201, cors(origin, env));
+}
+
+async function finalizeShare(id, request, env, origin) {
+  const configuration = readShareConfiguration(env);
+  const model = await env.SHARES.head(`shares/${id}.3dm`);
+  if (!model || isExpired(model)) {
+    return json({ error: 'This share link is unavailable.' }, 404, cors(origin, env));
+  }
+
+  const prepareToken = request.headers.get('X-Drakon-Prepare-Token');
+  if (!await isValidPrepareToken(prepareToken, model.customMetadata)) {
+    return json({ error: 'The share preparation link is invalid or has expired.' }, 403, cors(origin, env));
+  }
+
+  // Retrying a completed preparation is harmless, but it must not replace an
+  // already-compact share a second time.
+  if (model.customMetadata?.format === 'rhv') {
+    return json({ ok: true, optimized: true, size: model.size }, 200, cors(origin, env));
+  }
+
+  const contentType = request.headers.get('Content-Type')?.toLowerCase().split(';')[0].trim();
+  const contentLength = Number.parseInt(request.headers.get('Content-Length') || '', 10);
+  if (contentType !== 'application/vnd.drakon.rhv' || !request.body
+      || !Number.isSafeInteger(contentLength) || contentLength <= 0) {
+    return json({ error: 'A valid RHV model is required.' }, 400, cors(origin, env));
+  }
+  if (contentLength > configuration.maxModelBytes) {
+    return json({ error: 'The compact model exceeds the sharing limit.' }, 413, cors(origin, env));
+  }
+
+  // The optimisation must never consume more capacity than the original
+  // upload. If this particular model compresses better as 3DM, keep it.
+  if (contentLength >= model.size) {
+    return json({ ok: true, optimized: false, size: model.size, format: '3dm' }, 200, cors(origin, env));
+  }
+
+  const filename = safeFilename(request.headers.get('X-Drakon-Filename'), 'rhv');
+  try {
+    const storedObject = await env.SHARES.put(`shares/${id}.3dm`, request.body, {
+      httpMetadata: {
+        contentType: 'application/vnd.drakon.rhv',
+        contentDisposition: `inline; filename="${filename}"`,
+      },
+      customMetadata: {
+        ...model.customMetadata,
+        filename,
+        format: 'rhv',
+        optimizedAt: new Date().toISOString(),
+      },
+    });
+    if (!storedObject || storedObject.size <= 0) throw new Error('The compact model was empty.');
+
+    // A failed accounting update only over-counts capacity, which is safe.
+    // The public model has already been replaced atomically in R2 and remains
+    // available, so do not make a successful share look broken to the user.
+    try {
+      const resized = await quotaRequest(env, {
+        action: 'resize',
+        shareId: id,
+        size: storedObject.size,
+        maxLiveBytes: configuration.maxLiveBytes,
+      });
+      if (!resized.ok) console.error('Drakon Share compact-size accounting was not updated', resized.error);
+    } catch (error) {
+      console.error('Drakon Share compact-size accounting was not updated', error);
+    }
+
+    return json({
+      ok: true,
+      optimized: true,
+      size: storedObject.size,
+      originalSize: model.size,
+      format: 'rhv',
+    }, 200, cors(origin, env));
+  } catch (error) {
+    console.error('Drakon Share RHV finalization failed', error);
+    return json({ error: 'The compact model could not be stored.' }, 503, cors(origin, env));
+  }
 }
 
 async function getShareStatus(request, env, origin) {
@@ -162,6 +252,16 @@ function shareUrl(env, id) {
 
   const viewerUrl = new URL(requiredViewerOrigin(env));
   viewerUrl.searchParams.set('share', id);
+  return viewerUrl.toString();
+}
+
+function sharePrepareUrl(env, id, token) {
+  const viewerUrl = new URL(requiredViewerOrigin(env));
+  viewerUrl.searchParams.set('share', id);
+  // Fragments are not sent in HTTP requests or referrer headers. The viewer
+  // exchanges this short-lived token for the initial model and its one-time
+  // compact RHV replacement.
+  viewerUrl.hash = `prepare=${token}`;
   return viewerUrl.toString();
 }
 
@@ -273,7 +373,15 @@ async function getShare(id, request, env, origin, ctx) {
     return json({ error: 'This share link has expired.' }, 410, cors(origin, env));
   }
 
-  if (object.customMetadata?.passwordHash) {
+  const suppliedPrepareToken = request.headers.get('X-Drakon-Prepare-Token');
+  const preparedByOwner = suppliedPrepareToken
+    ? await isValidPrepareToken(suppliedPrepareToken, object.customMetadata)
+    : false;
+  if (suppliedPrepareToken && !preparedByOwner) {
+    return json({ error: 'The share preparation link is invalid or has expired.' }, 403, cors(origin, env));
+  }
+
+  if (object.customMetadata?.passwordHash && !preparedByOwner) {
     const password = readPassword(request);
     if (password.error || !password.value || !await isCorrectPassword(password.value, object.customMetadata, env)) {
       return json({ error: 'This share link is password protected.' }, 401, cors(origin, env));
@@ -394,8 +502,8 @@ async function releaseShareQuota(env, id) {
 function preflight(origin, env) {
   if (!isViewerOrigin(origin, env)) return new Response(null, { status: 403 });
   const headers = cors(origin, env);
-  headers.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  headers.set('Access-Control-Allow-Headers', 'Content-Type, X-Drakon-Share-Password');
+  headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  headers.set('Access-Control-Allow-Headers', 'Content-Type, X-Drakon-Share-Password, X-Drakon-Prepare-Token, X-Drakon-Filename');
   headers.set('Access-Control-Max-Age', '86400');
   return new Response(null, { status: 204, headers });
 }
@@ -471,22 +579,45 @@ async function sha256Hex(value) {
   return Array.from(hash, byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
-function safeFilename(value) {
-  let decoded = 'design.3dm';
+function safeFilename(value, extension = '3dm') {
+  let decoded = `design.${extension}`;
   try {
     if (value) decoded = decodeURIComponent(value);
   } catch {
     // Use the safe fallback below when a malformed header is received.
   }
   const cleaned = decoded.replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').replace(/\s+/g, ' ').trim().slice(0, 120);
-  return cleaned.toLowerCase().endsWith('.3dm') ? cleaned : `${cleaned || 'design'}.3dm`;
+  const baseName = cleaned.replace(/\.(?:3dm|rhv)$/i, '').trim();
+  return `${baseName || 'design'}.${extension}`;
 }
 
 function randomId() {
-  const bytes = crypto.getRandomValues(new Uint8Array(SHARE_ID_BYTES));
+  return randomToken(SHARE_ID_BYTES);
+}
+
+function randomToken(byteLength) {
+  const bytes = crypto.getRandomValues(new Uint8Array(byteLength));
   let binary = '';
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function isValidPrepareToken(token, metadata) {
+  if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{32}$/.test(token)) return false;
+  const expiresAt = Date.parse(metadata?.prepareExpiresAt || '');
+  if (!Number.isFinite(expiresAt) || Date.now() > expiresAt) return false;
+  const expected = metadata?.prepareTokenHash;
+  if (typeof expected !== 'string' || !/^[a-f0-9]{64}$/.test(expected)) return false;
+  return constantTimeStringEqual(await sha256Hex(token), expected);
+}
+
+function constantTimeStringEqual(left, right) {
+  if (left.length !== right.length) return false;
+  let difference = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  }
+  return difference === 0;
 }
 
 function readPassword(request) {
