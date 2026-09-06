@@ -280,11 +280,7 @@ async function _finalizeSharedModel(shareId, apiOrigin, prepareToken, sourceFile
     if (!response.ok) {
       throw new Error(result?.error || 'The compact share could not be stored.');
     }
-    if (result?.optimized === false) {
-      showToast('Share is ready. The original 3DM was already the smaller format.');
-    } else {
-      showToast('Share is ready and stored in the compact RHV format.');
-    }
+    showToast('Drakon Share is ready. Link copied to clipboard.');
   } catch (error) {
     // The public link was created before this best-effort conversion. Keep
     // the original 3DM usable instead of turning an optimisation failure into
