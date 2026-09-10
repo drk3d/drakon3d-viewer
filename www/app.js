@@ -41,6 +41,7 @@ import {
 } from './tools.js';
 import { onPointerDown, clearSelection, updatePropertiesPanel, addSelectionOutline, setupGumballHelper, clearGumballHelper, ensureOriginalTransform } from './selection.js';
 import { buildClippingCap, destroyClippingCap, setClippingCapEnabled, setClippingCapColor, updateClippingCapPose } from './clip-cap.js';
+import { isDrakonGemType } from './drakon-objects.js';
 
 // Notes UI is loaded lazily so the rest of the app boots even if the user
 // never opens a note. The animate loop reads the populated reference.
@@ -2143,7 +2144,7 @@ function bindUI() {
   springSlider?.addEventListener('change',        resetSpringSlider);
 
   // ── Select mode ──
-  document.getElementById('select-dropdown').querySelectorAll('.dropdown-item').forEach(btn => {
+  document.getElementById('select-dropdown').querySelectorAll('.dropdown-item[data-select]').forEach(btn => {
     btn.addEventListener('click', () => {
       S.selectMode = btn.dataset.select;
       document.getElementById('select-dropdown').querySelectorAll('.dropdown-item').forEach(b => b.classList.remove('active'));
@@ -2155,6 +2156,29 @@ function bindUI() {
       updateSelectIcon(S.selectMode);
       if (S.selectMode === 'none') { clearSelection(); updatePropertiesPanel(); }
     });
+  });
+
+  document.getElementById('btn-select-gems')?.addEventListener('click', () => {
+    clearSelection();
+    if (!S.currentModel) return;
+
+    S.currentModel.traverse(child => {
+      if (!(child.isMesh || child.isLine || child.isLineSegments)) return;
+      if (!child.visible || child.name === 'rhino-edges' || child.name === 'rhino-outline' ||
+          child.name === 'selection-outline' || child.name === 'ground-plane') return;
+      if (!isDrakonGemType(child.userData?.drakonObjectType)) return;
+
+      S.selectedObjects.push(child);
+      addSelectionOutline(child);
+    });
+
+    document.getElementById('select-dropdown')?.classList.add('hidden');
+    if (S.gumballActive) {
+      document.getElementById('object-properties')?.classList.add('hidden');
+      setupGumballHelper();
+    } else {
+      updatePropertiesPanel();
+    }
   });
 
   // ── Show/hide ──

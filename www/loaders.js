@@ -13,6 +13,7 @@ import { showLoading, hideLoading, setProgress, setFileName, showModelInfo, show
 import { t } from './i18n.js';
 import { setToolbarModelState, changeDisplayMode } from './app.js';
 import { destroyClippingCap } from './clip-cap.js';
+import { DRAKON_VIEWER_OBJECT_TYPE_KEY, readRhinoUserString } from './drakon-objects.js';
 
 // ── 3dm render-settings helpers ──────────────────────────────────────────────
 
@@ -654,6 +655,7 @@ export async function preprocess3dm(file, skipLayerParse) {
   S.parsedAnnotations = [];
   S.parsed3dmFileInfo = null;
   S._objLayerById = new Map();
+  S._objDrakonTypeById = new Map();
   S._instanceLayerByPos = new Map();
   S._wireframeFallback = new Map();
   S._brepEdgesById = new Map();
@@ -1506,6 +1508,16 @@ export async function preprocess3dm(file, skipLayerParse) {
           }
         } catch {}
 
+        // The Share command copies the originating Drakon custom-object type
+        // to Attribute User Text in its temporary snapshot. Rhino3dmLoader
+        // does not expose Drakon's native custom Rhino object class, so keep
+        // this ID-keyed bridge until the generated mesh is available below.
+        try {
+          const id = attr?.id;
+          const drakonType = readRhinoUserString(attr, DRAKON_VIEWER_OBJECT_TYPE_KEY);
+          if (id && drakonType) S._objDrakonTypeById.set(id, drakonType);
+        } catch {}
+
         // Extract user text (Attribute User Text) by object UUID for the
         // properties panel. THREE.js Rhino3dmLoader may include userStrings in
         // userData.attributes, but we pre-cache here as a reliable fallback.
@@ -2178,6 +2190,9 @@ export function postProcessModel(model, addEdgesFlag, colorsAreSRGBStoredAsLinea
         }
       } catch {}
       attrs.layerIndex = realLayerIndex;
+
+      const drakonType = S._objDrakonTypeById?.get(attrs.id);
+      if (drakonType) child.userData.drakonObjectType = drakonType;
     }
 
     // ── Tag iRefObject groups with the InstanceReference's own layer index
