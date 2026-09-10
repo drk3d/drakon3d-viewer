@@ -614,8 +614,16 @@ function init() {
   // Its semi-transparent XYZ centre handle otherwise renders at the world
   // origin as a small grey diamond. setupClippingHelper() adds it only while
   // the clipping widget is actually active.
-  S.clippingTransformControls.getHelper().visible = false;
-  S.clippingTransformControls.enabled = false;
+  {
+    const helper = S.clippingTransformControls.getHelper();
+    // `visible = false` alone is not sufficient if a previous viewer state
+    // left this helper attached to a render scene. Detach and remove it so its
+    // grey XYZ centre handle can never render until the clipping tool is opened.
+    S.clippingTransformControls.detach();
+    helper.visible = false;
+    helper.parent?.remove(helper);
+    S.clippingTransformControls.enabled = false;
+  }
 
   // ── Gumball Transform Controls Setup ──
   S.gumballTransformControls = new TransformControls(S.camera, S.renderer.domElement);
@@ -627,8 +635,15 @@ function init() {
   S.gumballTransformControls.showZ = true;
   // setupGumballHelper() adds this helper only while Move is active. Keeping a
   // detached helper in the scene exposes the same centre handle at the origin.
-  S.gumballTransformControls.getHelper().visible = false;
-  S.gumballTransformControls.enabled = false;
+  {
+    const helper = S.gumballTransformControls.getHelper();
+    // Same rule for the object gumball: it is added only while an object is
+    // actively being moved or rotated.
+    S.gumballTransformControls.detach();
+    helper.visible = false;
+    helper.parent?.remove(helper);
+    S.gumballTransformControls.enabled = false;
+  }
 
   // Hide negative direction handles for gumball
   try {

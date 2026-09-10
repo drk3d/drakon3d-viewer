@@ -2439,6 +2439,21 @@ export function postProcessModel(model, addEdgesFlag, colorsAreSRGBStoredAsLinea
 // ── Clear / dispose current model ─────────────────────────────────────────────
 
 export function clearCurrentModel() {
+  // TransformControls owns a separate helper object. A helper can survive a
+  // model/session transition if it was attached just before a new load. Its
+  // semi-transparent XYZ centre is the small grey diamond at the viewer
+  // origin, so remove both helpers before inspecting the outgoing model.
+  for (const control of [S.clippingTransformControls, S.gumballTransformControls]) {
+    if (!control) continue;
+    const helper = control.getHelper?.();
+    control.detach();
+    control.enabled = false;
+    if (helper) {
+      helper.visible = false;
+      helper.parent?.remove(helper);
+    }
+  }
+
   if (!S.currentModel) return;
 
   S.clippingToggleOn = false;
