@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { S } from './state.js';
 import { applyDisplayMode, applyCustomToMaterial } from './display.js';
-import { switchToPersp, getCustomViews } from './camera.js';
+import { switchToPersp, getCustomViews, fitCameraToBox } from './camera.js';
+import { computeVisibleBoundingBox } from './lighting.js';
 import { updateSliderFill, isPageVisuallyDark, showToast } from './helpers.js';
 import { History } from './history.js';
 import { t } from './i18n.js';
@@ -1315,6 +1316,21 @@ export async function loadSession(file, fileHandle = null) {
     }
 
     applyDisplayMode();
+
+    // A session normally restores the camera saved by its author. On a phone,
+    // that desktop framing can leave the model tiny or partly off-screen after
+    // the responsive viewport settles. Refit only on mobile, after two frames,
+    // so the browser's toolbar/orientation layout has reached its final size.
+    // Direct CAD/GLB loads already fit their extents during their load path.
+    const isMobileDevice = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if (isMobileDevice && S.currentModel) {
+      const loadedModel = S.currentModel;
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (S.currentModel !== loadedModel) return;
+        const box = computeVisibleBoundingBox(loadedModel);
+        if (!box.isEmpty()) fitCameraToBox(box, false);
+      }));
+    }
     hideLoading();
   } catch (e) {
     console.error('Session load failed', e);
