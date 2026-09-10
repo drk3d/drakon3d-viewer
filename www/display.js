@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { S } from './state.js';
 import { setupLights, updateGroundAppearance, applyFileSunSettings } from './lighting.js';
 import { isPageVisuallyDark } from './helpers.js';
-import { createGemstoneMaterial, gemstoneKindFromNames } from './gem-material.js';
+import { createGemstoneMaterial, gemstoneKindFromNames, gemstoneWhiteFallbackColorFromNames } from './gem-material.js';
 
 // ── Skybox sphere for rendered mode (bypasses tone mapping) ─────────────────
 // In rendered mode with ACES tone mapping, scene.background color gets compressed.
@@ -606,12 +606,14 @@ export function applyDisplayMode() {
         // colour guess. This lets a ruby keep its authored red or a sapphire its
         // blue, while coloured metal and plastic continue through the regular PBR
         // route. The same lookup works for object- and layer-assigned materials.
-        const gemstoneKind = gemstoneKindFromNames(
+        const gemstoneNames = [
           effectiveCustom?.name,
           child.userData.rhinoObjectMaterial?.name,
           base?.name,
           child.userData.originalMaterial?.name
-        );
+        ];
+        const gemstoneKind = gemstoneKindFromNames(...gemstoneNames);
+        const gemstoneWhiteFallbackColor = gemstoneWhiteFallbackColorFromNames(...gemstoneNames);
 
         const buildRendered = () => {
         let m = detachedFromOwnMaterial ? defaultLayerMaterial() : base.clone();
@@ -651,7 +653,8 @@ export function applyDisplayMode() {
             mesh: child,
             sourceMaterial: m,
             kind: gemstoneKind,
-            renderer: S.renderer
+            renderer: S.renderer,
+            whiteFallbackColor: gemstoneWhiteFallbackColor
           });
           if (gem) {
             // `m` is an unassigned clone at this point; dispose its GPU program

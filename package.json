@@ -1,6 +1,6 @@
 {
   "name": "drakon3d-viewer",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A Drakon3D-branded, local-first CAD web viewer.",
   "main": "index.js",
   "scripts": {

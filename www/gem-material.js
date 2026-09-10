@@ -40,7 +40,20 @@ import {
 // Initial Drakon catalogue: faceted, transparent stones only. Opaque, milky,
 // chatoyant or layered stones (Pearl, Opal, Malachite, Jade and Lapis Lazuli)
 // deliberately stay on the regular Rhino/PBR material path.
-const GEMSTONE_PATTERN = /\b(?:almandite|amethyst|aquamarine|aventurine|chalcedony|citrine|diamond|emerald|garnet|hiddenite|kunzite|precious\s+beryl|quartz|ruby|sapphire|topaz)\b/i;
+const GEMSTONE_PATTERN = /\b(?:almandite|amethyst|aquamarine|aventurine|chalcedony|citrine|diamond|emerald|garnet|hiddenite|kunzite|precious\s+beryl|quartz|ruby|sapphire|topaz|tourmaline)\b/i;
+// A few catalog gems arrive from Rhino with the default white material even
+// though their material names identify a specific stone. Preserve any authored
+// colour, but use these catalogue colours when the imported tint is white.
+const GEMSTONE_WHITE_FALLBACKS = [
+  { pattern: /\balmandite\s+violet\b/i, color: '#CF398F' },
+  { pattern: /\bamethyst\b/i, color: '#9678B6' },
+  { pattern: /\baquamarine\b/i, color: '#66CDCA' },
+  { pattern: /\bdiamond\s+cognac\b/i, color: '#E4CA7A' },
+  { pattern: /\bhiddenite\s+green\b/i, color: '#529557' },
+  { pattern: /\bhiddenite\s+yellow\b/i, color: '#F8D65C' },
+  { pattern: /\bprecious\s+beryl\s+yellow\s+green\b/i, color: '#83A700' },
+  { pattern: /\btourmaline\s+pink\b/i, color: '#9B4A71' },
+];
 const GEM_REFLECTION_URL = typeof __DRAKON_GEM_REFLECTION_URL__ !== 'undefined'
   ? __DRAKON_GEM_REFLECTION_URL__
   : './assets/diamond-top-view.png?v=20260906-diamond-test';
@@ -210,6 +223,15 @@ export function gemstoneKindFromNames(...names) {
   return null;
 }
 
+export function gemstoneWhiteFallbackColorFromNames(...names) {
+  for (const name of names) {
+    if (typeof name !== 'string') continue;
+    const fallback = GEMSTONE_WHITE_FALLBACKS.find(entry => entry.pattern.test(name));
+    if (fallback) return fallback.color;
+  }
+  return null;
+}
+
 function getGemBvh(geometry) {
   let resource = gemBvhByGeometry.get(geometry);
   if (resource) return resource;
@@ -354,7 +376,7 @@ function loadGemReflectionMap() {
  * material's working-space colour remains the tint, so ruby/sapphire/etc.
  * keep their authored appearance while gaining the same internal optics.
  */
-export function createGemstoneMaterial({ mesh, sourceMaterial, kind, renderer }) {
+export function createGemstoneMaterial({ mesh, sourceMaterial, kind, renderer, whiteFallbackColor = null }) {
   if (!mesh?.geometry?.attributes?.position || mesh.geometry.attributes.position.count < 12) return null;
   if (!renderer?.capabilities?.isWebGL2) return null;
 
@@ -364,6 +386,15 @@ export function createGemstoneMaterial({ mesh, sourceMaterial, kind, renderer })
   } catch (error) {
     console.warn(`[gem] ${kind} BVH could not be built; using the Rhino material instead.`, error);
     return null;
+  }
+
+  const sourceColor = sourceMaterial?.color?.clone?.() || new THREE.Color(0xffffff);
+  // Three.js stores colours in linear space. A nearly equal, very bright RGB
+  // triplet is the Rhino default white material; only that case gets corrected.
+  const channelMin = Math.min(sourceColor.r, sourceColor.g, sourceColor.b);
+  const channelMax = Math.max(sourceColor.r, sourceColor.g, sourceColor.b);
+  if (whiteFallbackColor && channelMin > 0.85 && channelMax - channelMin < 0.08) {
+    sourceColor.set(whiteFallbackColor);
   }
 
   const material = new THREE.ShaderMaterial({
@@ -379,7 +410,7 @@ export function createGemstoneMaterial({ mesh, sourceMaterial, kind, renderer })
       // for the coloured faceted stones in this first shared shader.
       ior: { value: 2.417 },
       aberrationStrength: { value: 0.01 },
-      color: { value: sourceMaterial?.color?.clone?.() || new THREE.Color(0xffffff) }
+      color: { value: sourceColor }
     },
     vertexShader: GEM_VERTEX_SHADER,
     fragmentShader: GEM_FRAGMENT_SHADER,
