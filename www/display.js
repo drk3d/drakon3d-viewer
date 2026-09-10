@@ -1267,7 +1267,11 @@ export function applyCustomToMaterial(mat, custom) {
   // A Rhino material can have no usable colour channel (for example an older
   // reflective material with only a shine value). Keep the loader's existing
   // colour in that case rather than asking Three.js to set a colour from null.
-  if (custom.color != null) mat.color?.set(custom.color);
+  if (Array.isArray(custom.colorLinear) && custom.colorLinear.length >= 3) {
+    mat.color?.setRGB(custom.colorLinear[0], custom.colorLinear[1], custom.colorLinear[2]);
+  } else if (custom.color != null) {
+    mat.color?.set(custom.color);
+  }
   if (custom.roughness !== undefined && mat.roughness !== undefined) mat.roughness = custom.roughness;
   if (custom.metalness !== undefined && mat.metalness !== undefined) mat.metalness = custom.metalness;
   if (custom.opacity   !== undefined) {
@@ -1285,6 +1289,15 @@ export function applyCustomToMaterial(mat, custom) {
     // specular reflection entirely. Left alone rather than written as 1.
     if (custom.ior !== undefined && custom.ior > 1.001) mat.ior = custom.ior;
     if (custom.clearcoat !== undefined) mat.clearcoat = custom.clearcoat;
+  }
+  if (custom.clearTextureMaps) {
+    // A catalogue preset is a full material replacement, not a tint. Retaining
+    // the previous object's maps would make a gold preset inherit a gemstone
+    // texture or an old roughness/metalness mask.
+    for (const slot of ['map', 'roughnessMap', 'metalnessMap', 'normalMap',
+                        'bumpMap', 'emissiveMap', 'alphaMap', 'aoMap']) {
+      if (slot in mat) mat[slot] = null;
+    }
   }
   if (custom.mapTexture !== undefined) {
     if (custom.mapTexture === null) {

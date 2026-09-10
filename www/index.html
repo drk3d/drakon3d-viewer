@@ -331,11 +331,25 @@
       </button>
     </div>
     <div class="right-panel-content">
-      <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-        <button id="btn-toggle-all-layers-panel" class="text-btn" data-i18n="layer.toggle_all">Toggle All</button>
+      <div class="layer-panel-tabs" role="tablist" aria-label="Layer panel mode">
+        <button id="btn-layer-panel-layers" class="layer-panel-tab active" role="tab" aria-selected="true">Layers</button>
+        <button id="btn-layer-panel-materials" class="layer-panel-tab" role="tab" aria-selected="false">Materials</button>
       </div>
-      <div id="layer-list-panel">
-        <span class="dropdown-empty-msg" data-i18n="layer.no_layers">No layers</span>
+      <div id="layer-panel-layers-view">
+        <div class="layer-panel-toolbar">
+          <button id="btn-toggle-all-layers-panel" class="text-btn" data-i18n="layer.toggle_all">Toggle All</button>
+        </div>
+        <div id="layer-list-panel">
+          <span class="dropdown-empty-msg" data-i18n="layer.no_layers">No layers</span>
+        </div>
+      </div>
+      <div id="layer-panel-materials-view" class="hidden">
+        <p class="materials-apply-hint">Applies to selected objects. With nothing selected, applies to detected metal objects.</p>
+        <section class="material-preset-section" aria-labelledby="metal-materials-heading">
+          <h3 id="metal-materials-heading">Metals</h3>
+          <div id="metal-material-grid" class="material-preset-grid"></div>
+        </section>
+        <p class="materials-catalogue-note">Gem presets will appear here with their catalogue icons.</p>
       </div>
     </div>
   </aside>

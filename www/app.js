@@ -21,6 +21,7 @@ import { setupLights, updateSunLight, updateShadowCasting, addGroundPlane, remov
 import { switchToOrtho, switchToPersp, switchToTwoPoint, apply2PointConstraints, installTwoPointDragHandler, setViewPreset, setWalkthroughMode, triggerCameraTransition, fitCameraToBox, fitCameraToObject, fitCameraToSelected, saveCustomView, renderNamedViewsUI, updateAdaptiveClipping } from './camera.js';
 import { applySceneBackground, applyFileBackground, applyDisplayMode, applyLayerColorsToModel, recreateAllEdges, setEdgeAngleUniform } from './display.js';
 import { renderLayerUI, updateLayerVisibility } from './layers.js';
+import { renderMaterialsPanel } from './material-library.js';
 import { createAnnotationSprites } from './annotations.js';
 import { saveSession, loadSession, exportPackage, buildSessionBuffer } from './session.js';
 import { handleFile, clearCurrentModel } from './loaders.js';
@@ -1247,6 +1248,30 @@ function bindUI() {
   document.getElementById('btn-close-layer-panel')?.addEventListener('click', () => {
     layerRightPanel?.classList.remove('panel-open');
   });
+
+  // The Material view shares the Layers side panel, so it adds no pressure to
+  // the already compact mobile toolbar. Keep the chosen view while the panel
+  // is opened and closed during this session; a fresh page starts on Layers.
+  let layerPanelMode = 'layers';
+  const setLayerPanelMode = (mode) => {
+    layerPanelMode = mode === 'materials' ? 'materials' : 'layers';
+    const layersView = document.getElementById('layer-panel-layers-view');
+    const materialsView = document.getElementById('layer-panel-materials-view');
+    const layersTab = document.getElementById('btn-layer-panel-layers');
+    const materialsTab = document.getElementById('btn-layer-panel-materials');
+    const isMaterials = layerPanelMode === 'materials';
+
+    layersView?.classList.toggle('hidden', isMaterials);
+    materialsView?.classList.toggle('hidden', !isMaterials);
+    layersTab?.classList.toggle('active', !isMaterials);
+    materialsTab?.classList.toggle('active', isMaterials);
+    layersTab?.setAttribute('aria-selected', String(!isMaterials));
+    materialsTab?.setAttribute('aria-selected', String(isMaterials));
+    if (isMaterials) renderMaterialsPanel();
+  };
+  document.getElementById('btn-layer-panel-layers')?.addEventListener('click', () => setLayerPanelMode('layers'));
+  document.getElementById('btn-layer-panel-materials')?.addEventListener('click', () => setLayerPanelMode('materials'));
+  setLayerPanelMode(layerPanelMode);
 
   document.getElementById('btn-settings-panel')?.addEventListener('click', () => {
     const isOpen = settingsRightPanel?.classList.contains('panel-open');
