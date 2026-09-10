@@ -922,11 +922,18 @@ body.dark-theme .dark-only {
   text-align: left;
 }
 .dropdown-item svg { width: 13px; height: 13px; flex-shrink: 0; }
-.gem-selection-icon {
+.gem-selection-icon,
+.invert-selection-icon {
   width: 13px;
   height: 13px;
   flex: 0 0 13px;
   background: currentColor;
+}
+.invert-selection-icon {
+  -webkit-mask: url('assets/selection-invert.png') center / contain no-repeat;
+  mask: url('assets/selection-invert.png') center / contain no-repeat;
+}
+.gem-selection-icon {
   -webkit-mask: url('assets/selection-gems.png') center / contain no-repeat;
   mask: url('assets/selection-gems.png') center / contain no-repeat;
 }

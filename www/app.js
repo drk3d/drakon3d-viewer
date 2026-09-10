@@ -2181,6 +2181,33 @@ function bindUI() {
     }
   });
 
+  document.getElementById('btn-invert-selection')?.addEventListener('click', () => {
+    if (!S.currentModel) return;
+
+    const selected = new Set(S.selectedObjects);
+    const inverted = [];
+    S.currentModel.traverse(child => {
+      if (!(child.isMesh || child.isLine || child.isLineSegments)) return;
+      if (!child.visible || child.name === 'rhino-edges' || child.name === 'rhino-outline' ||
+          child.name === 'selection-outline' || child.name === 'ground-plane') return;
+      if (!selected.has(child)) inverted.push(child);
+    });
+
+    clearSelection();
+    inverted.forEach(child => {
+      S.selectedObjects.push(child);
+      addSelectionOutline(child);
+    });
+
+    document.getElementById('select-dropdown')?.classList.add('hidden');
+    if (S.gumballActive) {
+      document.getElementById('object-properties')?.classList.add('hidden');
+      setupGumballHelper();
+    } else {
+      updatePropertiesPanel();
+    }
+  });
+
   // ── Show/hide ──
   document.getElementById('btn-show-all').addEventListener('click', () => {
     // Reveal both viewer-side hides AND Rhino's per-object hidden objects,
