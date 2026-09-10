@@ -156,7 +156,7 @@ if (_hasPlainPackage || _hasEncryptedPackage || _sharedModelId) {
   // work standalone, since it fetches the viewer shell that only exists on the
   // dev server).
   if (_hasPlainPackage || _hasEncryptedPackage) {
-    ['btn-save-panel', 'btn-save-as-panel', 'btn-save-glb', 'btn-export-package']
+    ['btn-save-panel', 'btn-save-as-panel']
       .forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
   }
 
@@ -1296,10 +1296,46 @@ function bindUI() {
     Dropbox.pickAndLoad(cloudLoaders);
   });
   document.getElementById('btn-save-panel').addEventListener('click', () => { saveSession(); });
+
+  const saveAsWrap = document.getElementById('save-as-wrap');
+  const saveAsFormats = document.getElementById('save-as-formats');
+  const saveAsButton = document.getElementById('btn-save-as-panel');
+
+  function closeSaveAsFormats() {
+    saveAsFormats?.classList.add('hidden');
+    saveAsWrap?.classList.remove('open');
+    saveAsButton?.setAttribute('aria-expanded', 'false');
+  }
+
+  function openSaveAsFormats() {
+    if (!S.currentModel) {
+      alert('No model loaded to save.');
+      return;
+    }
+    const willOpen = saveAsFormats?.classList.contains('hidden');
+    closeSaveAsFormats();
+    if (willOpen) {
+      saveAsFormats?.classList.remove('hidden');
+      saveAsWrap?.classList.add('open');
+      saveAsButton?.setAttribute('aria-expanded', 'true');
+    }
+  }
+
+  function saveAsRhv() {
+    closeSaveAsFormats();
+    // Desktop Chromium provides the native name/location picker. Other
+    // browsers use the existing in-viewer filename dialog.
+    if (typeof window.showSaveFilePicker === 'function') {
+      saveSession(null, true);
+    } else {
+      openSaveAsDialog();
+    }
+  }
+
   // Export Package opens an options dialog (hide File menu, password protect).
   // The dialog's confirm button is what eventually calls exportPackage(), so the
   // FSA save picker still fires inside a real user gesture.
-  document.getElementById('btn-export-package')?.addEventListener('click', () => {
+  function openExportPackageDialog() {
     if (!S.currentModel) { alert('No model loaded to export.'); return; }
     const dlg = document.getElementById('export-package-dialog');
     // Reset fields each time the dialog opens.
@@ -1313,7 +1349,7 @@ function bindUI() {
     pwdRow?.classList.add('hidden');
     dlg?.classList.remove('hidden');
     leftPanel.classList.add('hidden');
-  });
+  }
 
   document.getElementById('exportpkg-use-password')?.addEventListener('change', (e) => {
     const row = document.getElementById('exportpkg-password-row');
@@ -1344,19 +1380,21 @@ function bindUI() {
     document.getElementById('export-package-dialog')?.classList.add('hidden');
     exportPackage(null, { hideFileMenu, password });
   });
-  document.getElementById('btn-save-as-panel')?.addEventListener('click', () => {
-    if (!S.currentModel) {
-      alert('No model loaded to save.');
-      return;
-    }
-    // Desktop Chromium: the native save dialog handles name + location in one
-    // step, so skip the in-app filename prompt. Elsewhere fall back to the
-    // in-app name dialog (a plain download has no OS picker).
-    if (typeof window.showSaveFilePicker === 'function') {
-      saveSession(null, true);
-    } else {
-      openSaveAsDialog();
-    }
+  saveAsButton?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    openSaveAsFormats();
+  });
+  document.getElementById('btn-save-as-rhv')?.addEventListener('click', saveAsRhv);
+  document.getElementById('btn-save-as-glb')?.addEventListener('click', () => {
+    closeSaveAsFormats();
+    exportGLB();
+  });
+  document.getElementById('btn-save-as-html')?.addEventListener('click', () => {
+    closeSaveAsFormats();
+    openExportPackageDialog();
+  });
+  document.addEventListener('click', (event) => {
+    if (!saveAsWrap?.contains(event.target)) closeSaveAsFormats();
   });
   document.getElementById('btn-close-panel').addEventListener('click', () => { clearCurrentModel(); });
   document.getElementById('btn-capture-panel').addEventListener('click', () => {
@@ -1421,9 +1459,6 @@ function bindUI() {
     }
     document.getElementById('capture-dialog').classList.add('hidden');
   });
-
-  const saveGlbBtn = document.getElementById('btn-save-glb');
-  if (saveGlbBtn) saveGlbBtn.addEventListener('click', () => exportGLB());
 
   // ── 3. Background color pickers ──
   if (window.Coloris) {
