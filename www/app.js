@@ -1297,46 +1297,60 @@ function bindUI() {
   });
   document.getElementById('btn-save-panel').addEventListener('click', () => { saveSession(); });
 
-  const saveAsWrap = document.getElementById('save-as-wrap');
-  const saveAsFormats = document.getElementById('save-as-formats');
   const saveAsButton = document.getElementById('btn-save-as-panel');
+  let pendingPackageWriteHandle = null;
+  let pendingPackageCustomName = null;
 
-  function closeSaveAsFormats() {
-    saveAsFormats?.classList.add('hidden');
-    saveAsWrap?.classList.remove('open');
-    saveAsButton?.setAttribute('aria-expanded', 'false');
+  function baseSaveName() {
+    return (S.currentFileName || 'scene').replace(/\.[^.]+$/, '');
   }
 
-  function openSaveAsFormats() {
+  async function openSystemSaveAs() {
     if (!S.currentModel) {
       alert('No model loaded to save.');
       return;
     }
-    const willOpen = saveAsFormats?.classList.contains('hidden');
-    closeSaveAsFormats();
-    if (willOpen) {
-      saveAsFormats?.classList.remove('hidden');
-      saveAsWrap?.classList.add('open');
-      saveAsButton?.setAttribute('aria-expanded', 'true');
-    }
-  }
-
-  function saveAsRhv() {
-    closeSaveAsFormats();
-    // Desktop Chromium provides the native name/location picker. Other
-    // browsers use the existing in-viewer filename dialog.
-    if (typeof window.showSaveFilePicker === 'function') {
-      saveSession(null, true);
-    } else {
+    // Chromium's native dialog provides the requested "Save as type" dropdown.
+    // Keep RHV first so it remains the default, while routing the selected type
+    // into the corresponding existing writer without asking for a second path.
+    if (typeof window.showSaveFilePicker !== 'function') {
       openSaveAsDialog();
+      return;
+    }
+    let writeHandle;
+    try {
+      writeHandle = await window.showSaveFilePicker({
+        suggestedName: baseSaveName() + '.rhv',
+        excludeAcceptAllOption: true,
+        types: [
+          { description: 'Drakon Viewer Session (.rhv)', accept: { 'application/octet-stream': ['.rhv'] } },
+          { description: 'GLB Model (.glb)', accept: { 'model/gltf-binary': ['.glb'] } },
+          { description: 'Offline Viewer Package (.html)', accept: { 'text/html': ['.html'] } },
+        ],
+      });
+    } catch (err) {
+      if (err?.name !== 'AbortError') console.warn('[Save As] native picker failed:', err);
+      return;
+    }
+    const extension = (writeHandle.name.split('.').pop() || '').toLowerCase();
+    if (extension === 'rhv') {
+      saveSession(null, true, writeHandle);
+    } else if (extension === 'glb') {
+      exportGLB(writeHandle);
+    } else if (extension === 'html' || extension === 'htm') {
+      openExportPackageDialog({ writeHandle });
+    } else {
+      alert('Choose RHV, GLB, or HTML in the Save as type list.');
     }
   }
 
   // Export Package opens an options dialog (hide File menu, password protect).
   // The dialog's confirm button is what eventually calls exportPackage(), so the
   // FSA save picker still fires inside a real user gesture.
-  function openExportPackageDialog() {
+  function openExportPackageDialog({ writeHandle = null, customFileName = null } = {}) {
     if (!S.currentModel) { alert('No model loaded to export.'); return; }
+    pendingPackageWriteHandle = writeHandle;
+    pendingPackageCustomName = customFileName;
     const dlg = document.getElementById('export-package-dialog');
     // Reset fields each time the dialog opens.
     const hideCb = document.getElementById('exportpkg-hide-file');
@@ -1364,9 +1378,13 @@ function bindUI() {
 
   document.getElementById('btn-close-export-pkg-dialog')?.addEventListener('click', () => {
     document.getElementById('export-package-dialog')?.classList.add('hidden');
+    pendingPackageWriteHandle = null;
+    pendingPackageCustomName = null;
   });
   document.getElementById('btn-cancel-export-pkg')?.addEventListener('click', () => {
     document.getElementById('export-package-dialog')?.classList.add('hidden');
+    pendingPackageWriteHandle = null;
+    pendingPackageCustomName = null;
   });
   document.getElementById('btn-confirm-export-pkg')?.addEventListener('click', () => {
     const hideFileMenu = !!document.getElementById('exportpkg-hide-file')?.checked;
@@ -1377,25 +1395,14 @@ function bindUI() {
       document.getElementById('exportpkg-password')?.focus();
       return;
     }
+    const writeHandle = pendingPackageWriteHandle;
+    const customFileName = pendingPackageCustomName;
+    pendingPackageWriteHandle = null;
+    pendingPackageCustomName = null;
     document.getElementById('export-package-dialog')?.classList.add('hidden');
-    exportPackage(null, { hideFileMenu, password });
+    exportPackage(customFileName, { hideFileMenu, password, writeHandle });
   });
-  saveAsButton?.addEventListener('click', (event) => {
-    event.stopPropagation();
-    openSaveAsFormats();
-  });
-  document.getElementById('btn-save-as-rhv')?.addEventListener('click', saveAsRhv);
-  document.getElementById('btn-save-as-glb')?.addEventListener('click', () => {
-    closeSaveAsFormats();
-    exportGLB();
-  });
-  document.getElementById('btn-save-as-html')?.addEventListener('click', () => {
-    closeSaveAsFormats();
-    openExportPackageDialog();
-  });
-  document.addEventListener('click', (event) => {
-    if (!saveAsWrap?.contains(event.target)) closeSaveAsFormats();
-  });
+  saveAsButton?.addEventListener('click', openSystemSaveAs);
   document.getElementById('btn-close-panel').addEventListener('click', () => { clearCurrentModel(); });
   document.getElementById('btn-capture-panel').addEventListener('click', () => {
     document.getElementById('capture-w').value = window.innerWidth;
@@ -2017,10 +2024,12 @@ function bindUI() {
   // Save As Dialog
   const saveAsDlg   = document.getElementById('save-as-dialog');
   const saveAsInput = document.getElementById('input-save-as-name');
+  const saveAsFormat = document.getElementById('input-save-as-format');
 
   function openSaveAsDialog() {
     if (!saveAsDlg) return;
     saveAsInput.value = S.currentFileName || 'scene';
+    if (saveAsFormat) saveAsFormat.value = 'rhv';
     saveAsDlg.classList.remove('hidden');
     requestAnimationFrame(() => {
       saveAsInput.focus();
@@ -2033,8 +2042,15 @@ function bindUI() {
   function confirmSaveAs() {
     const name = saveAsInput?.value.trim();
     if (name) {
-      saveSession(name, true);
+      const format = saveAsFormat?.value || 'rhv';
       closeSaveAsDialog();
+      if (format === 'rhv') {
+        saveSession(name, true);
+      } else if (format === 'glb') {
+        exportGLB(null, name);
+      } else {
+        openExportPackageDialog({ customFileName: name });
+      }
     } else {
       alert('Please enter a valid file name.');
     }
@@ -3929,19 +3945,25 @@ function initThemeSync() {
 }
 
 
-async function exportGLB() {
+async function exportGLB(writeHandle = null, customFileName = null) {
   if (!S.currentModel) { alert('No model loaded.'); return; }
 
   const isCapacitor = window.Capacitor && window.Capacitor.isPluginAvailable('FileOpener');
-  const glbFileName = (S.currentFileName?.replace(/\.[^.]+$/, '') || 'model') + '.glb';
+  const glbFileName = ((customFileName || S.currentFileName || 'model').replace(/\.[^.]+$/, '')) + '.glb';
 
   // Pick the save location first, while the click gesture is still active.
   let sink = null;
   if (!isCapacitor) {
-    sink = await beginSave({
-      suggestedName: glbFileName,
-      types: [{ description: 'glTF Binary', accept: { 'model/gltf-binary': ['.glb'] } }],
-    });
+    sink = writeHandle
+      ? async (blob) => {
+          const writable = await writeHandle.createWritable();
+          await writable.write(blob);
+          await writable.close();
+        }
+      : await beginSave({
+          suggestedName: glbFileName,
+          types: [{ description: 'glTF Binary', accept: { 'model/gltf-binary': ['.glb'] } }],
+        });
     if (!sink) return; // user cancelled
   }
 

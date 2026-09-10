@@ -577,7 +577,7 @@ export async function buildSessionBuffer(customFileName = null) {
 //     the source file's folder with the same base name + .rhv
 // Save As (pickLocation=true): always the native save dialog (in the source
 // folder when known). Desktop Chromium only; elsewhere falls back to download.
-export async function saveSession(customFileName = null, pickLocation = false) {
+export async function saveSession(customFileName = null, pickLocation = false, writeHandleOverride = null) {
   if (!S.currentModel) {
     alert('No model loaded to save.');
     return;
@@ -591,9 +591,9 @@ export async function saveSession(customFileName = null, pickLocation = false) {
 
   // Decide the write target FIRST, while the click gesture is still active
   // (showSaveFilePicker and requestPermission both require it).
-  let writeHandle = null;   // FileSystemFileHandle to create/overwrite
+  let writeHandle = writeHandleOverride; // FileSystemFileHandle to create/overwrite
   let useDownload = false;
-  if (!isCapacitor) {
+  if (!isCapacitor && !writeHandle) {
     const openedRhv = (!pickLocation && S.currentFileHandle && /\.rhv$/i.test(S.currentFileHandle.name || ''))
       ? S.currentFileHandle : null;
     if (openedRhv && await ensureWritePermission(openedRhv)) {
@@ -673,7 +673,7 @@ export async function exportPackage(customFileName = null, opts = {}) {
   const hideFileMenu = !!opts.hideFileMenu;
   const password     = (typeof opts.password === 'string' && opts.password.length) ? opts.password : null;
 
-  const { showLoading, hideLoading, beginSave } = await import('./helpers.js');
+  const { showLoading, hideLoading, beginSave, writeBlobToHandle } = await import('./helpers.js');
 
   const isCapacitor = window.Capacitor && window.Capacitor.isPluginAvailable('FileOpener');
   let baseName = customFileName || S.currentFileName || 'scene';
@@ -682,10 +682,12 @@ export async function exportPackage(customFileName = null, opts = {}) {
   // Acquire the save location first, while the click gesture is still active.
   let sink = null;
   if (!isCapacitor) {
-    sink = await beginSave({
-      suggestedName: baseName + '.html',
-      types: [{ description: 'HTML', accept: { 'text/html': ['.html'] } }],
-    });
+    sink = opts.writeHandle
+      ? async (blob) => writeBlobToHandle(opts.writeHandle, blob)
+      : await beginSave({
+          suggestedName: baseName + '.html',
+          types: [{ description: 'HTML', accept: { 'text/html': ['.html'] } }],
+        });
     if (!sink) return; // user cancelled
   }
 

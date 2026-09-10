@@ -278,27 +278,10 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
               <span data-i18n="file.save">Save Session</span>
             </button>
-            <div id="save-as-wrap" class="save-as-wrap">
-              <button id="btn-save-as-panel" class="panel-action-btn" aria-haspopup="menu" aria-controls="save-as-formats" aria-expanded="false">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/><path d="M12 5v4M10 7h4"/></svg>
-                <span data-i18n="file.save_as">Save As...</span>
-                <svg class="save-as-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-              </button>
-              <div id="save-as-formats" class="save-as-formats hidden" role="menu" aria-label="Save As format">
-                <button id="btn-save-as-rhv" class="save-as-format default" role="menuitem">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-                  <span class="save-as-format-copy"><span data-i18n="file.save_as_rhv">Drakon Viewer Session (.rhv)</span><small data-i18n="file.save_as_rhv_hint">Default</small></span>
-                </button>
-                <button id="btn-save-as-glb" class="save-as-format" role="menuitem">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                  <span class="save-as-format-copy" data-i18n="file.save_as_glb">GLB Model (.glb)</span>
-                </button>
-                <button id="btn-save-as-html" class="save-as-format" role="menuitem">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><polyline points="10 12 8 14 10 16"/><polyline points="14 12 16 14 14 16"/></svg>
-                  <span class="save-as-format-copy" data-i18n="file.save_as_html">Offline Viewer Package (.html)</span>
-                </button>
-              </div>
-            </div>
+            <button id="btn-save-as-panel" class="panel-action-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/><path d="M12 5v4M10 7h4"/></svg>
+              <span data-i18n="file.save_as">Save As...</span>
+            </button>
             <button id="btn-capture-panel" class="panel-action-btn">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
               <span data-i18n="file.capture">Capture</span>
@@ -802,16 +785,22 @@
     </div>
   </div>
 
-  <!-- ── Save Session As Dialog ── -->
+  <!-- ── Save As Dialog (fallback when the browser has no native picker) ── -->
   <div id="save-as-dialog" class="modal-overlay hidden">
     <div class="modal-box" style="width:280px;">
       <div class="modal-header">
-        <span data-i18n="file.save_as_title">Save Session As</span>
+        <span data-i18n="file.save_as_title">Save As</span>
         <button id="btn-close-save-as-dialog" class="icon-btn sm">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
       <div class="modal-body" style="padding:16px;">
+        <label style="font-size:0.75rem;color:var(--text-2);display:block;margin-bottom:6px;" data-i18n="file.save_as_type">Save as type</label>
+        <select id="input-save-as-format" style="width:100%;margin-bottom:12px;background:var(--surface-hi);border:1px solid var(--border);color:var(--text);border-radius:var(--r-sm);padding:7px 10px;font-size:0.8rem;outline:none;box-sizing:border-box;">
+          <option value="rhv">Drakon Viewer Session (*.rhv)</option>
+          <option value="glb">GLB Model (*.glb)</option>
+          <option value="html">Offline Viewer Package (*.html)</option>
+        </select>
         <label style="font-size:0.75rem;color:var(--text-2);display:block;margin-bottom:6px;" data-i18n="file.filename_label">File Name</label>
         <input type="text" id="input-save-as-name"
           placeholder="e.g. MyModel"
