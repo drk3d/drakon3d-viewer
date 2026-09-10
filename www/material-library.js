@@ -1,6 +1,7 @@
 import { S } from './state.js';
 import { applyDisplayMode } from './display.js';
 import { showToast } from './helpers.js';
+import { History } from './history.js';
 
 // Drakon catalogue presets. Physical values come from the supplied
 // materials.rhv library; Zircon is intentionally absent because its source
@@ -76,6 +77,8 @@ export const GEM_PRESETS = [
   { id: 'pearl', name: 'Pearl', icon: gemIcon('pearl'), color: '#EEEAE3', roughness: 0.2, clearcoat: 0.86, ior: 1.43902438 },
   { id: 'turquoise', name: 'Turquoise', icon: gemIcon('turquoise'), color: '#4CBBC2', roughness: 0.15, clearcoat: 0.32, ior: 2.33333333 }
 ];
+
+const CATALOGUE_PRESETS = [...METAL_PRESETS, ...GEM_PRESETS];
 
 const METAL_NAME_PATTERN = /\b(?:gold|silver|platinum|palladium|steel|titanium|brass|bronze|copper)\b/i;
 const GEM_NAME_PATTERN = /\b(?:almandite|amethyst|aquamarine|aventurine|chalcedony|citrine|diamond|emerald|garnet|hiddenite|jade|kunzite|lapis\s+lazuli|malachite|opal|pearl|precious\s+beryl|quartz|ruby|sapphire|topaz|tourmaline|turquoise)\b/i;
@@ -154,6 +157,69 @@ function makeGemOverride(preset) {
   };
 }
 
+function cloneCustomMaterial(material) {
+  if (!material) return null;
+  const copy = { ...material };
+  if (Array.isArray(material.colorLinear)) copy.colorLinear = [...material.colorLinear];
+  return copy;
+}
+
+function captureMaterialStates(targets) {
+  return targets.map(object => ({
+    customMaterial: cloneCustomMaterial(object.userData.customMaterial),
+    isMaterialByLayer: !!object.userData.isMaterialByLayer
+  }));
+}
+
+function applyObjectMaterialPreset(targets, makeOverride) {
+  const before = captureMaterialStates(targets);
+  for (const object of targets) {
+    object.userData.customMaterial = makeOverride();
+    object.userData.isMaterialByLayer = false;
+  }
+  const after = captureMaterialStates(targets);
+  History.push({ type: 'material', targets: [...targets], before, after });
+}
+
+function normaliseMaterialName(name) {
+  return String(name || '')
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ');
+}
+
+/**
+ * Returns a fresh Viewer material override for a recognised Rhino material
+ * name. This is deliberately non-mutating: a later user-applied material is
+ * still an object override and Undo can return to the original named preset.
+ */
+export function catalogueMaterialOverrideFromNames(...names) {
+  for (const name of names) {
+    const normalised = normaliseMaterialName(name);
+    if (!normalised) continue;
+
+    // Zircon has no catalogue swatch yet, so it intentionally follows the
+    // Diamond material. Every Pearl family member uses Pearl except the
+    // dedicated Pearl Black material.
+    if (/\bzircon\b/.test(normalised)) {
+      return makeGemOverride(GEM_PRESETS.find(preset => preset.id === 'diamond'));
+    }
+    if (/\bpearl\b/.test(normalised)) {
+      const pearlId = /\bpearl\s+black\b/.test(normalised) ? 'pearl-black' : 'pearl';
+      return makeGemOverride(GEM_PRESETS.find(preset => preset.id === pearlId));
+    }
+
+    const preset = CATALOGUE_PRESETS.find(entry => normaliseMaterialName(entry.name) === normalised);
+    if (preset) {
+      return METAL_PRESETS.includes(preset)
+        ? makeMetalOverride(preset)
+        : makeGemOverride(preset);
+    }
+  }
+  return null;
+}
+
 export function applyMetalPreset(presetId) {
   const preset = METAL_PRESETS.find(entry => entry.id === presetId);
   if (!preset || !S.currentModel) {
@@ -174,7 +240,7 @@ export function applyMetalPreset(presetId) {
     return;
   }
 
-  for (const object of targets) object.userData.customMaterial = makeMetalOverride(preset);
+  applyObjectMaterialPreset(targets, () => makeMetalOverride(preset));
   applyDisplayMode();
   showToast(`${preset.name} applied to ${targets.length} object${targets.length === 1 ? '' : 's'}.`);
 }
@@ -199,7 +265,7 @@ export function applyGemPreset(presetId) {
     return;
   }
 
-  for (const object of targets) object.userData.customMaterial = makeGemOverride(preset);
+  applyObjectMaterialPreset(targets, () => makeGemOverride(preset));
   applyDisplayMode();
   showToast(`${preset.name} applied to ${targets.length} object${targets.length === 1 ? '' : 's'}.`);
 }

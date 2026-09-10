@@ -3,6 +3,7 @@ import { S } from './state.js';
 import { setupLights, updateGroundAppearance, applyFileSunSettings } from './lighting.js';
 import { isPageVisuallyDark } from './helpers.js';
 import { createGemstoneMaterial, gemstoneKindFromNames, gemstoneWhiteFallbackColorFromNames } from './gem-material.js';
+import { catalogueMaterialOverrideFromNames } from './material-library.js';
 
 // ── Skybox sphere for rendered mode (bypasses tone mapping) ─────────────────
 // In rendered mode with ACES tone mapping, scene.background color gets compressed.
@@ -594,12 +595,28 @@ export function applyDisplayMode() {
         // Objects the file itself marked ByLayer are untouched: their base material
         // *is* the layer's, resolved by the exporter, textures and all, so there is
         // nothing to detach and doing so would throw away maps the layer really has.
+        const childLayerIdx = (child.userData.attributes || {}).layerIndex ?? 0;
+        const childLayer = S.parsedLayers.find(l => l.index === childLayerIdx);
         let detachedFromOwnMaterial = false;
         if (!effectiveCustom && child.userData.isMaterialByLayer) {
-          const childLayerIdx = (child.userData.attributes || {}).layerIndex ?? 0;
-          const childLayer = S.parsedLayers.find(l => l.index === childLayerIdx);
           if (childLayer?.customMaterial) effectiveCustom = childLayer.customMaterial;
           detachedFromOwnMaterial = !child.userData.originalIsMaterialByLayer;
+        }
+
+        // A matching Drakon catalogue material always takes precedence over the
+        // imported PBR values. Unlike a user override it is not stored on the
+        // object, so Undo can remove a manually selected material and return to
+        // the original material-name mapping.
+        const sourceMaterialNames = [
+          child.userData.rhinoObjectMaterial?.name,
+          base?.name,
+          child.userData.originalMaterial?.name,
+          childLayer?.customMaterial?.name,
+          childLayer?.originalCustomMaterial?.name
+        ];
+        if (!child.userData.customMaterial) {
+          const catalogueOverride = catalogueMaterialOverrideFromNames(...sourceMaterialNames);
+          if (catalogueOverride) effectiveCustom = catalogueOverride;
         }
 
         // Gemstone names come from the Rhino material table rather than from a
