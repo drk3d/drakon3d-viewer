@@ -3519,8 +3519,27 @@ function applyWalkthroughFrame(now) {
 }
 
 // ── Core render loop ───────────────────────────────────────────────────────
+function detachInactiveTransformHelper(control) {
+  if (!control) return;
+  const helper = control.getHelper();
+  // A TransformControls helper must not remain in either render scene while its
+  // tool is inactive. This is deliberately enforced before every frame because
+  // Three.js can reattach the root when controls are detached during a load.
+  control.detach();
+  control.enabled = false;
+  helper.visible = false;
+  helper.parent?.remove(helper);
+}
+
 function animate() {
   requestAnimationFrame(animate);
+
+  if (!S.clippingEnabled) {
+    detachInactiveTransformHelper(S.clippingTransformControls);
+  }
+  if (!S.gumballActive || S.selectedObjects.length === 0) {
+    detachInactiveTransformHelper(S.gumballTransformControls);
+  }
 
   // Exclude all measurement elements (lines, sprites, handles) from AO (SSAO/GTAO) and shadows by moving them to Layer 1
   if (S.measurementGroup) {
