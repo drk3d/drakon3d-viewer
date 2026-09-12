@@ -826,7 +826,7 @@ export async function loadSession(file, fileHandle = null) {
 
   const sourceFileName = file?.name || 'session.rhv';
   const { showLoading, hideLoading } = await import('./helpers.js');
-  showLoading('Loading session file…');
+  showLoading('Loading session…');
 
   // Suppress history recording for the duration of restore — dispatched
   // input/change events during settings playback would otherwise fill the
