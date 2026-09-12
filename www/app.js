@@ -2217,26 +2217,9 @@ function bindUI() {
   });
 
   document.getElementById('btn-select-gems')?.addEventListener('click', () => {
-    clearSelection();
-    if (!S.currentModel) return;
-
-    S.currentModel.traverse(child => {
-      if (!(child.isMesh || child.isLine || child.isLineSegments)) return;
-      if (!child.visible || child.name === 'rhino-edges' || child.name === 'rhino-outline' ||
-          child.name === 'selection-outline' || child.name === 'ground-plane') return;
-      if (!isDrakonGemType(child.userData?.drakonObjectType)) return;
-
-      S.selectedObjects.push(child);
-      addSelectionOutline(child);
-    });
-
     document.getElementById('select-dropdown')?.classList.add('hidden');
-    if (S.gumballActive) {
-      document.getElementById('object-properties')?.classList.add('hidden');
-      setupGumballHelper();
-    } else {
-      updatePropertiesPanel();
-    }
+    document.getElementById('find-panel')?.classList.add('hidden');
+    selectObjectsByName('Gem');
   });
 
   document.getElementById('btn-invert-selection')?.addEventListener('click', () => {
@@ -2864,20 +2847,7 @@ function bindUI() {
   const findBtn   = document.getElementById('btn-find-search');
   if (findInput) {
     findInput.addEventListener('input', () => {
-      const query = findInput.value.trim();
-      clearSelection();
-      if (!S.currentModel || !query) { updatePropertiesPanel(); return; }
-      S.currentModel.traverse(child => {
-        if (!(child.isMesh || child.isLine || child.isLineSegments)) return;
-        if (child.name === 'rhino-edges' || child.name === 'rhino-outline' ||
-            child.name === 'selection-outline' || child.name === 'ground-plane') return;
-        const name = child.userData?.attributes?.name || child.name || '';
-        if (name.toLowerCase().includes(query.toLowerCase())) {
-          S.selectedObjects.push(child);
-          addSelectionOutline(child);
-        }
-      });
-      updatePropertiesPanel();
+      selectObjectsByName(findInput.value);
     });
     findInput.addEventListener('keydown', e => {
       if (e.key === 'Escape') { findInput.value = ''; clearSelection(); updatePropertiesPanel(); }
@@ -4121,6 +4091,27 @@ async function exportGLB(writeHandle = null, customFileName = null) {
     },
     { binary: true }
   );
+}
+
+function selectObjectsByName(query) {
+  const normalizedQuery = String(query || '').trim().toLowerCase();
+  clearSelection();
+  if (!S.currentModel || !normalizedQuery) {
+    updatePropertiesPanel();
+    return;
+  }
+
+  S.currentModel.traverse(child => {
+    if (!(child.isMesh || child.isLine || child.isLineSegments)) return;
+    if (child.name === 'rhino-edges' || child.name === 'rhino-outline' ||
+        child.name === 'selection-outline' || child.name === 'ground-plane') return;
+    const name = child.userData?.attributes?.name || child.name || '';
+    if (name.toLowerCase().includes(normalizedQuery)) {
+      S.selectedObjects.push(child);
+      addSelectionOutline(child);
+    }
+  });
+  updatePropertiesPanel();
 }
 
 // ── Object search (results panel) ─────────────────────────────────────────

@@ -44,6 +44,7 @@ export const TRANSLATIONS = {
     'select.single':      'Single',
     'select.multi':       'Multi-Select',
     'select.invert':      'Invert Selection',
+    'select.gems':        'Gems',
 
     'show.all':           'Show All',
     'show.hide_selected': 'Hide Selected',
@@ -291,6 +292,7 @@ export const TRANSLATIONS = {
     'select.single':      '단일',
     'select.multi':       '다중 선택',
     'select.invert':      '선택 반전',
+    'select.gems':        '보석',
 
     'show.all':           '모두 표시',
     'show.hide_selected': '선택 숨기기',
@@ -538,6 +540,7 @@ export const TRANSLATIONS = {
     'select.single':      'Simple',
     'select.multi':       'Sélection multiple',
     'select.invert':      'Inverser la sélection',
+    'select.gems':        'Gemmes',
 
     'show.all':           'Tout afficher',
     'show.hide_selected': 'Masquer la sélection',
@@ -747,6 +750,7 @@ export const TRANSLATIONS = {
     'select.single':      'Einzeln',
     'select.multi':       'Mehrfachauswahl',
     'select.invert':      'Auswahl umkehren',
+    'select.gems':        'Edelsteine',
 
     'show.all':           'Alle anzeigen',
     'show.hide_selected': 'Auswahl ausblenden',
@@ -956,6 +960,7 @@ export const TRANSLATIONS = {
     'select.single':      'Individual',
     'select.multi':       'Selección múltiple',
     'select.invert':      'Invertir selección',
+    'select.gems':        'Gemas',
 
     'show.all':           'Mostrar todo',
     'show.hide_selected': 'Ocultar selección',
@@ -1165,6 +1170,7 @@ export const TRANSLATIONS = {
     'select.single':      'Singolo',
     'select.multi':       'Selezione multipla',
     'select.invert':      'Inverti selezione',
+    'select.gems':        'Gemme',
 
     'show.all':           'Mostra tutto',
     'show.hide_selected': 'Nascondi selezione',
@@ -1374,6 +1380,7 @@ export const TRANSLATIONS = {
     'select.single':      '単体選択',
     'select.multi':       '複数選択',
     'select.invert':      '選択を反転',
+    'select.gems':        '宝石',
 
     'show.all':           'すべて表示',
     'show.hide_selected': '選択を非表示',
@@ -1583,6 +1590,7 @@ export const TRANSLATIONS = {
     'select.single':      '单选',
     'select.multi':       '多选',
     'select.invert':      '反向选择',
+    'select.gems':        '宝石',
 
     'show.all':           '全部显示',
     'show.hide_selected': '隐藏选择',
@@ -1792,6 +1800,7 @@ export const TRANSLATIONS = {
     'select.single':      '單選',
     'select.multi':       '多選',
     'select.invert':      '反向選取',
+    'select.gems':        '寶石',
 
     'show.all':           '全部顯示',
     'show.hide_selected': '隱藏選取',
@@ -2001,6 +2010,7 @@ export const TRANSLATIONS = {
     'select.single':      'Individual',
     'select.multi':       'Seleção múltipla',
     'select.invert':      'Inverter seleção',
+    'select.gems':        'Gemas',
 
     'show.all':           'Mostrar tudo',
     'show.hide_selected': 'Ocultar seleção',
@@ -2210,6 +2220,7 @@ export const TRANSLATIONS = {
     'select.single':      'Jeden',
     'select.multi':       'Vícenásobný výběr',
     'select.invert':      'Invertovat výběr',
+    'select.gems':        'Drahokamy',
 
     'show.all':           'Zobrazit vše',
     'show.hide_selected': 'Skrýt výběr',
@@ -2419,6 +2430,7 @@ export const TRANSLATIONS = {
     'select.single':      'Pojedynczy',
     'select.multi':       'Zaznaczenie wielokrotne',
     'select.invert':      'Odwróć zaznaczenie',
+    'select.gems':        'Kamienie szlachetne',
 
     'show.all':           'Pokaż wszystko',
     'show.hide_selected': 'Ukryj zaznaczenie',
