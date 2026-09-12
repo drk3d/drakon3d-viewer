@@ -1251,8 +1251,9 @@ function bindUI() {
 
   // The Material view shares the Layers side panel, so it adds no pressure to
   // the already compact mobile toolbar. Keep the chosen view while the panel
-  // is opened and closed during this session; a fresh page starts on Layers.
-  let layerPanelMode = 'layers';
+  // is opened and closed during this session. Shared links open on Materials;
+  // a fresh standalone viewer still starts on Layers.
+  let layerPanelMode = _sharedModelId ? 'materials' : 'layers';
   const setLayerPanelMode = (mode) => {
     layerPanelMode = mode === 'materials' ? 'materials' : 'layers';
     const layersView = document.getElementById('layer-panel-layers-view');
