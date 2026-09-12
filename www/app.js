@@ -1253,7 +1253,11 @@ function bindUI() {
   // the already compact mobile toolbar. Keep the chosen view while the panel
   // is opened and closed during this session. Shared links open on Materials;
   // a fresh standalone viewer still starts on Layers.
-  let layerPanelMode = _sharedModelId ? 'materials' : 'layers';
+  // `bindUI()` runs during bootstrap, before the module-level share variables
+  // below have been initialized. Read the URL here to keep shared-link startup
+  // independent of that later initialization.
+  const opensSharedLink = new URLSearchParams(window.location.search).has('share');
+  let layerPanelMode = opensSharedLink ? 'materials' : 'layers';
   const setLayerPanelMode = (mode) => {
     layerPanelMode = mode === 'materials' ? 'materials' : 'layers';
     const layersView = document.getElementById('layer-panel-layers-view');
