@@ -376,7 +376,14 @@ function loadGemReflectionMap() {
  * material's working-space colour remains the tint, so ruby/sapphire/etc.
  * keep their authored appearance while gaining the same internal optics.
  */
-export function createGemstoneMaterial({ mesh, sourceMaterial, kind, renderer, whiteFallbackColor = null }) {
+export function createGemstoneMaterial({
+  mesh,
+  sourceMaterial,
+  kind,
+  renderer,
+  whiteFallbackColor = null,
+  colorOverride = null
+}) {
   if (!mesh?.geometry?.attributes?.position || mesh.geometry.attributes.position.count < 12) return null;
   if (!renderer?.capabilities?.isWebGL2) return null;
 
@@ -389,11 +396,22 @@ export function createGemstoneMaterial({ mesh, sourceMaterial, kind, renderer, w
   }
 
   const sourceColor = sourceMaterial?.color?.clone?.() || new THREE.Color(0xffffff);
+  const hasCatalogueColor = Array.isArray(colorOverride?.colorLinear)
+    || typeof colorOverride?.color === 'string';
+  if (Array.isArray(colorOverride?.colorLinear) && colorOverride.colorLinear.length >= 3) {
+    sourceColor.setRGB(
+      colorOverride.colorLinear[0],
+      colorOverride.colorLinear[1],
+      colorOverride.colorLinear[2]
+    );
+  } else if (typeof colorOverride?.color === 'string') {
+    sourceColor.set(colorOverride.color);
+  }
   // Three.js stores colours in linear space. A nearly equal, very bright RGB
   // triplet is the Rhino default white material; only that case gets corrected.
   const channelMin = Math.min(sourceColor.r, sourceColor.g, sourceColor.b);
   const channelMax = Math.max(sourceColor.r, sourceColor.g, sourceColor.b);
-  if (whiteFallbackColor && channelMin > 0.85 && channelMax - channelMin < 0.08) {
+  if (!hasCatalogueColor && whiteFallbackColor && channelMin > 0.85 && channelMax - channelMin < 0.08) {
     sourceColor.set(whiteFallbackColor);
   }
 

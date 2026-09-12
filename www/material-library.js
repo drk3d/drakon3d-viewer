@@ -186,7 +186,10 @@ function normaliseMaterialName(name) {
     .trim()
     .toLocaleLowerCase()
     .replace(/[_-]+/g, ' ')
-    .replace(/\s+/g, ' ');
+    .replace(/\s+/g, ' ')
+    // Drakon/Rhino display materials may carry implementation/form suffixes.
+    // They identify the rendering path or cut, not a different catalogue gem.
+    .replace(/(?:\s+(?:ray\s*traced|cabochon))+$/, '');
 }
 
 /**

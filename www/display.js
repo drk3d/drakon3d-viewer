@@ -631,6 +631,13 @@ export function applyDisplayMode() {
         ];
         const gemstoneKind = gemstoneKindFromNames(...gemstoneNames);
         const gemstoneWhiteFallbackColor = gemstoneWhiteFallbackColorFromNames(...gemstoneNames);
+        // A material selected from the Viewer catalogue must control the gem
+        // shader's tint directly. Reading it back only from the cloned source
+        // PBR material lets a few imported RayTraced materials retain their old
+        // colour, most visibly when switching a coloured stone to Diamond.
+        const gemstoneColorOverride = effectiveCustom?.materialCategory === 'gem'
+          ? effectiveCustom
+          : null;
 
         const buildRendered = () => {
         let m = detachedFromOwnMaterial ? defaultLayerMaterial() : base.clone();
@@ -671,7 +678,8 @@ export function applyDisplayMode() {
             sourceMaterial: m,
             kind: gemstoneKind,
             renderer: S.renderer,
-            whiteFallbackColor: gemstoneWhiteFallbackColor
+            whiteFallbackColor: gemstoneWhiteFallbackColor,
+            colorOverride: gemstoneColorOverride
           });
           if (gem) {
             // `m` is an unassigned clone at this point; dispose its GPU program
