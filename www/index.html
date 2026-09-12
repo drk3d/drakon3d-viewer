@@ -323,7 +323,7 @@
   <!-- ── Right Panel: Layer ── -->
   <aside id="layer-right-panel" class="right-panel">
     <div class="right-panel-header">
-      <h2 data-i18n="panel.layer">Layer</h2>
+      <h2 id="layer-panel-title" data-i18n="panel.layer">Layer</h2>
       <button id="btn-close-layer-panel" class="icon-btn sm" title="Close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
           <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -332,8 +332,8 @@
     </div>
     <div class="right-panel-content">
       <div class="layer-panel-tabs" role="tablist" aria-label="Layer panel mode">
-        <button id="btn-layer-panel-layers" class="layer-panel-tab active" role="tab" aria-selected="true">Layers</button>
-        <button id="btn-layer-panel-materials" class="layer-panel-tab" role="tab" aria-selected="false">Materials</button>
+        <button id="btn-layer-panel-layers" class="layer-panel-tab active" role="tab" aria-selected="true" data-i18n="layer.tab_layers">Layers</button>
+        <button id="btn-layer-panel-materials" class="layer-panel-tab" role="tab" aria-selected="false" data-i18n="layer.tab_materials">Materials</button>
       </div>
       <div id="layer-panel-layers-view">
         <div class="layer-panel-toolbar">

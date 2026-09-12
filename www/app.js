@@ -1269,9 +1269,12 @@ function bindUI() {
     const materialsView = document.getElementById('layer-panel-materials-view');
     const layersTab = document.getElementById('btn-layer-panel-layers');
     const materialsTab = document.getElementById('btn-layer-panel-materials');
+    const panelTitle = document.getElementById('layer-panel-title');
     const panelTrigger = document.getElementById('btn-layer-panel');
     const panelTriggerLabel = panelTrigger?.querySelector('.btn-label');
     const isMaterials = layerPanelMode === 'materials';
+    const toolbarKey = isMaterials ? 'toolbar.material' : 'toolbar.layer';
+    const panelKey = isMaterials ? 'panel.material' : 'panel.layer';
 
     layersView?.classList.toggle('hidden', isMaterials);
     materialsView?.classList.toggle('hidden', !isMaterials);
@@ -1279,11 +1282,14 @@ function bindUI() {
     materialsTab?.classList.toggle('active', isMaterials);
     layersTab?.setAttribute('aria-selected', String(!isMaterials));
     materialsTab?.setAttribute('aria-selected', String(isMaterials));
+    if (panelTitle) {
+      panelTitle.dataset.i18n = panelKey;
+      panelTitle.textContent = t(panelKey);
+    }
     if (panelTrigger && panelTriggerLabel) {
-      panelTrigger.title = isMaterials ? 'Material' : 'Layer';
-      panelTriggerLabel.textContent = isMaterials ? 'Material' : 'Layer';
-      if (isMaterials) delete panelTriggerLabel.dataset.i18n;
-      else panelTriggerLabel.dataset.i18n = 'toolbar.layer';
+      panelTrigger.title = t(toolbarKey);
+      panelTriggerLabel.dataset.i18n = toolbarKey;
+      panelTriggerLabel.textContent = t(toolbarKey);
     }
     if (isMaterials) renderMaterialsPanel();
   };

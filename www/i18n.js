@@ -14,6 +14,7 @@ export const TRANSLATIONS = {
     'toolbar.tools':      'Tools',
     'toolbar.file':       'File',
     'toolbar.layer':      'Layer',
+    'toolbar.material':   'Material',
     'toolbar.settings':   'Settings',
 
     'mode.shaded':        'Shaded',
@@ -67,6 +68,7 @@ export const TRANSLATIONS = {
 
     'panel.file':         'File',
     'panel.layer':        'Layer',
+    'panel.material':     'Material',
     'panel.settings':     'Settings',
 
     'file.open':          'Open',
@@ -213,6 +215,8 @@ export const TRANSLATIONS = {
     'env.custom':            'Custom HDR',
     'layer.toggle_all':      'Toggle All',
     'layer.no_layers':       'No layers',
+    'layer.tab_layers':      'Layers',
+    'layer.tab_materials':   'Materials',
     'materials.apply_hint':  'Applies to selected objects. With nothing selected, applies to all detected objects of the material type.',
     'hdr.open_file':         'Open .hdr file',
     'measure.list':          'Measurements',
@@ -256,6 +260,7 @@ export const TRANSLATIONS = {
     'toolbar.tools':      '도구',
     'toolbar.file':       '파일',
     'toolbar.layer':      '레이어',
+    'toolbar.material':   '재질',
     'toolbar.settings':   '설정',
 
     'mode.shaded':        '음영',
@@ -309,6 +314,7 @@ export const TRANSLATIONS = {
 
     'panel.file':         '파일',
     'panel.layer':        '레이어',
+    'panel.material':     '재질',
     'panel.settings':     '설정',
 
     'file.open':          '열기',
@@ -455,6 +461,8 @@ export const TRANSLATIONS = {
     'env.custom':            '사용자 지정 HDR',
     'layer.toggle_all':      '전체 전환',
     'layer.no_layers':       '레이어 없음',
+    'layer.tab_layers':      '레이어',
+    'layer.tab_materials':   '재질',
     'materials.apply_hint':  '선택한 객체에 적용됩니다. 아무것도 선택하지 않으면 해당 재질 유형의 감지된 모든 객체에 적용됩니다.',
     'measure.list':          '측정값',
     'measure.clearAll':      '전체 삭제',
@@ -498,6 +506,7 @@ export const TRANSLATIONS = {
     'toolbar.tools':      'Outils',
     'toolbar.file':       'Fichier',
     'toolbar.layer':      'Calques',
+    'toolbar.material':   'Matériaux',
     'toolbar.settings':   'Config.',
 
     'mode.shaded':        'Ombré',
@@ -551,6 +560,7 @@ export const TRANSLATIONS = {
 
     'panel.file':         'Fichier',
     'panel.layer':        'Calque',
+    'panel.material':     'Matériau',
     'panel.settings':     'Paramètres',
 
     'file.open':          'Ouvrir',
@@ -662,6 +672,8 @@ export const TRANSLATIONS = {
     'turntable.spring':   'Rotation ressort',
     'layer.toggle_all':   'Tout basculer',
     'layer.no_layers':    'Aucun calque',
+    'layer.tab_layers':   'Calques',
+    'layer.tab_materials': 'Matériaux',
     'materials.apply_hint': 'S’applique aux objets sélectionnés. Sans sélection, s’applique à tous les objets détectés du type de matériau.',
     'hdr.open_file':      'Ouvrir fichier .hdr',
     'env.intensity':      'Intensité',
@@ -702,6 +714,7 @@ export const TRANSLATIONS = {
     'toolbar.tools':      'Tools',
     'toolbar.file':       'Datei',
     'toolbar.layer':      'Ebenen',
+    'toolbar.material':   'Material',
     'toolbar.settings':   'Einst.',
 
     'mode.shaded':        'Schattiert',
@@ -755,6 +768,7 @@ export const TRANSLATIONS = {
 
     'panel.file':         'Datei',
     'panel.layer':        'Ebene',
+    'panel.material':     'Material',
     'panel.settings':     'Einstellungen',
 
     'file.open':          'Öffnen',
@@ -866,6 +880,8 @@ export const TRANSLATIONS = {
     'turntable.spring':   'Federdrehung',
     'layer.toggle_all':   'Alle umschalten',
     'layer.no_layers':    'Keine Ebenen',
+    'layer.tab_layers':   'Ebenen',
+    'layer.tab_materials': 'Materialien',
     'materials.apply_hint': 'Wird auf ausgewählte Objekte angewendet. Ohne Auswahl wird es auf alle erkannten Objekte des Materialtyps angewendet.',
     'hdr.open_file':      '.hdr Datei öffnen',
     'env.intensity':      'Intensität',
@@ -906,6 +922,7 @@ export const TRANSLATIONS = {
     'toolbar.tools':      'Herram.',
     'toolbar.file':       'Archivo',
     'toolbar.layer':      'Capas',
+    'toolbar.material':   'Materiales',
     'toolbar.settings':   'Config.',
 
     'mode.shaded':        'Sombreado',
@@ -959,6 +976,7 @@ export const TRANSLATIONS = {
 
     'panel.file':         'Archivo',
     'panel.layer':        'Capa',
+    'panel.material':     'Material',
     'panel.settings':     'Configuración',
 
     'file.open':          'Abrir',
@@ -1070,6 +1088,8 @@ export const TRANSLATIONS = {
     'turntable.spring':   'Giro de resorte',
     'layer.toggle_all':   'Alternar todo',
     'layer.no_layers':    'Sin capas',
+    'layer.tab_layers':   'Capas',
+    'layer.tab_materials': 'Materiales',
     'materials.apply_hint': 'Se aplica a los objetos seleccionados. Sin ninguna selección, se aplica a todos los objetos detectados del tipo de material.',
     'hdr.open_file':      'Abrir archivo .hdr',
     'env.intensity':      'Intensidad',
@@ -1110,6 +1130,7 @@ export const TRANSLATIONS = {
     'toolbar.tools':      'Strum.',
     'toolbar.file':       'File',
     'toolbar.layer':      'Livelli',
+    'toolbar.material':   'Materiali',
     'toolbar.settings':   'Impost.',
 
     'mode.shaded':        'Ombreggiato',
@@ -1163,6 +1184,7 @@ export const TRANSLATIONS = {
 
     'panel.file':         'File',
     'panel.layer':        'Layer',
+    'panel.material':     'Materiale',
     'panel.settings':     'Impostazioni',
 
     'file.open':          'Apri',
@@ -1274,6 +1296,8 @@ export const TRANSLATIONS = {
     'turntable.spring':   'Rotazione a molla',
     'layer.toggle_all':   'Attiva/disattiva tutto',
     'layer.no_layers':    'Nessun layer',
+    'layer.tab_layers':   'Livelli',
+    'layer.tab_materials': 'Materiali',
     'materials.apply_hint': 'Si applica agli oggetti selezionati. Senza alcuna selezione, si applica a tutti gli oggetti rilevati del tipo di materiale.',
     'hdr.open_file':      'Apri file .hdr',
     'env.intensity':      'Intensità',
@@ -1314,6 +1338,7 @@ export const TRANSLATIONS = {
     'toolbar.tools':      'ツール',
     'toolbar.file':       'ファイル',
     'toolbar.layer':      'レイヤー',
+    'toolbar.material':   'マテリアル',
     'toolbar.settings':   '設定',
 
     'mode.shaded':        'シェーディング',
@@ -1367,6 +1392,7 @@ export const TRANSLATIONS = {
 
     'panel.file':         'ファイル',
     'panel.layer':        'レイヤー',
+    'panel.material':     'マテリアル',
     'panel.settings':     '設定',
 
     'file.open':          '開く',
@@ -1478,6 +1504,8 @@ export const TRANSLATIONS = {
     'turntable.spring':   'スプリング回転',
     'layer.toggle_all':   'すべて切替',
     'layer.no_layers':    'レイヤーなし',
+    'layer.tab_layers':   'レイヤー',
+    'layer.tab_materials': 'マテリアル',
     'materials.apply_hint': '選択したオブジェクトに適用されます。何も選択されていない場合は、該当するマテリアル種類の検出されたすべてのオブジェクトに適用されます。',
     'hdr.open_file':      '.hdrファイルを開く',
     'env.intensity':      '強度',
@@ -1518,6 +1546,7 @@ export const TRANSLATIONS = {
     'toolbar.tools':      '工具',
     'toolbar.file':       '文件',
     'toolbar.layer':      '图层',
+    'toolbar.material':   '材质',
     'toolbar.settings':   '设置',
 
     'mode.shaded':        '着色',
@@ -1571,6 +1600,7 @@ export const TRANSLATIONS = {
 
     'panel.file':         '文件',
     'panel.layer':        '图层',
+    'panel.material':     '材质',
     'panel.settings':     '设置',
 
     'file.open':          '打开',
@@ -1682,6 +1712,8 @@ export const TRANSLATIONS = {
     'turntable.spring':   '弹簧旋转',
     'layer.toggle_all':   '全部切换',
     'layer.no_layers':    '无图层',
+    'layer.tab_layers':   '图层',
+    'layer.tab_materials': '材质',
     'materials.apply_hint': '应用于选定对象。未选择任何对象时，将应用于已检测到的所有该材质类型对象。',
     'hdr.open_file':      '打开 .hdr 文件',
     'env.intensity':      '强度',
@@ -1722,6 +1754,7 @@ export const TRANSLATIONS = {
     'toolbar.tools':      '工具',
     'toolbar.file':       '檔案',
     'toolbar.layer':      '圖層',
+    'toolbar.material':   '材質',
     'toolbar.settings':   '設定',
 
     'mode.shaded':        '著色',
@@ -1775,6 +1808,7 @@ export const TRANSLATIONS = {
 
     'panel.file':         '檔案',
     'panel.layer':        '圖層',
+    'panel.material':     '材質',
     'panel.settings':     '設定',
 
     'file.open':          '開啟',
@@ -1886,6 +1920,8 @@ export const TRANSLATIONS = {
     'turntable.spring':   '彈簧旋轉',
     'layer.toggle_all':   '全部切換',
     'layer.no_layers':    '無圖層',
+    'layer.tab_layers':   '圖層',
+    'layer.tab_materials': '材質',
     'materials.apply_hint': '套用至選取的物件。未選取任何物件時，會套用至所有偵測到的該材質類型物件。',
     'hdr.open_file':      '開啟 .hdr 檔案',
     'env.intensity':      '強度',
@@ -1926,6 +1962,7 @@ export const TRANSLATIONS = {
     'toolbar.tools':      'Ferram.',
     'toolbar.file':       'Arquivo',
     'toolbar.layer':      'Camadas',
+    'toolbar.material':   'Materiais',
     'toolbar.settings':   'Config.',
 
     'mode.shaded':        'Sombreado',
@@ -1979,6 +2016,7 @@ export const TRANSLATIONS = {
 
     'panel.file':         'Arquivo',
     'panel.layer':        'Camada',
+    'panel.material':     'Material',
     'panel.settings':     'Configurações',
 
     'file.open':          'Abrir',
@@ -2090,6 +2128,8 @@ export const TRANSLATIONS = {
     'turntable.spring':   'Giro por mola',
     'layer.toggle_all':   'Alternar tudo',
     'layer.no_layers':    'Sem camadas',
+    'layer.tab_layers':   'Camadas',
+    'layer.tab_materials': 'Materiais',
     'materials.apply_hint': 'Aplica-se aos objetos selecionados. Sem nenhuma seleção, aplica-se a todos os objetos detectados do tipo de material.',
     'hdr.open_file':      'Abrir arquivo .hdr',
     'env.intensity':      'Intensidade',
@@ -2130,6 +2170,7 @@ export const TRANSLATIONS = {
     'toolbar.tools':      'Nást.',
     'toolbar.file':       'Soubor',
     'toolbar.layer':      'Vrstvy',
+    'toolbar.material':   'Materiály',
     'toolbar.settings':   'Nastav.',
 
     'mode.shaded':        'Stínovaný',
@@ -2183,6 +2224,7 @@ export const TRANSLATIONS = {
 
     'panel.file':         'Soubor',
     'panel.layer':        'Vrstva',
+    'panel.material':     'Materiál',
     'panel.settings':     'Nastavení',
 
     'file.open':          'Otevřít',
@@ -2294,6 +2336,8 @@ export const TRANSLATIONS = {
     'turntable.spring':   'Pružinové otáčení',
     'layer.toggle_all':   'Přepnout vše',
     'layer.no_layers':    'Žádné vrstvy',
+    'layer.tab_layers':   'Vrstvy',
+    'layer.tab_materials': 'Materiály',
     'materials.apply_hint': 'Použije se na vybrané objekty. Bez výběru se použije na všechny rozpoznané objekty daného typu materiálu.',
     'hdr.open_file':      'Otevřít soubor .hdr',
     'env.intensity':      'Intenzita',
@@ -2334,6 +2378,7 @@ export const TRANSLATIONS = {
     'toolbar.tools':      'Narz.',
     'toolbar.file':       'Plik',
     'toolbar.layer':      'Warstwy',
+    'toolbar.material':   'Materiały',
     'toolbar.settings':   'Opcje',
 
     'mode.shaded':        'Cieniowany',
@@ -2387,6 +2432,7 @@ export const TRANSLATIONS = {
 
     'panel.file':         'Plik',
     'panel.layer':        'Warstwa',
+    'panel.material':     'Materiał',
     'panel.settings':     'Ustawienia',
 
     'file.open':          'Otwórz',
@@ -2498,6 +2544,8 @@ export const TRANSLATIONS = {
     'turntable.spring':   'Obrót sprężynowy',
     'layer.toggle_all':   'Przełącz wszystko',
     'layer.no_layers':    'Brak warstw',
+    'layer.tab_layers':   'Warstwy',
+    'layer.tab_materials': 'Materiały',
     'materials.apply_hint': 'Stosuje się do zaznaczonych obiektów. Bez zaznaczenia stosuje się do wszystkich wykrytych obiektów danego typu materiału.',
     'hdr.open_file':      'Otwórz plik .hdr',
     'env.intensity':      'Intensywność',
