@@ -209,14 +209,6 @@ let gemEnvironment = null;
 let gemReflectionMap = null;
 let reflectionMapPromise = null;
 
-function shouldUseMobileGemFallback() {
-  const userAgent = navigator.userAgent || '';
-  return navigator.userAgentData?.mobile === true
-    || /Android|iPhone|iPad|iPod/i.test(userAgent)
-    // iPadOS can identify itself as macOS, but still exposes a touch screen.
-    || (/Macintosh/i.test(userAgent) && navigator.maxTouchPoints > 1);
-}
-
 /**
  * Returns the first explicitly named stone in a list of material names.
  * The Viewer does not guess from colour, so yellow gold or coloured plastics
@@ -394,12 +386,6 @@ export function createGemstoneMaterial({
 }) {
   if (!mesh?.geometry?.attributes?.position || mesh.geometry.attributes.position.count < 12) return null;
   if (!renderer?.capabilities?.isWebGL2) return null;
-  // The refractive material owns a BVH and GPU texture per stone. A jewellery
-  // model may contain hundreds of stones, which exhausts phone/tablet WebGL
-  // memory before the initial frame can render. The ordinary PBR material has
-  // already received the same catalogue colour, so use that reliable fallback
-  // on touch/mobile devices and reserve full internal refraction for desktop.
-  if (shouldUseMobileGemFallback()) return null;
 
   let resource;
   try {
