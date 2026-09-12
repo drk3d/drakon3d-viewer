@@ -347,9 +347,6 @@ export function renderObjectMaterialsPanel(container, objects = S.selectedObject
       }
       pressedPresetId = null;
       applyPreset(presetId, typedTargets[category]);
-      if (mobile) {
-        document.getElementById('object-properties')?.classList.add('hidden');
-      }
     });
   };
 
