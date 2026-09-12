@@ -289,7 +289,7 @@ function renderPresetGrid(gridTarget, presets, applyPreset) {
     button.title = `Apply ${preset.name}`;
     button.dataset.materialPreset = preset.id;
     button.innerHTML = `<img src="${preset.icon}" alt="" draggable="false"><span>${preset.name}</span>`;
-    button.addEventListener('click', () => applyPreset(preset.id));
+    button.addEventListener('click', event => applyPreset(preset.id, event));
     grid.appendChild(button);
   }
 }
@@ -300,8 +300,8 @@ function isMobileDevice() {
 }
 
 export function renderMaterialsPanel() {
-  renderPresetGrid('metal-material-grid', METAL_PRESETS, applyMetalPreset);
-  renderPresetGrid('gem-material-grid', GEM_PRESETS, applyGemPreset);
+  renderPresetGrid('metal-material-grid', METAL_PRESETS, presetId => applyMetalPreset(presetId));
+  renderPresetGrid('gem-material-grid', GEM_PRESETS, presetId => applyGemPreset(presetId));
 }
 
 export function renderObjectMaterialsPanel(container, objects = S.selectedObjects) {
@@ -328,9 +328,26 @@ export function renderObjectMaterialsPanel(container, objects = S.selectedObject
     grid.className = 'material-preset-grid';
     section.append(heading, grid);
     wrapper.appendChild(section);
-    renderPresetGrid(grid, presets, presetId => {
+    const mobile = isMobileDevice();
+    let pressedPresetId = null;
+    if (mobile) {
+      grid.addEventListener('pointerdown', event => {
+        pressedPresetId = event.target.closest('.material-preset-btn')?.dataset.materialPreset || null;
+      });
+      grid.addEventListener('pointercancel', () => { pressedPresetId = null; });
+    }
+    renderPresetGrid(grid, presets, (presetId, event) => {
+      // On touch devices the pointerdown that selected the model can finish
+      // over this newly opened panel and synthesize a click on a preset. Only
+      // accept a pointer-generated click when that same preset received its
+      // own, fresh pointerdown. Keyboard-generated clicks have detail === 0.
+      if (mobile && event.detail !== 0 && pressedPresetId !== presetId) {
+        pressedPresetId = null;
+        return;
+      }
+      pressedPresetId = null;
       applyPreset(presetId, typedTargets[category]);
-      if (isMobileDevice()) {
+      if (mobile) {
         document.getElementById('object-properties')?.classList.add('hidden');
       }
     });
