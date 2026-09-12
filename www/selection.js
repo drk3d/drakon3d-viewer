@@ -202,6 +202,7 @@ export function clearSelection() {
     }
   });
   S.selectedObjects = [];
+  _lastPropSelection = [];
   if (S.selectionOutlinePass) {
     S.selectionOutlinePass.selectedObjects = [];
   }
@@ -214,14 +215,19 @@ export function clearSelection() {
 // ── Properties panel ──────────────────────────────────────────────────────────
 
 let _activePropTab = 'props'; // 'props' | 'materials' | 'usertext'
+let _lastPropSelection = [];
 let _utSortCol = null;        // null | 'key' | 'value'
 let _utSortDir = 'asc';       // 'asc' | 'desc'
 
-function _switchPropTab(tab) {
+function _setPropTab(tab) {
   _activePropTab = tab;
   document.getElementById('prop-tab-props')?.classList.toggle('active', tab === 'props');
   document.getElementById('prop-tab-materials')?.classList.toggle('active', tab === 'materials');
   document.getElementById('prop-tab-usertext')?.classList.toggle('active', tab === 'usertext');
+}
+
+function _switchPropTab(tab) {
+  _setPropTab(tab);
   updatePropertiesPanel();
 }
 
@@ -263,7 +269,18 @@ function _getUserText(obj) {
 
 export function updatePropertiesPanel() {
   const panel = document.getElementById('object-properties');
-  if (!S.selectedObjects.length) { panel.classList.add('hidden'); return; }
+  if (!S.selectedObjects.length) {
+    _lastPropSelection = [];
+    panel.classList.add('hidden');
+    return;
+  }
+
+  const selectionChanged = S.selectedObjects.length !== _lastPropSelection.length
+    || S.selectedObjects.some((object, index) => object !== _lastPropSelection[index]);
+  if (selectionChanged) {
+    _setPropTab(S.currentMode === 'rendered' ? 'materials' : 'props');
+    _lastPropSelection = [...S.selectedObjects];
+  }
 
   const isMulti = S.selectedObjects.length > 1;
 

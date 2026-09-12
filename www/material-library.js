@@ -294,6 +294,11 @@ function renderPresetGrid(gridTarget, presets, applyPreset) {
   }
 }
 
+function isMobileDevice() {
+  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+    || (/Macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+}
+
 export function renderMaterialsPanel() {
   renderPresetGrid('metal-material-grid', METAL_PRESETS, applyMetalPreset);
   renderPresetGrid('gem-material-grid', GEM_PRESETS, applyGemPreset);
@@ -323,7 +328,12 @@ export function renderObjectMaterialsPanel(container, objects = S.selectedObject
     grid.className = 'material-preset-grid';
     section.append(heading, grid);
     wrapper.appendChild(section);
-    renderPresetGrid(grid, presets, presetId => applyPreset(presetId, typedTargets[category]));
+    renderPresetGrid(grid, presets, presetId => {
+      applyPreset(presetId, typedTargets[category]);
+      if (isMobileDevice()) {
+        document.getElementById('object-properties')?.classList.add('hidden');
+      }
+    });
   };
 
   addSection('metal', 'props.materials_metals', METAL_PRESETS, applyMetalPreset);
