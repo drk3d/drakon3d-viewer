@@ -42,7 +42,6 @@ import {
 } from './tools.js';
 import { onPointerDown, clearSelection, updatePropertiesPanel, addSelectionOutline, setupGumballHelper, clearGumballHelper, ensureOriginalTransform } from './selection.js';
 import { buildClippingCap, destroyClippingCap, setClippingCapEnabled, setClippingCapColor, updateClippingCapPose } from './clip-cap.js';
-import { isDrakonGemType } from './drakon-objects.js';
 
 // Notes UI is loaded lazily so the rest of the app boots even if the user
 // never opens a note. The animate loop reads the populated reference.

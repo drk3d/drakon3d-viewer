@@ -2,6 +2,8 @@ import { S } from './state.js';
 import { applyDisplayMode } from './display.js';
 import { showToast } from './helpers.js';
 import { History } from './history.js';
+import { t } from './i18n.js';
+import { isDrakonGemType } from './drakon-objects.js';
 
 // Drakon catalogue presets. Physical values come from the supplied
 // materials.rhv library; Zircon is intentionally absent because its source
@@ -121,6 +123,8 @@ function isDetectedMetal(object) {
 
 function isDetectedGem(object) {
   return object.userData?.customMaterial?.materialCategory === 'gem'
+    || isDrakonGemType(object.userData?.drakonObjectType)
+    || /\bgem\b/i.test(object.userData?.attributes?.name || object.name || '')
     || materialNamesFor(object).some(name => GEM_NAME_PATTERN.test(name));
 }
 
@@ -223,14 +227,14 @@ export function catalogueMaterialOverrideFromNames(...names) {
   return null;
 }
 
-export function applyMetalPreset(presetId) {
+export function applyMetalPreset(presetId, targetObjects = null) {
   const preset = METAL_PRESETS.find(entry => entry.id === presetId);
   if (!preset || !S.currentModel) {
     showToast('Open a model to apply a material.');
     return;
   }
 
-  const selectedMeshes = S.selectedObjects.filter(isModelMesh);
+  const selectedMeshes = (targetObjects || S.selectedObjects).filter(isModelMesh);
   const targets = selectedMeshes.length > 0 ? selectedMeshes : [];
   if (targets.length === 0) {
     S.currentModel.traverse(object => {
@@ -248,14 +252,14 @@ export function applyMetalPreset(presetId) {
   showToast(`${preset.name} applied to ${targets.length} object${targets.length === 1 ? '' : 's'}.`);
 }
 
-export function applyGemPreset(presetId) {
+export function applyGemPreset(presetId, targetObjects = null) {
   const preset = GEM_PRESETS.find(entry => entry.id === presetId);
   if (!preset || !S.currentModel) {
     showToast('Open a model to apply a material.');
     return;
   }
 
-  const selectedMeshes = S.selectedObjects.filter(isModelMesh);
+  const selectedMeshes = (targetObjects || S.selectedObjects).filter(isModelMesh);
   const targets = selectedMeshes.length > 0 ? selectedMeshes : [];
   if (targets.length === 0) {
     S.currentModel.traverse(object => {
@@ -273,8 +277,8 @@ export function applyGemPreset(presetId) {
   showToast(`${preset.name} applied to ${targets.length} object${targets.length === 1 ? '' : 's'}.`);
 }
 
-function renderPresetGrid(gridId, presets, applyPreset) {
-  const grid = document.getElementById(gridId);
+function renderPresetGrid(gridTarget, presets, applyPreset) {
+  const grid = typeof gridTarget === 'string' ? document.getElementById(gridTarget) : gridTarget;
   if (!grid) return;
   grid.replaceChildren();
 
@@ -293,4 +297,44 @@ function renderPresetGrid(gridId, presets, applyPreset) {
 export function renderMaterialsPanel() {
   renderPresetGrid('metal-material-grid', METAL_PRESETS, applyMetalPreset);
   renderPresetGrid('gem-material-grid', GEM_PRESETS, applyGemPreset);
+}
+
+export function renderObjectMaterialsPanel(container, objects = S.selectedObjects) {
+  if (!container) return;
+  container.replaceChildren();
+
+  const typedTargets = { metal: [], gem: [] };
+  for (const object of objects.filter(isModelMesh)) {
+    if (isDetectedGem(object)) typedTargets.gem.push(object);
+    else if (isDetectedMetal(object)) typedTargets.metal.push(object);
+  }
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'prop-materials';
+
+  const addSection = (category, titleKey, presets, applyPreset) => {
+    if (typedTargets[category].length === 0) return;
+    const section = document.createElement('section');
+    section.className = 'material-preset-section';
+    const heading = document.createElement('h3');
+    heading.dataset.i18n = titleKey;
+    heading.textContent = t(titleKey);
+    const grid = document.createElement('div');
+    grid.className = 'material-preset-grid';
+    section.append(heading, grid);
+    wrapper.appendChild(section);
+    renderPresetGrid(grid, presets, presetId => applyPreset(presetId, typedTargets[category]));
+  };
+
+  addSection('metal', 'props.materials_metals', METAL_PRESETS, applyMetalPreset);
+  addSection('gem', 'props.materials_gems', GEM_PRESETS, applyGemPreset);
+
+  if (!wrapper.childElementCount) {
+    const empty = document.createElement('p');
+    empty.className = 'prop-materials-empty';
+    empty.dataset.i18n = 'props.materials_none';
+    empty.textContent = t('props.materials_none');
+    wrapper.appendChild(empty);
+  }
+  container.appendChild(wrapper);
 }

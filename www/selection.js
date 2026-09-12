@@ -4,6 +4,7 @@ import { applyDisplayMode, ensureOwnMaterial } from './display.js';
 import { History } from './history.js';
 import { bindSliderDblClickInput } from './helpers.js';
 import { t } from './i18n.js';
+import { renderObjectMaterialsPanel } from './material-library.js';
 
 // ── Pointer hit-test / selection ─────────────────────────────────────────────
 
@@ -212,19 +213,21 @@ export function clearSelection() {
 
 // ── Properties panel ──────────────────────────────────────────────────────────
 
-let _activePropTab = 'props'; // 'props' | 'usertext'
+let _activePropTab = 'props'; // 'props' | 'materials' | 'usertext'
 let _utSortCol = null;        // null | 'key' | 'value'
 let _utSortDir = 'asc';       // 'asc' | 'desc'
 
 function _switchPropTab(tab) {
   _activePropTab = tab;
   document.getElementById('prop-tab-props')?.classList.toggle('active', tab === 'props');
+  document.getElementById('prop-tab-materials')?.classList.toggle('active', tab === 'materials');
   document.getElementById('prop-tab-usertext')?.classList.toggle('active', tab === 'usertext');
   updatePropertiesPanel();
 }
 
 function _bindPropTabs() {
   document.getElementById('prop-tab-props')?.addEventListener('click', () => _switchPropTab('props'));
+  document.getElementById('prop-tab-materials')?.addEventListener('click', () => _switchPropTab('materials'));
   document.getElementById('prop-tab-usertext')?.addEventListener('click', () => _switchPropTab('usertext'));
 }
 _bindPropTabs();
@@ -263,6 +266,12 @@ export function updatePropertiesPanel() {
   if (!S.selectedObjects.length) { panel.classList.add('hidden'); return; }
 
   const isMulti = S.selectedObjects.length > 1;
+
+  if (_activePropTab === 'materials') {
+    renderObjectMaterialsPanel(document.getElementById('prop-content'), S.selectedObjects);
+    panel.classList.remove('hidden');
+    return;
+  }
 
   // ── Extract Name and Layer ───────────────────────────────────────────
   let displayName = 'Unnamed';

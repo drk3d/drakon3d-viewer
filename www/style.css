@@ -929,6 +929,21 @@ body.dark-theme .dark-only {
   flex: 0 0 13px;
   background: currentColor;
 }
+
+.prop-materials {
+  padding: 10px 8px;
+}
+.prop-materials .material-preset-section + .material-preset-section {
+  margin-top: 10px;
+}
+.prop-materials-empty {
+  margin: 0;
+  padding: 20px 8px;
+  color: var(--text-3);
+  font-size: 0.7rem;
+  line-height: 1.4;
+  text-align: center;
+}
 .invert-selection-icon {
   -webkit-mask: url('assets/selection-invert.png') center / contain no-repeat;
   mask: url('assets/selection-invert.png') center / contain no-repeat;
