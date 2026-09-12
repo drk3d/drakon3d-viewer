@@ -824,6 +824,7 @@ export async function loadSession(file, fileHandle = null) {
   // one. Lets a plain Save overwrite the opened .rhv in place.
   S.currentFileHandle = fileHandle || null;
 
+  const sourceFileName = file?.name || 'session.rhv';
   const { showLoading, hideLoading } = await import('./helpers.js');
   showLoading('Loading session file…');
 
@@ -833,6 +834,11 @@ export async function loadSession(file, fileHandle = null) {
   History.suppress = true;
   try {
     let arrayBuffer = await file.arrayBuffer();
+    // The caller may be holding a compressed multi-megabyte Share file. Its
+    // bytes are no longer needed once this copy has been read, so release that
+    // reference before expanding/parsing the session on memory-constrained
+    // mobile browsers.
+    file = null;
 
     // Auto-detect gzip wrapper (magic 0x1f 0x8b). .rhv files are gzip-wrapped
     // around the RV3D container for a 3–5× size reduction.
@@ -851,7 +857,7 @@ export async function loadSession(file, fileHandle = null) {
       }
     }
 
-    const view = new DataView(arrayBuffer);
+    let view = new DataView(arrayBuffer);
 
     // Check magic bytes
     let isBinaryPackage = false;
@@ -918,9 +924,15 @@ export async function loadSession(file, fileHandle = null) {
       const glbStart = 12 + jsonLength;
       glbBuffer = arrayBuffer.slice(glbStart);
 
+      // `slice` above is the standalone GLB consumed by GLTFLoader. Drop the
+      // larger RV3D container before the async GLB parser starts, avoiding two
+      // full copies of the model during a mobile Share load.
+      arrayBuffer = null;
+      view = null;
+
       // 1. Load the packed geometry first
       const { loadGeometryFromGLB } = await import('./loaders.js');
-      await loadGeometryFromGLB(glbBuffer, file.name, glbBuffer.byteLength);
+      await loadGeometryFromGLB(glbBuffer, sourceFileName, glbBuffer.byteLength);
     } else {
       // Legacy JSON-only session file
       resetSettingsToDefault();
@@ -1183,7 +1195,7 @@ export async function loadSession(file, fileHandle = null) {
 
     // 5. Restore custom named views
     if (data.namedViews) {
-      const base = file.name.replace(/\.[^.]+$/, '');
+      const base = sourceFileName.replace(/\.[^.]+$/, '');
       try {
         localStorage.setItem(`rhino_custom_views_${base}`, JSON.stringify(data.namedViews));
       } catch (e) {

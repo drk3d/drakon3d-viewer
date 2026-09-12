@@ -238,9 +238,14 @@ async function _loadSharedModel(shareId, apiOrigin, prepareToken = null) {
     throw new _ShareLinkError(message, response.status);
   }
   const filename = response.headers.get('X-Drakon-Filename') || 'design.3dm';
-  const file = new File([await response.blob()], filename, { type: 'application/octet-stream' });
-  if (filename.toLowerCase().endsWith('.rhv')) await loadSession(file);
-  else if (await handleFile(file, rhinoLoader, gltfLoader) === false) {
+  let file = new File([await response.blob()], filename, { type: 'application/octet-stream' });
+  if (filename.toLowerCase().endsWith('.rhv')) {
+    // `loadSession` takes its own temporary reference while it reads the file.
+    // Do not retain another compressed Share blob throughout GLB parsing.
+    const sessionLoad = loadSession(file);
+    file = null;
+    await sessionLoad;
+  } else if (await handleFile(file, rhinoLoader, gltfLoader) === false) {
     throw new _ShareLinkError('The shared 3DM could not be loaded.', 500);
   }
   return { filename };
