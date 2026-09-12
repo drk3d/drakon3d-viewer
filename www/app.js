@@ -543,13 +543,22 @@ function init() {
     const _orig = pass.render.bind(pass);
     pass.render = (renderer, writeBuffer, readBuffer, dt, mask) => {
       const savedMask = S.camera.layers.mask;
+      const savedBackground = S.scene.background;
       const ann        = S.annotationGroup;
       const annVisible = ann ? ann.visible : false;
       S.camera.layers.set(0);
       if (ann) ann.visible = false;
-      _orig(renderer, writeBuffer, readBuffer, dt, mask);
-      S.camera.layers.mask = savedMask;
-      if (ann) ann.visible = annVisible;
+      // Texture backgrounds use an internal 2x2 plane. The normal-material
+      // override projects it as world geometry, creating a false AO square at
+      // the origin. RenderPass already drew the backdrop; exclude it here.
+      S.scene.background = null;
+      try {
+        _orig(renderer, writeBuffer, readBuffer, dt, mask);
+      } finally {
+        S.scene.background = savedBackground;
+        S.camera.layers.mask = savedMask;
+        if (ann) ann.visible = annVisible;
+      }
     };
   });
 
