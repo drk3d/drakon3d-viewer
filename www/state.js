@@ -263,3 +263,13 @@ export const S = {
     }
   })(),
 };
+
+// The Jewelry Studio preset remains selected in the UI, but Arctic deliberately
+// uses the neutral procedural Studio lighting instead. Keeping this resolution
+// here means mode changes, preset changes, session restores, and late HDR loads
+// all make the same choice.
+export function getEffectiveEnvironmentPreset() {
+  return S.currentMode === 'arctic' && S.currentEnvPreset === 'jewelry'
+    ? 'studio'
+    : S.currentEnvPreset;
+}

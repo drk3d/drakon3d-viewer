@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { S } from './state.js';
+import { S, getEffectiveEnvironmentPreset } from './state.js';
 import { setupLights, updateGroundAppearance, applyFileSunSettings } from './lighting.js';
 import { isPageVisuallyDark } from './helpers.js';
 import { createGemstoneMaterial, gemstoneKindFromNames, gemstoneWhiteFallbackColorFromNames } from './gem-material.js';
@@ -225,6 +225,21 @@ export function addTechnicalOutline(mesh) {
   mesh.add(outline);
 }
 
+// Keep the selected preset intact while applying Arctic's Studio-lighting
+// exception. Every other mode and preset resolves directly to its selection.
+export function applyEnvironmentPreset() {
+  const preset = S.envMaps[getEffectiveEnvironmentPreset()];
+  if (!preset) return false;
+
+  S.environmentMap = preset;
+  if (S.scene) {
+    S.scene.environment = ['arctic', 'rendered'].includes(S.currentMode)
+      ? preset
+      : null;
+  }
+  return true;
+}
+
 export function applyDisplayMode() {
   if (!S.currentModel) return;
 
@@ -291,13 +306,10 @@ export function applyDisplayMode() {
   // color appears exactly as intended even in rendered (ACES) mode.
   updateBgSkybox();
 
-  // Environment map (skylight) — Arch + Rendered use it for AO + reflections.
-  // Shaded/Wireframe/Technical: no env (flat/specific look).
-  if (['arctic', 'rendered'].includes(S.currentMode) && S.environmentMap) {
-    S.scene.environment = S.environmentMap;
-  } else {
-    S.scene.environment = null;
-  }
+  // Environment map (skylight) — Arctic + Rendered use it for AO + reflections.
+  // Shaded/Wireframe/Technical: no env (flat/specific look). Arctic resolves
+  // Jewelry Studio to Studio while preserving Jewelry Studio in the UI.
+  applyEnvironmentPreset();
 
   // Shadow control by mode:
   // - shaded/arctic/rendered: shadows if sun enabled

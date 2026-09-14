@@ -20,7 +20,7 @@ import { S } from './state.js';
 import { updateSliderFill, updateAllSliderFills, updateSelectIcon, showLoading, hideLoading, showToast, bindSliderDblClickInput, beginSave } from './helpers.js';
 import { setupLights, updateSunLight, updateShadowCasting, addGroundPlane, removeGroundPlane, computeVisibleBoundingBox } from './lighting.js';
 import { switchToOrtho, switchToPersp, switchToTwoPoint, apply2PointConstraints, installTwoPointDragHandler, setViewPreset, setWalkthroughMode, triggerCameraTransition, fitCameraToBox, fitCameraToObject, fitCameraToSelected, saveCustomView, renderNamedViewsUI, updateAdaptiveClipping } from './camera.js';
-import { applySceneBackground, applyFileBackground, applyDisplayMode, applyLayerColorsToModel, recreateAllEdges, setEdgeAngleUniform } from './display.js';
+import { applySceneBackground, applyFileBackground, applyDisplayMode, applyEnvironmentPreset, applyLayerColorsToModel, recreateAllEdges, setEdgeAngleUniform } from './display.js';
 import { renderLayerUI, updateLayerVisibility } from './layers.js';
 import { renderMaterialsPanel } from './material-library.js';
 import { createAnnotationSprites } from './annotations.js';
@@ -957,10 +957,7 @@ function loadJewelryStudioEnvironment() {
     S.envMaps.jewelry = environment;
 
     if (S.currentEnvPreset === 'jewelry') {
-      S.environmentMap = environment;
-      if (['arctic', 'rendered'].includes(S.currentMode)) {
-        S.scene.environment = environment;
-      }
+      applyEnvironmentPreset();
       if (document.getElementById('bg-type-select')?.value === 'hdr') {
         applySceneBackground();
       }
@@ -1572,12 +1569,7 @@ function bindUI() {
   if (envPresetSel) {
     envPresetSel.addEventListener('change', () => {
       S.currentEnvPreset = envPresetSel.value;
-      const preset = S.envMaps[S.currentEnvPreset];
-      if (preset) {
-        S.environmentMap = preset;
-        if (['arctic','rendered'].includes(S.currentMode)) {
-          S.scene.environment = S.environmentMap;
-        }
+      if (applyEnvironmentPreset()) {
         // Also update background if HDR bg mode is active
         const bgSel = document.getElementById('bg-type-select');
         if (bgSel?.value === 'hdr') applySceneBackground();
@@ -1631,10 +1623,7 @@ function bindUI() {
       document.querySelectorAll('.env-preset-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       if (envPresetSel) envPresetSel.value = S.currentEnvPreset;
-      const preset = S.envMaps[S.currentEnvPreset];
-      if (preset) {
-        S.environmentMap = preset;
-        S.scene.environment = S.environmentMap;
+      if (applyEnvironmentPreset()) {
         if (document.getElementById('bg-type-select')?.value === 'hdr') applySceneBackground();
       }
     });
