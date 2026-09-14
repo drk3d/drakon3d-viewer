@@ -19,7 +19,7 @@ export const TRANSLATIONS = {
 
     'mode.shaded':        'Shaded',
     'mode.wireframe':     'Wire',
-    'mode.arctic':        'Arch.',
+    'mode.arctic':        'Arctic',
     'mode.rendered':      'Render',
     'mode.technical':     'Sketch',
 
@@ -132,6 +132,7 @@ export const TRANSLATIONS = {
     'bg.color2':          'Color 2',
     'bg.spread':          'Spread',
 
+    'env.jewelry_studio': 'Jewelry Studio',
     'env.studio':         'Studio',
     'env.neutral':        'Neutral',
     'env.sky':            'Sky',
@@ -271,7 +272,7 @@ export const TRANSLATIONS = {
 
     'mode.shaded':        '음영',
     'mode.wireframe':     '와이어프레임',
-    'mode.arctic':        '아키텍처',
+    'mode.arctic':        '북극',
     'mode.rendered':      '렌더링',
     'mode.technical':     '스케치',
 
@@ -384,6 +385,7 @@ export const TRANSLATIONS = {
     'bg.color2':          '색상 2',
     'bg.spread':          '퍼짐',
 
+    'env.jewelry_studio': '주얼리 스튜디오',
     'env.studio':         '스튜디오',
     'env.neutral':        '중립',
     'env.sky':            '하늘',
@@ -523,7 +525,7 @@ export const TRANSLATIONS = {
 
     'mode.shaded':        'Ombré',
     'mode.wireframe':     'Fil de fer',
-    'mode.arctic':        'Architecture',
+    'mode.arctic':        'Arctique',
     'mode.rendered':      'Rendu',
     'mode.technical':     'Esquisse',
 
@@ -621,6 +623,7 @@ export const TRANSLATIONS = {
     'bg.color2':          'Couleur 2',
     'bg.spread':          'Diffusion',
 
+    'env.jewelry_studio': 'Studio de joaillerie',
     'env.studio':         'Studio',
     'env.neutral':        'Neutre',
     'env.sky':            'Ciel',
@@ -737,7 +740,7 @@ export const TRANSLATIONS = {
 
     'mode.shaded':        'Schattiert',
     'mode.wireframe':     'Drahtgitter',
-    'mode.arctic':        'Architektur',
+    'mode.arctic':        'Arktisch',
     'mode.rendered':      'Gerendert',
     'mode.technical':     'Skizze',
 
@@ -835,6 +838,7 @@ export const TRANSLATIONS = {
     'bg.color2':          'Farbe 2',
     'bg.spread':          'Ausbreitung',
 
+    'env.jewelry_studio': 'Schmuckstudio',
     'env.studio':         'Studio',
     'env.neutral':        'Neutral',
     'env.sky':            'Himmel',
@@ -951,7 +955,7 @@ export const TRANSLATIONS = {
 
     'mode.shaded':        'Sombreado',
     'mode.wireframe':     'Estructura alámbrica',
-    'mode.arctic':        'Arquitectura',
+    'mode.arctic':        'Ártico',
     'mode.rendered':      'Renderizado',
     'mode.technical':     'Boceto',
 
@@ -1049,6 +1053,7 @@ export const TRANSLATIONS = {
     'bg.color2':          'Color 2',
     'bg.spread':          'Dispersión',
 
+    'env.jewelry_studio': 'Estudio de joyería',
     'env.studio':         'Estudio',
     'env.neutral':        'Neutro',
     'env.sky':            'Cielo',
@@ -1165,7 +1170,7 @@ export const TRANSLATIONS = {
 
     'mode.shaded':        'Ombreggiato',
     'mode.wireframe':     'Reticolo',
-    'mode.arctic':        'Architettura',
+    'mode.arctic':        'Artico',
     'mode.rendered':      'Renderizzato',
     'mode.technical':     'Schizzo',
 
@@ -1263,6 +1268,7 @@ export const TRANSLATIONS = {
     'bg.color2':          'Colore 2',
     'bg.spread':          'Diffusione',
 
+    'env.jewelry_studio': 'Studio di gioielleria',
     'env.studio':         'Studio',
     'env.neutral':        'Neutro',
     'env.sky':            'Cielo',
@@ -1379,7 +1385,7 @@ export const TRANSLATIONS = {
 
     'mode.shaded':        'シェーディング',
     'mode.wireframe':     'ワイヤーフレーム',
-    'mode.arctic':        'アーキテクチャ',
+    'mode.arctic':        '北極',
     'mode.rendered':      'レンダリング',
     'mode.technical':     'スケッチ',
 
@@ -1477,6 +1483,7 @@ export const TRANSLATIONS = {
     'bg.color2':          'カラー 2',
     'bg.spread':          '広がり',
 
+    'env.jewelry_studio': 'ジュエリースタジオ',
     'env.studio':         'スタジオ',
     'env.neutral':        'ニュートラル',
     'env.sky':            'スカイ',
@@ -1593,7 +1600,7 @@ export const TRANSLATIONS = {
 
     'mode.shaded':        '着色',
     'mode.wireframe':     '线框',
-    'mode.arctic':        '建筑',
+    'mode.arctic':        '北极',
     'mode.rendered':      '渲染',
     'mode.technical':     '草图',
 
@@ -1691,6 +1698,7 @@ export const TRANSLATIONS = {
     'bg.color2':          '颜色 2',
     'bg.spread':          '扩散',
 
+    'env.jewelry_studio': '珠宝工作室',
     'env.studio':         '工作室',
     'env.neutral':        '中性',
     'env.sky':            '天空',
@@ -1807,7 +1815,7 @@ export const TRANSLATIONS = {
 
     'mode.shaded':        '著色',
     'mode.wireframe':     '線框',
-    'mode.arctic':        '建築',
+    'mode.arctic':        '北極',
     'mode.rendered':      '渲染',
     'mode.technical':     '草圖',
 
@@ -1905,6 +1913,7 @@ export const TRANSLATIONS = {
     'bg.color2':          '顏色 2',
     'bg.spread':          '擴散',
 
+    'env.jewelry_studio': '珠寶工作室',
     'env.studio':         '工作室',
     'env.neutral':        '中性',
     'env.sky':            '天空',
@@ -2021,7 +2030,7 @@ export const TRANSLATIONS = {
 
     'mode.shaded':        'Sombreado',
     'mode.wireframe':     'Arame',
-    'mode.arctic':        'Arquitetura',
+    'mode.arctic':        'Ártico',
     'mode.rendered':      'Renderizado',
     'mode.technical':     'Esboço',
 
@@ -2119,6 +2128,7 @@ export const TRANSLATIONS = {
     'bg.color2':          'Cor 2',
     'bg.spread':          'Dispersão',
 
+    'env.jewelry_studio': 'Estúdio de joias',
     'env.studio':         'Estúdio',
     'env.neutral':        'Neutro',
     'env.sky':            'Céu',
@@ -2235,7 +2245,7 @@ export const TRANSLATIONS = {
 
     'mode.shaded':        'Stínovaný',
     'mode.wireframe':     'Drátový model',
-    'mode.arctic':        'Architektura',
+    'mode.arctic':        'Arktický',
     'mode.rendered':      'Renderovaný',
     'mode.technical':     'Skica',
 
@@ -2333,6 +2343,7 @@ export const TRANSLATIONS = {
     'bg.color2':          'Barva 2',
     'bg.spread':          'Rozptyl',
 
+    'env.jewelry_studio': 'Šperkařské studio',
     'env.studio':         'Studio',
     'env.neutral':        'Neutrální',
     'env.sky':            'Obloha',
@@ -2449,7 +2460,7 @@ export const TRANSLATIONS = {
 
     'mode.shaded':        'Cieniowany',
     'mode.wireframe':     'Szkieletowy',
-    'mode.arctic':        'Architektura',
+    'mode.arctic':        'Arktyczny',
     'mode.rendered':      'Renderowany',
     'mode.technical':     'Szkic',
 
@@ -2547,6 +2558,7 @@ export const TRANSLATIONS = {
     'bg.color2':          'Kolor 2',
     'bg.spread':          'Rozproszenie',
 
+    'env.jewelry_studio': 'Studio jubilerskie',
     'env.studio':         'Studio',
     'env.neutral':        'Neutralne',
     'env.sky':            'Niebo',
