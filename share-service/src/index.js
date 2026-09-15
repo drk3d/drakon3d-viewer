@@ -27,6 +27,7 @@ export default {
     if (request.method === 'OPTIONS') return preflight(origin, env);
     if (url.pathname === '/health') return json({ ok: true });
     if (url.pathname === '/v1/share-status' && request.method === 'GET') return getShareStatus(request, env, origin);
+    if (url.pathname === '/v1/account/shares' && request.method === 'GET') return getAccountShares(request, env);
     if (url.pathname === '/v1/shares' && request.method === 'POST') return createShare(request, env, origin);
 
     const match = url.pathname.match(/^\/v1\/shares\/([A-Za-z0-9_-]{24})$/);
@@ -86,6 +87,7 @@ async function createShare(request, env, origin) {
     expiresAt: expiresAt.getTime(),
     maxLiveBytes: configuration.maxLiveBytes,
     policy: authorization.policy,
+    filename,
   });
   if (!reservation.ok) {
     return json({ error: reservation.error, code: reservation.code }, reservation.status || 503, cors(origin, env));
@@ -268,6 +270,37 @@ async function getShareStatus(request, env, origin) {
     exportCount: authorization.policy.total == null ? null : usage.totalExports,
     exportLimit: authorization.policy.total,
   }, 200, cors(origin, env));
+}
+
+// This endpoint is intentionally server-to-server. The Wix account page
+// proves member ownership of a Keygen licence before calling it, then uses the
+// shared deployment secret below. It never exposes a Keygen user token or a
+// licence identifier to the browser.
+async function getAccountShares(request, env) {
+  if (!await isAccountApiRequest(request, env)) {
+    return json({ error: 'Account access is not authorized.' }, 401);
+  }
+
+  const licenseId = readSafeHeader(request, 'X-Drakon-License-Id', 200);
+  if (!licenseId) return json({ error: 'A valid Drakon license is required.' }, 400);
+
+  const licenseKey = await sha256Hex(licenseId);
+  const result = await quotaRequest(env, { action: 'list', licenseKey });
+  if (!result.ok) return json({ error: result.error }, result.status || 503);
+
+  const publicOrigin = optionalShareOrigin(env) || requiredViewerOrigin(env);
+  const shares = result.shares.map(share => ({
+    id: share.shareId,
+    url: shareUrl(env, share.shareId),
+    thumbnailUrl: share.hasPreview
+      ? new URL(`/v1/shares/${share.shareId}/thumbnail`, publicOrigin).toString()
+      : null,
+    filename: share.filename || 'Shared model',
+    expiresAt: new Date(share.expiresAt).toISOString(),
+    hasPreview: share.hasPreview === true,
+  }));
+
+  return json({ shares }, 200);
 }
 
 function shareUrl(env, id) {
@@ -606,6 +639,18 @@ function shareLandingHtml(title, previewUrl, viewerUrl) {
 function readBearerToken(authorization) {
   const match = typeof authorization === 'string' ? authorization.match(/^Bearer\s+([^\s]{1,8192})$/i) : null;
   return match ? match[1] : null;
+}
+
+async function isAccountApiRequest(request, env) {
+  const configuredSecret = typeof env.DRAKON_SHARE_ACCOUNT_API_SECRET === 'string'
+    ? env.DRAKON_SHARE_ACCOUNT_API_SECRET.trim()
+    : '';
+  const suppliedSecret = readSafeHeader(request, 'X-Drakon-Account-Secret', 8192);
+  if (!configuredSecret || !suppliedSecret) return false;
+  return constantTimeStringEqual(
+    await sha256Hex(suppliedSecret),
+    await sha256Hex(configuredSecret),
+  );
 }
 
 function readSafeHeader(request, name, maxLength) {

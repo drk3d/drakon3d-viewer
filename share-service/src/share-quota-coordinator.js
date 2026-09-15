@@ -33,6 +33,10 @@ export class ShareQuotaCoordinator {
         await this.cleanupExpired(Date.now());
         return quotaJson(await this.status(body));
       }
+      if (action === 'list') {
+        await this.cleanupExpired(Date.now());
+        return quotaJson(await this.list(body));
+      }
       if (action === 'confirm') return quotaJson(await this.confirm(body));
       if (action === 'resize') return quotaJson(await this.resize(body));
       if (action === 'reservePreview') return quotaJson(await this.reservePreview(body));
@@ -104,6 +108,7 @@ export class ShareQuotaCoordinator {
       const share = {
         shareId: request.shareId,
         licenseKey: request.licenseKey,
+        filename: request.filename,
         size: request.size,
         expiresAt: request.expiresAt,
         reservationUntil,
@@ -174,6 +179,27 @@ export class ShareQuotaCoordinator {
 
     const license = (await this.ctx.storage.get(licenseKey(licenseKeyValue))) || emptyLicenseState();
     return { ok: true, activeCount: license.activeCount, totalExports: license.totalExports };
+  }
+
+  async list(body) {
+    const licenseKeyValue = typeof body?.licenseKey === 'string' && /^[a-f0-9]{64}$/.test(body.licenseKey)
+      ? body.licenseKey
+      : null;
+    if (!licenseKeyValue) return { ok: false, status: 400, error: 'Invalid share list request.' };
+
+    const records = await this.ctx.storage.list({ prefix: SHARE_PREFIX, limit: 10000 });
+    const shares = [];
+    for (const share of records.values()) {
+      if (share.state !== 'active' || share.licenseKey !== licenseKeyValue || !Number.isSafeInteger(share.expiresAt)) continue;
+      shares.push({
+        shareId: share.shareId,
+        filename: typeof share.filename === 'string' ? share.filename : null,
+        expiresAt: share.expiresAt,
+        hasPreview: Number.isSafeInteger(share.previewSize) && share.previewSize > 0,
+      });
+    }
+    shares.sort((left, right) => right.expiresAt - left.expiresAt);
+    return { ok: true, shares };
   }
 
   async resize(body) {
@@ -348,6 +374,9 @@ function validateReservation(body) {
     ? body.licenseKey
     : null;
   const size = safeInteger(body?.size, 1, 100 * 1024 * 1024);
+  const filename = typeof body?.filename === 'string' && body.filename.length > 0 && body.filename.length <= 124
+    ? body.filename
+    : null;
   const expiresAt = safeInteger(body?.expiresAt, Date.now() + 1000, Date.now() + 32 * 24 * 60 * 60 * 1000);
   const maxLiveBytes = safeInteger(body?.maxLiveBytes, 1, 100 * 1024 * 1024 * 1024);
   const active = safeInteger(body?.policy?.active, 1, 10000);
@@ -355,12 +384,13 @@ function validateReservation(body) {
   const label = typeof body?.policy?.label === 'string' && body.policy.label.length <= 80
     ? body.policy.label
     : null;
-  if (!shareId || !licenseKeyValue || !size || !expiresAt || !maxLiveBytes || !active || (body?.policy?.total != null && !total) || !label) {
+  if (!shareId || !licenseKeyValue || !size || !filename || !expiresAt || !maxLiveBytes || !active || (body?.policy?.total != null && !total) || !label) {
     return null;
   }
   return {
     shareId,
     licenseKey: licenseKeyValue,
+    filename,
     size,
     expiresAt,
     maxLiveBytes,

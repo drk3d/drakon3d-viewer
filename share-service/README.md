@@ -58,6 +58,20 @@ Only small accounting records are kept in the Durable Object. Files remain in
 R2, so the licence layer can later be moved to another Drakon service or the
 quota store can be expanded without changing public share links or the viewer.
 
+## Member account link list
+
+The member account page can list live shares without a Drakon plug-in update.
+`DkShare` already authenticates each upload and the quota coordinator records
+the owning licence, share ID, expiry, filename, and preview availability.
+
+`GET /v1/account/shares` is a **server-to-server** endpoint for the Drakon3D
+website. It accepts the license ID in `X-Drakon-License-Id` and requires the
+same non-empty secret in `X-Drakon-Account-Secret` as the Worker secret
+`DRAKON_SHARE_ACCOUNT_API_SECRET`. It returns only shares belonging to that
+licence, never the licence identifier itself. Configure the matching Wix
+secret with the same value; never call this endpoint directly from browser
+code or expose that secret to a site visitor.
+
 ## Deploy once the code is approved
 
 From this directory:
