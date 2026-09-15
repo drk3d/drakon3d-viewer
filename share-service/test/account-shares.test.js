@@ -35,6 +35,7 @@ function createEnvironment(onQuotaRequest) {
     },
     SHARES: {
       async get(key) { return objects.get(key) || null; },
+      async head(key) { return objects.get(key) || null; },
       async put(key, body, options) {
         const stored = {
           body,
@@ -49,6 +50,26 @@ function createEnvironment(onQuotaRequest) {
     },
   };
 }
+
+test('the social share page provides browser and direct share choices for an active link', async () => {
+  const environment = createEnvironment(() => ({ ok: true }));
+  environment.SHARES.objects.set(`shares/${SHARE_ID}.3dm`, {
+    size: 11,
+    customMetadata: {
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      filename: 'Solitaire.3dm',
+    },
+  });
+
+  const response = await worker.fetch(new Request(`https://worker.example/share/${SHARE_ID}`), environment, { waitUntil() {} });
+  const html = await response.text();
+
+  assert.equal(response.status, 200);
+  assert.match(html, /Share with an app/);
+  assert.match(html, /WhatsApp/);
+  assert.match(html, /mailto:/);
+  assert.match(html, new RegExp(`/s/${SHARE_ID}`));
+});
 
 test('the account endpoint returns only the authenticated license share records', async () => {
   let quotaRequest = null;

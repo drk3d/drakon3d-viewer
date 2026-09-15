@@ -45,6 +45,8 @@ export default {
 
     const landingMatch = url.pathname.match(/^\/s\/([A-Za-z0-9_-]{24})$/);
     if (landingMatch && request.method === 'GET') return getShareLandingPage(landingMatch[1], request, env, ctx);
+    const socialShareMatch = url.pathname.match(/^\/share\/([A-Za-z0-9_-]{24})$/);
+    if (socialShareMatch && request.method === 'GET') return getSocialSharePage(socialShareMatch[1], request, env, ctx);
     return json({ error: 'Not found.' }, 404, cors(origin, env));
   },
 };
@@ -549,6 +551,28 @@ async function getShareLandingPage(id, request, env, ctx) {
   });
 }
 
+async function getSocialSharePage(id, request, env, ctx) {
+  const model = await env.SHARES.head(`shares/${id}.3dm`);
+  if (!model || isExpired(model)) {
+    if (model && isExpired(model)) ctx.waitUntil(releaseShareQuota(env, id));
+    return new Response('This shared model is unavailable.', {
+      status: 404,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
+    });
+  }
+
+  const publicOrigin = optionalShareOrigin(env) || new URL(request.url).origin;
+  const shareUrl = new URL(`/s/${id}`, publicOrigin).toString();
+  const title = model.customMetadata?.filename || 'Shared Drakon3D model';
+  return new Response(socialShareHtml(title, shareUrl), {
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+    },
+  });
+}
+
 async function getShare(id, request, env, origin, ctx) {
   const object = await env.SHARES.get(`shares/${id}.3dm`);
   if (!object) return json({ error: 'This share link is unavailable.' }, 404, cors(origin, env));
@@ -762,6 +786,28 @@ function shareLandingHtml(title, previewUrl, viewerUrl) {
   const escapedViewerUrl = safeHtmlTitle(viewerUrl);
   const escapedPreviewUrl = safeHtmlTitle(previewUrl);
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><meta property="og:type" content="website"><meta property="og:title" content="${title}"><meta property="og:description" content="Open this Drakon 3D design in your browser."><meta property="og:image" content="${escapedPreviewUrl}"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="${title}"><meta name="twitter:image" content="${escapedPreviewUrl}"><meta http-equiv="refresh" content="0;url=${escapedViewerUrl}"><script>location.replace(${JSON.stringify(viewerUrl)})</script></head><body><p>Opening Drakon 3D Viewer… <a href="${escapedViewerUrl}">Continue</a></p></body></html>`;
+}
+
+function socialShareHtml(title, shareUrl) {
+  const message = `View this Drakon3D model: ${shareUrl}`;
+  const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+  const emailUrl = `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(message)}`;
+  const facebookUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`;
+  const escapedTitle = safeHtmlTitle(title);
+  const escapedShareUrl = safeHtmlTitle(shareUrl);
+
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Share ${escapedTitle}</title>
+<style>
+*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#111;color:#fff;font:16px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}.card{width:min(100%,440px);padding:28px;border:1px solid #353535;border-radius:16px;background:#1c1c1c;box-shadow:0 16px 48px #0007}h1{font-size:24px;margin:0 0 8px;overflow-wrap:anywhere}p{color:#c4c4c4;margin:0 0 22px}.actions{display:grid;gap:10px}.action{display:block;width:100%;padding:13px 16px;border:0;border-radius:9px;background:#fff;color:#111;text-align:center;font:inherit;font-weight:650;text-decoration:none;cursor:pointer}.secondary{background:#2c2c2c;color:#fff}.url{margin-top:18px;color:#aaa;font-size:12px;overflow-wrap:anywhere}</style>
+</head><body><main class="card"><h1>Share model</h1><p>${escapedTitle}</p><div class="actions"><button class="action" id="native-share" type="button">Share with an app</button><a class="action secondary" href="${safeHtmlTitle(whatsappUrl)}" target="_blank" rel="noopener">WhatsApp</a><a class="action secondary" href="${safeHtmlTitle(emailUrl)}">Email</a><a class="action secondary" href="${safeHtmlTitle(facebookUrl)}" target="_blank" rel="noopener">Facebook</a><button class="action secondary" id="copy-link" type="button">Copy link</button></div><div class="url">${escapedShareUrl}</div></main><script>
+const shareUrl=${JSON.stringify(shareUrl)};const shareData={title:${JSON.stringify(title)},text:'View this Drakon3D model.',url:shareUrl};
+const copyButton=document.querySelector('#copy-link');
+async function copyLink(){try{await navigator.clipboard.writeText(shareUrl);copyButton.textContent='Link copied';setTimeout(()=>copyButton.textContent='Copy link',1800)}catch{copyButton.textContent='Copy unavailable'}}
+copyButton.addEventListener('click',copyLink);
+document.querySelector('#native-share').addEventListener('click',async()=>{if(typeof navigator.share==='function'){try{await navigator.share(shareData);return}catch(error){if(error&&error.name==='AbortError')return}}await copyLink()});
+</script></body></html>`;
 }
 
 function readBearerToken(authorization) {
