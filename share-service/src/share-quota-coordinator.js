@@ -45,6 +45,10 @@ export class ShareQuotaCoordinator {
         await this.cleanupExpired(Date.now());
         return quotaJson(await this.deleteShare(body));
       }
+      if (action === 'updateExpiry') {
+        await this.cleanupExpired(Date.now());
+        return quotaJson(await this.updateExpiry(body));
+      }
       if (action === 'cancel' || action === 'release') return quotaJson(await this.release(body));
       if (action === 'cleanup') {
         await this.cleanupExpired(Date.now());
@@ -317,6 +321,37 @@ export class ShareQuotaCoordinator {
     await this.removeShares([share]);
     await this.scheduleNextAlarm();
     return { ok: true };
+  }
+
+  async updateExpiry(body) {
+    const shareId = boundedId(body?.shareId);
+    const ownerLicenseKey = typeof body?.licenseKey === 'string' && /^[a-f0-9]{64}$/.test(body.licenseKey)
+      ? body.licenseKey
+      : null;
+    // The public Worker validates the exact 1-15 calendar-day window before
+    // it reaches the coordinator. Keep this internal boundary broad enough
+    // to include the end of the fifteenth selected calendar day.
+    const expiresAt = safeInteger(body?.expiresAt, Date.now() + 1000, Date.now() + 16 * 24 * 60 * 60 * 1000);
+    if (!shareId || !ownerLicenseKey || !expiresAt) {
+      return { ok: false, status: 400, error: 'Invalid share expiry request.' };
+    }
+
+    const result = await this.ctx.storage.transaction(async transaction => {
+      const key = shareKey(shareId);
+      const share = await transaction.get(key);
+      // Do not reveal whether a link owned by a different license exists.
+      if (!share || share.state !== 'active' || share.licenseKey !== ownerLicenseKey) {
+        return { ok: false, status: 404, error: 'This share link is unavailable.' };
+      }
+
+      const previousExpiresAt = share.expiresAt;
+      share.expiresAt = expiresAt;
+      await transaction.put(key, share);
+      return { ok: true, previousExpiresAt, expiresAt };
+    });
+
+    if (result.ok) await this.scheduleNextAlarm();
+    return result;
   }
 
   async cleanupExpired(now) {

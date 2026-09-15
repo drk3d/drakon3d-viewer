@@ -30,6 +30,7 @@ export default {
     if (url.pathname === '/v1/account/shares' && request.method === 'GET') return getAccountShares(request, env);
     const accountShareMatch = url.pathname.match(/^\/v1\/account\/shares\/([A-Za-z0-9_-]{24})$/);
     if (accountShareMatch && request.method === 'DELETE') return deleteAccountShare(accountShareMatch[1], request, env);
+    if (accountShareMatch && request.method === 'PATCH') return updateAccountShareExpiry(accountShareMatch[1], request, env);
     if (url.pathname === '/v1/shares' && request.method === 'POST') return createShare(request, env, origin);
 
     const match = url.pathname.match(/^\/v1\/shares\/([A-Za-z0-9_-]{24})$/);
@@ -323,6 +324,69 @@ async function deleteAccountShare(shareId, request, env) {
   return json({ ok: true }, 200);
 }
 
+// Account members can change a share's calendar expiry without involving the
+// Rhino plug-in. The request is still server-to-server only and must own the
+// share's licence. R2 retains the authoritative expiry used by the Viewer,
+// while the Durable Object retains the matching cleanup schedule.
+async function updateAccountShareExpiry(shareId, request, env) {
+  if (!await isAccountApiRequest(request, env)) {
+    return json({ error: 'Account access is not authorized.' }, 401);
+  }
+
+  const licenseId = readSafeHeader(request, 'X-Drakon-License-Id', 200);
+  if (!licenseId) return json({ error: 'A valid Drakon license is required.' }, 400);
+
+  const expiry = await readAccountExpiry(request);
+  if (expiry.error) return json({ error: expiry.error }, 400);
+
+  const licenseKey = await sha256Hex(licenseId);
+  const modelKey = `shares/${shareId}.3dm`;
+  const model = await env.SHARES.get(modelKey);
+  // Check R2 ownership too, before consuming the model stream to update its
+  // metadata. The Durable Object repeats this check before it changes quota
+  // state, so neither store trusts the other on its own.
+  if (!model?.body || isExpired(model) || model.customMetadata?.ownerLicenseKey !== licenseKey) {
+    return json({ error: 'This share link is unavailable.' }, 404);
+  }
+
+  const update = await quotaRequest(env, {
+    action: 'updateExpiry',
+    shareId,
+    licenseKey,
+    expiresAt: expiry.expiresAt,
+  });
+  if (!update.ok) return json({ error: update.error || 'This share link is unavailable.' }, update.status || 503);
+
+  try {
+    const stored = await env.SHARES.put(modelKey, model.body, {
+      httpMetadata: preservedHttpMetadata(model.httpMetadata),
+      customMetadata: {
+        ...model.customMetadata,
+        expiresAt: expiry.iso,
+      },
+    });
+    if (!stored || stored.size <= 0) throw new Error('The shared model could not be updated.');
+  } catch (error) {
+    // Revert the schedule if the authoritative R2 metadata was not changed.
+    // A failed rollback is safe: it can only cause the model to be removed
+    // earlier, never expose it beyond its previous expiration.
+    try {
+      await quotaRequest(env, {
+        action: 'updateExpiry',
+        shareId,
+        licenseKey,
+        expiresAt: update.previousExpiresAt,
+      });
+    } catch (rollbackError) {
+      console.error('Drakon Share expiry rollback failed', rollbackError);
+    }
+    console.error('Drakon Share expiry update failed', error);
+    return json({ error: 'The share expiry could not be updated. Please try again.' }, 503);
+  }
+
+  return json({ ok: true, expiresAt: expiry.iso }, 200);
+}
+
 function shareUrl(env, id) {
   const shareOrigin = optionalShareOrigin(env);
   if (shareOrigin) return new URL(`/s/${id}`, shareOrigin).toString();
@@ -356,6 +420,50 @@ function readShareLifetime(request, defaultDays) {
     return { error: `Share expiry must be between 1 and ${MAX_SHARE_TTL_DAYS} days.` };
   }
   return { days };
+}
+
+async function readAccountExpiry(request) {
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return { error: 'Choose a valid expiry date.' };
+  }
+
+  const expiresOn = typeof body?.expiresOn === 'string' ? body.expiresOn : '';
+  const match = expiresOn.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return { error: 'Choose a valid expiry date.' };
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const dateStart = Date.UTC(year, month - 1, day);
+  const date = new Date(dateStart);
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
+    return { error: 'Choose a valid expiry date.' };
+  }
+
+  // Keep online changes within the same 1-15 calendar-day rule as new shares
+  // created by DkShare. The date is stored at the end of the selected UTC day
+  // so a member never loses the selected date due to a time-zone conversion.
+  const now = new Date();
+  const firstAllowed = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
+  const lastAllowed = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + MAX_SHARE_TTL_DAYS);
+  if (dateStart < firstAllowed || dateStart > lastAllowed) {
+    return { error: `Share expiry must be between 1 and ${MAX_SHARE_TTL_DAYS} days from today.` };
+  }
+
+  const expiresAt = dateStart + (24 * 60 * 60 * 1000) - 1;
+  return { expiresAt, iso: new Date(expiresAt).toISOString() };
+}
+
+function preservedHttpMetadata(metadata) {
+  const result = {};
+  for (const key of ['contentType', 'contentLanguage', 'contentDisposition', 'contentEncoding', 'cacheControl']) {
+    if (typeof metadata?.[key] === 'string' && metadata[key]) result[key] = metadata[key];
+  }
+  if (metadata?.cacheExpiry instanceof Date) result.cacheExpiry = metadata.cacheExpiry;
+  return result;
 }
 
 async function createThumbnail(id, request, env, origin) {
