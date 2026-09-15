@@ -28,6 +28,8 @@ export default {
     if (url.pathname === '/health') return json({ ok: true });
     if (url.pathname === '/v1/share-status' && request.method === 'GET') return getShareStatus(request, env, origin);
     if (url.pathname === '/v1/account/shares' && request.method === 'GET') return getAccountShares(request, env);
+    const accountShareMatch = url.pathname.match(/^\/v1\/account\/shares\/([A-Za-z0-9_-]{24})$/);
+    if (accountShareMatch && request.method === 'DELETE') return deleteAccountShare(accountShareMatch[1], request, env);
     if (url.pathname === '/v1/shares' && request.method === 'POST') return createShare(request, env, origin);
 
     const match = url.pathname.match(/^\/v1\/shares\/([A-Za-z0-9_-]{24})$/);
@@ -301,6 +303,24 @@ async function getAccountShares(request, env) {
   }));
 
   return json({ shares }, 200);
+}
+
+// Like the account list endpoint, this is server-to-server only. The Wix
+// backend verifies the site member's license ownership before reaching here.
+// The Durable Object verifies the supplied license again before deleting R2
+// objects, so an account request can never remove another license's share.
+async function deleteAccountShare(shareId, request, env) {
+  if (!await isAccountApiRequest(request, env)) {
+    return json({ error: 'Account access is not authorized.' }, 401);
+  }
+
+  const licenseId = readSafeHeader(request, 'X-Drakon-License-Id', 200);
+  if (!licenseId) return json({ error: 'A valid Drakon license is required.' }, 400);
+
+  const licenseKey = await sha256Hex(licenseId);
+  const result = await quotaRequest(env, { action: 'delete', shareId, licenseKey });
+  if (!result.ok) return json({ error: result.error || 'This share link is unavailable.' }, result.status || 503);
+  return json({ ok: true }, 200);
 }
 
 function shareUrl(env, id) {

@@ -18,8 +18,8 @@ function createEnvironment(onQuotaRequest) {
         return {
           async fetch(_url, init) {
             const request = JSON.parse(init.body);
-            onQuotaRequest(request);
-            return Response.json({
+            const response = onQuotaRequest(request);
+            return Response.json(response || {
               ok: true,
               shares: [{
                 shareId: SHARE_ID,
@@ -66,4 +66,24 @@ test('the account endpoint rejects requests without the server-to-server secret'
 
   assert.equal(response.status, 401);
   assert.equal(quotaCalled, false);
+});
+
+test('the account endpoint deletes only through the authenticated licence', async () => {
+  let quotaRequest = null;
+  const response = await worker.fetch(new Request(`https://worker.example/v1/account/shares/${SHARE_ID}`, {
+    method: 'DELETE',
+    headers: {
+      'X-Drakon-Account-Secret': ACCOUNT_SECRET,
+      'X-Drakon-License-Id': LICENSE_ID,
+    },
+  }), createEnvironment(request => {
+    quotaRequest = request;
+    return { ok: true };
+  }), { waitUntil() {} });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true });
+  assert.equal(quotaRequest.action, 'delete');
+  assert.equal(quotaRequest.shareId, SHARE_ID);
+  assert.match(quotaRequest.licenseKey, /^[a-f0-9]{64}$/);
 });

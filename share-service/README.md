@@ -72,6 +72,11 @@ licence, never the licence identifier itself. Configure the matching Wix
 secret with the same value; never call this endpoint directly from browser
 code or expose that secret to a site visitor.
 
+`DELETE /v1/account/shares/:shareId` uses the same server-to-server
+credentials. The quota coordinator checks that the share belongs to the
+supplied licence before permanently removing its model, preview, and share
+record. The Wix member page asks for confirmation before invoking it.
+
 ## Deploy once the code is approved
 
 From this directory:

@@ -37,8 +37,9 @@ async function call(coordinator, body) {
 
 test('the quota coordinator lists only active links for the requested license', async () => {
   const storage = new MemoryStorage();
+  const deletedKeys = [];
   const coordinator = new ShareQuotaCoordinator({ storage }, {
-    SHARES: { async delete() {} },
+    SHARES: { async delete(key) { deletedKeys.push(key); } },
   });
   const expiresAt = Date.now() + 60_000;
 
@@ -70,6 +71,23 @@ test('the quota coordinator lists only active links for the requested license', 
   });
 
   assert.deepEqual(await call(coordinator, { action: 'list', licenseKey: OTHER_LICENSE_KEY }), {
+    ok: true,
+    shares: [],
+  });
+
+  assert.deepEqual(await call(coordinator, {
+    action: 'delete', shareId: SHARE_ID, licenseKey: OTHER_LICENSE_KEY,
+  }), {
+    ok: false,
+    status: 404,
+    error: 'This share link is unavailable.',
+  });
+
+  assert.deepEqual(await call(coordinator, {
+    action: 'delete', shareId: SHARE_ID, licenseKey: LICENSE_KEY,
+  }), { ok: true });
+  assert.deepEqual(deletedKeys, [`shares/${SHARE_ID}.3dm`, `shares/${SHARE_ID}.png`]);
+  assert.deepEqual(await call(coordinator, { action: 'list', licenseKey: LICENSE_KEY }), {
     ok: true,
     shares: [],
   });

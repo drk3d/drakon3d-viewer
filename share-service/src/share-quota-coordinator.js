@@ -41,6 +41,10 @@ export class ShareQuotaCoordinator {
       if (action === 'resize') return quotaJson(await this.resize(body));
       if (action === 'reservePreview') return quotaJson(await this.reservePreview(body));
       if (action === 'releasePreview') return quotaJson(await this.releasePreview(body));
+      if (action === 'delete') {
+        await this.cleanupExpired(Date.now());
+        return quotaJson(await this.deleteShare(body));
+      }
       if (action === 'cancel' || action === 'release') return quotaJson(await this.release(body));
       if (action === 'cleanup') {
         await this.cleanupExpired(Date.now());
@@ -290,6 +294,28 @@ export class ShareQuotaCoordinator {
       this.env.SHARES.delete(`shares/${shareId}.png`),
     ]);
     await this.removeShares([share]);
+    return { ok: true };
+  }
+
+  async deleteShare(body) {
+    const shareId = boundedId(body?.shareId);
+    const ownerLicenseKey = typeof body?.licenseKey === 'string' && /^[a-f0-9]{64}$/.test(body.licenseKey)
+      ? body.licenseKey
+      : null;
+    if (!shareId || !ownerLicenseKey) return { ok: false, status: 400, error: 'Invalid share deletion request.' };
+
+    const share = await this.ctx.storage.get(shareKey(shareId));
+    // Do not reveal whether a link owned by a different license exists.
+    if (!share || share.state !== 'active' || share.licenseKey !== ownerLicenseKey) {
+      return { ok: false, status: 404, error: 'This share link is unavailable.' };
+    }
+
+    await Promise.all([
+      this.env.SHARES.delete(`shares/${shareId}.3dm`),
+      this.env.SHARES.delete(`shares/${shareId}.png`),
+    ]);
+    await this.removeShares([share]);
+    await this.scheduleNextAlarm();
     return { ok: true };
   }
 
