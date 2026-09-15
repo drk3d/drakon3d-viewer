@@ -561,7 +561,10 @@ async function getSocialSharePage(id, request, env, ctx) {
     });
   }
 
-  const publicOrigin = optionalShareOrigin(env) || new URL(request.url).origin;
+  // The share page runs on this Worker.  Using its own origin keeps the
+  // generated model link usable even if a branded share subdomain is routed
+  // somewhere else.
+  const publicOrigin = new URL(request.url).origin;
   const shareUrl = new URL(`/s/${id}`, publicOrigin).toString();
   const title = model.customMetadata?.filename || 'Shared Drakon3D model';
   return new Response(socialShareHtml(title, shareUrl), {
@@ -802,7 +805,7 @@ function socialShareHtml(title, shareUrl) {
 <style>
 *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#111;color:#fff;font:16px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}.card{width:min(100%,440px);padding:28px;border:1px solid #353535;border-radius:16px;background:#1c1c1c;box-shadow:0 16px 48px #0007}h1{font-size:24px;margin:0 0 8px;overflow-wrap:anywhere}p{color:#c4c4c4;margin:0 0 22px}.actions{display:grid;gap:10px}.action{display:block;width:100%;padding:13px 16px;border:0;border-radius:9px;background:#fff;color:#111;text-align:center;font:inherit;font-weight:650;text-decoration:none;cursor:pointer}.secondary{background:#2c2c2c;color:#fff}.url{margin-top:18px;color:#aaa;font-size:12px;overflow-wrap:anywhere}</style>
 </head><body><main class="card"><h1>Share model</h1><p>${escapedTitle}</p><div class="actions"><button class="action" id="native-share" type="button">Share with an app</button><a class="action secondary" href="${safeHtmlTitle(whatsappUrl)}" target="_blank" rel="noopener">WhatsApp</a><a class="action secondary" href="${safeHtmlTitle(emailUrl)}">Email</a><a class="action secondary" href="${safeHtmlTitle(facebookUrl)}" target="_blank" rel="noopener">Facebook</a><button class="action secondary" id="copy-link" type="button">Copy link</button></div><div class="url">${escapedShareUrl}</div></main><script>
-const shareUrl=${JSON.stringify(shareUrl)};const shareData={title:${JSON.stringify(title)},text:'View this Drakon3D model.',url:shareUrl};
+const shareUrl=${JSON.stringify(shareUrl)};const shareData={title:'Drakon3D model',text:'View this Drakon3D model.',url:shareUrl};
 const copyButton=document.querySelector('#copy-link');
 async function copyLink(){try{await navigator.clipboard.writeText(shareUrl);copyButton.textContent='Link copied';setTimeout(()=>copyButton.textContent='Copy link',1800)}catch{copyButton.textContent='Copy unavailable'}}
 copyButton.addEventListener('click',copyLink);
