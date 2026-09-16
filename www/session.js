@@ -268,7 +268,9 @@ export async function buildSessionBuffer(customFileName = null) {
   const activeMaterials = new Map();
   try {
     const settings = {
-      displayMode:        S.currentMode,
+      // Sessions always open in Rendered mode, even when they were saved while
+      // the author was temporarily inspecting another display mode.
+      displayMode:        'rendered',
       shadowsEnabled:     S.shadowsEnabled,
       groundEnabled:      S.groundEnabled,
       edgeOverlay:        document.getElementById('chk-edges-panel')?.checked ?? true,
@@ -356,7 +358,7 @@ export async function buildSessionBuffer(customFileName = null) {
       // (unified geometry + annotations); schema 4 only added provenance.
       minViewerSchema:     MIN_VIEWER_SCHEMA,
       producer:            { name: 'Drakon3D.Viewer', version: APP_VERSION, host: navigator.userAgent },
-      displayMode:         S.currentMode,
+      displayMode:         'rendered',
       settings,
       cameraState,
       customMaterials:     {},
@@ -834,6 +836,11 @@ export async function loadSession(file, fileHandle = null) {
   // undo stack with the entire session reload, drowning the user's history.
   History.suppress = true;
   try {
+    // Opening policy: an RHV is always presented in Rendered mode. Reset before
+    // GLB geometry loads too, so a previously opened file cannot leak its mode
+    // into this session while it is being restored.
+    resetSettingsToDefault();
+
     let arrayBuffer = await file.arrayBuffer();
     // The caller may be holding a compressed multi-megabyte Share file. Its
     // bytes are no longer needed once this copy has been read, so release that
@@ -936,7 +943,6 @@ export async function loadSession(file, fileHandle = null) {
       await loadGeometryFromGLB(glbBuffer, sourceFileName, glbBuffer.byteLength);
     } else {
       // Legacy JSON-only session file
-      resetSettingsToDefault();
       const text = new TextDecoder().decode(new Uint8Array(arrayBuffer));
       data = JSON.parse(text);
     }
@@ -987,7 +993,9 @@ export async function loadSession(file, fileHandle = null) {
     if (data.settings) {
       const s = data.settings;
 
-      S.currentMode    = s.displayMode    || 'shaded';
+      // Deliberately ignore the saved display mode: opening any RHV must start
+      // in Rendered mode, regardless of the mode active when it was saved.
+      S.currentMode    = 'rendered';
       S.shadowsEnabled = s.shadowsEnabled ?? true;
       S.groundEnabled  = s.groundEnabled  ?? false;
       S.modelUnit      = s.modelUnit       || 'Unknown';
@@ -1177,8 +1185,6 @@ export async function loadSession(file, fileHandle = null) {
         setCgSlider('cg-saturation',  cg.saturation);
         setCgSlider('cg-temperature', cg.temperature);
       }
-    } else {
-      if (data.displayMode) S.currentMode = data.displayMode;
     }
 
     // 3. Restore CAD layers
@@ -1364,7 +1370,7 @@ export async function loadSession(file, fileHandle = null) {
 // Imported by both loadSession (above) and handleFile (in loaders.js).
 
 export function resetSettingsToDefault() {
-  S.currentMode    = 'shaded';
+  S.currentMode    = 'rendered';
   S.shadowsEnabled = true;
   S.groundEnabled  = false;
   S.selectedObjects = [];
@@ -1395,7 +1401,7 @@ export function resetSettingsToDefault() {
   import('./selection.js').then(m => m.clearSelection()).catch(() => {});
 
   document.querySelectorAll('#mode-dropdown .dropdown-item').forEach(b => {
-    b.classList.toggle('active', b.dataset.mode === 'shaded');
+    b.classList.toggle('active', b.dataset.mode === 'rendered');
   });
 
   const setCheck = (id, val) => {
@@ -1403,9 +1409,9 @@ export function resetSettingsToDefault() {
     if (el) { el.checked = val; el.dispatchEvent(new Event('change')); }
   };
 
-  setCheck('chk-edges-panel',     true);
+  setCheck('chk-edges-panel',     false);
   setCheck('chk-annotations-panel', true);
-  setCheck('chk-ground-panel',    false);
+  setCheck('chk-ground-panel',    true);
   setCheck('chk-shadows-panel',   true);
   setCheck('chk-sun-panel',       false);
 
