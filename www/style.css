@@ -1486,9 +1486,14 @@ body.dark-theme .footer-logo.light-only {
   font-weight: 600;
 }
 .material-section-toggle {
+  display: inline-flex;
   flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 48px;
+  min-height: 36px;
   margin: 0;
-  padding: 0;
+  padding: 7px 0 7px 12px;
   border: 0;
   background: transparent;
   color: var(--accent);
@@ -1496,6 +1501,8 @@ body.dark-theme .footer-logo.light-only {
   font-size: 0.68rem;
   font-weight: 600;
   cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 .material-section-toggle:hover,
 .material-section-toggle:focus-visible {
@@ -1504,6 +1511,16 @@ body.dark-theme .footer-logo.light-only {
   outline: none;
 }
 .material-section-toggle[hidden] { display: none; }
+@media (max-width: 480px) {
+  .material-preset-heading {
+    align-items: center;
+    min-height: 44px;
+  }
+  .material-section-toggle {
+    min-width: 56px;
+    min-height: 44px;
+  }
+}
 .material-preset-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
