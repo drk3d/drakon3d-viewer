@@ -822,7 +822,7 @@ export function fixMaterialTransparency(mat) {
   }
 }
 
-// Rhino object types whose tessellation has no topological edges to find.
+// Rhino object types with no triangles to run a dihedral pass over.
 //
 // A Rhino Mesh has no Brep edges — its "edges" are just its triangulation, so a
 // dihedral-angle pass over an imported tree or a scanned terrain produces noise
@@ -835,7 +835,7 @@ export function fixMaterialTransparency(mat) {
 // regions really are flat and creases and boundaries produce genuine sharp
 // dihedral angles — the threshold pass yields an outline, and Rhino itself shows
 // SubD edges.
-const NO_TOPOLOGY_EDGE_TYPES = new Set(['Mesh', 'PointSet', 'PointCloud']);
+const NO_TOPOLOGY_EDGE_TYPES = new Set(['PointSet', 'PointCloud']);
 
 /**
  * Whether dihedral edge extraction is worth running on this mesh.
