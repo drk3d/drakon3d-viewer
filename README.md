@@ -1,14 +1,15 @@
 # Drakon3D Viewer
 
-A local-first 3D Rhino & CAD web viewer for Drakon3D.
+A 3D Rhino & CAD web viewer adapted for improved performance in jewelry designs by Drakon Forge.
 
-This project is a branded fork of [plusplastic/byRhinoView](https://github.com/plusplastic/byRhinoView). It retains the upstream MIT license and notices; Drakon3D changes the presentation, hosting, and integration configuration.
+This project is a branded fork of [plusplastic/byRhinoView](https://github.com/plusplastic/byRhinoView). It retains the upstream MIT license and notices; 
+Drakon3D Viewer changes the presentation, hosting, and integration configuration.
 
-웹 브라우저에서 직접 매끄럽고 빠른 3D Rhino 및 CAD 모델 뷰잉과 상호작용을 지원하는 고성능 경량 웹 뷰어 솔루션입니다.
+It is a high-performance, lightweight web viewer solution that supports smooth, fast 3D Rhino and CAD model viewing and interaction directly within a web browser.
 
 ---
 
-## 🌟 Key Features (주요 기능)
+## 🌟 Key Features
 
 * **High-Fidelity CAD Formats:** Support for `.3dm` (Rhino 3D versions 5–8), `.glb`, `.stl`, `.3mf`, and `.stp`/`.step`/`.igs` file drops.
 * **Premium Shading Modes:** Interactive shaded, wireframe, technical sketch, rendered, and beautiful **Arctic (Ambient Occlusion style)** modes.
@@ -20,7 +21,7 @@ This project is a branded fork of [plusplastic/byRhinoView](https://github.com/p
 
 ---
 
-## 📂 Repository Structure (저장소 구조)
+## 📂 Repository Structure
 
 This repository contains the clean distribution of the **byRhinoView Web Viewer**:
 
@@ -56,7 +57,7 @@ byRhinoView/
 
 ---
 
-## 🛠️ Technology Stack (기술 스택)
+## 🛠️ Technology Stack 
 
 * **Core Structure:** Pure HTML5 semantic elements
 * **Design & Styling:** Vanilla CSS3 (Custom HSL properties, Glassmorphism, animations, Responsive Design)
@@ -68,7 +69,7 @@ byRhinoView/
 
 ---
 
-## 🚀 Running Locally (로컬 실행 방법)
+## 🚀 Running Locally 
 
 ### 1. Install Dependencies
 Ensure you have [Node.js](https://nodejs.org/) installed, then run:
@@ -92,14 +93,14 @@ npm run build:shell   # bundles the viewer → www/viewer-shell.html
 
 ---
 
-## 📄 Documentation (문서 가이드)
+## 📄 Documentation 
 
 * **Detailed Product Features & Guide:** [www/features.md](file:///www/features.md)
-* **Bilingual Privacy Policy (개인정보처리방침):** [www/privacy.md](file:///www/privacy.md) (or open [www/privacy.html](file:///www/privacy.html) directly in a browser).
+* **Bilingual Privacy Policy:** [www/privacy.md](file:///www/privacy.md) (or open [www/privacy.html](file:///www/privacy.html) directly in a browser).
 
 ---
 
-## 🔒 Security & Privacy (보안 및 개인정보 보호)
+## 🔒 Security & Privacy 
 
 **byRhinoView** values user privacy and operates completely offline and locally.
 All 3D models and session files opened within the app are processed entirely **offline and locally** inside your browser sandbox. Your confidential models are **never uploaded to any server**.
