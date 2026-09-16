@@ -185,6 +185,14 @@ export function setFileName(name) {
   S.currentFileNameWithExt = isLoaded ? name : '';
 }
 
+export function setActiveShareId(shareId = null) {
+  const value = typeof shareId === 'string' && /^[A-Za-z0-9_-]{24}$/.test(shareId)
+    ? shareId
+    : null;
+  S.activeShareId = value;
+  document.getElementById('btn-share-panel')?.classList.toggle('hidden', !value);
+}
+
 // ── Model info panel ─────────────────────────────────────────────────────────
 
 export function showModelInfo(model, fileSize) {

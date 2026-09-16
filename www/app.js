@@ -17,7 +17,7 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { initI18n, setLang, applyI18n, t, currentLang } from './i18n.js';
 
 import { S } from './state.js';
-import { updateSliderFill, updateAllSliderFills, updateSelectIcon, showLoading, hideLoading, showToast, bindSliderDblClickInput, beginSave } from './helpers.js';
+import { updateSliderFill, updateAllSliderFills, updateSelectIcon, showLoading, hideLoading, showToast, bindSliderDblClickInput, beginSave, setActiveShareId } from './helpers.js';
 import { setupLights, updateSunLight, updateShadowCasting, addGroundPlane, removeGroundPlane, computeVisibleBoundingBox } from './lighting.js';
 import { switchToOrtho, switchToPersp, switchToTwoPoint, apply2PointConstraints, installTwoPointDragHandler, setViewPreset, setWalkthroughMode, triggerCameraTransition, fitCameraToBox, fitCameraToObject, fitCameraToSelected, saveCustomView, renderNamedViewsUI, updateAdaptiveClipping } from './camera.js';
 import { applySceneBackground, applyFileBackground, applyDisplayMode, applyEnvironmentPreset, applyLayerColorsToModel, recreateAllEdges, setEdgeAngleUniform } from './display.js';
@@ -248,6 +248,10 @@ async function _loadSharedModel(shareId, apiOrigin, prepareToken = null) {
   } else if (await handleFile(file, rhinoLoader, gltfLoader) === false) {
     throw new _ShareLinkError('The shared 3DM could not be loaded.', 500);
   }
+  if (!S.currentModel) {
+    throw new _ShareLinkError('The shared model could not be loaded.', 500);
+  }
+  setActiveShareId(shareId);
   return { filename };
 }
 
@@ -1460,6 +1464,12 @@ function bindUI() {
   });
   saveAsButton?.addEventListener('click', openSystemSaveAs);
   document.getElementById('btn-close-panel').addEventListener('click', () => { clearCurrentModel(); });
+  document.getElementById('btn-share-panel')?.addEventListener('click', () => {
+    const shareId = S.activeShareId;
+    if (!shareId) return;
+    window.open(`https://share.drakon3d.com/share/${encodeURIComponent(shareId)}`, '_blank', 'noopener,noreferrer');
+    leftPanel.classList.add('hidden');
+  });
   document.getElementById('btn-capture-panel').addEventListener('click', () => {
     document.getElementById('capture-w').value = window.innerWidth;
     document.getElementById('capture-h').value = window.innerHeight;

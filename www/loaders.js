@@ -9,7 +9,7 @@ import { renderLayerUI, updateLayerVisibility } from './layers.js';
 import { createAnnotationSprites } from './annotations.js';
 import { renderNamedViewsUI } from './camera.js';
 import { resetSettingsToDefault } from './session.js';
-import { showLoading, hideLoading, setProgress, setFileName, showModelInfo, showModal, showToast } from './helpers.js';
+import { showLoading, hideLoading, setProgress, setFileName, setActiveShareId, showModelInfo, showModal, showToast } from './helpers.js';
 import { t } from './i18n.js';
 import { setToolbarModelState, changeDisplayMode } from './app.js';
 import { destroyClippingCap } from './clip-cap.js';
@@ -2454,6 +2454,7 @@ export function postProcessModel(model, addEdgesFlag, colorsAreSRGBStoredAsLinea
 // ── Clear / dispose current model ─────────────────────────────────────────────
 
 export function clearCurrentModel() {
+  setActiveShareId(null);
   // TransformControls owns a separate helper object. A helper can survive a
   // model/session transition if it was attached just before a new load. Its
   // semi-transparent XYZ centre is the small grey diamond at the viewer
