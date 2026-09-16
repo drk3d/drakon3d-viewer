@@ -224,6 +224,19 @@ function _setPropTab(tab) {
   document.getElementById('prop-tab-props')?.classList.toggle('active', tab === 'props');
   document.getElementById('prop-tab-materials')?.classList.toggle('active', tab === 'materials');
   document.getElementById('prop-tab-usertext')?.classList.toggle('active', tab === 'usertext');
+
+  // Keep the floating panel heading in sync with the active view. Store the
+  // key on the heading so a later language change updates it as well.
+  const titleKey = tab === 'materials'
+    ? 'props.tab_materials'
+    : tab === 'usertext'
+      ? 'props.tab_usertext'
+      : 'props.title';
+  const title = document.querySelector('#object-properties .prop-drag-handle h3');
+  if (title) {
+    title.dataset.i18n = titleKey;
+    title.textContent = t(titleKey);
+  }
 }
 
 function _switchPropTab(tab) {
