@@ -674,6 +674,7 @@ export function applyDisplayMode() {
         // whole point and the floor would turn chrome into pewter and a window into
         // frosted glass.
         if (m.roughness !== undefined && m.roughness < 0.05
+            && !m.userData.__roughnessFromFile
             && !(m.metalness > 0.9) && !(m.transmission > 0)) m.roughness = 0.4;
         if (m.metalness === undefined) m.metalness = 0.0;
         m.polygonOffset = true; m.polygonOffsetFactor = 1; m.polygonOffsetUnits = 1;
@@ -1295,7 +1296,7 @@ function reconcileTransmission(mat) {
  * that nothing of the old material survives.
  */
 function defaultLayerMaterial() {
-  return new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.5, metalness: 0.0 });
+  return new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 1.0, metalness: 0.0 });
 }
 
 /** Whether an edited material asks for something only MeshPhysicalMaterial has. */

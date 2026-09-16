@@ -15,6 +15,10 @@ import { setToolbarModelState, changeDisplayMode } from './app.js';
 import { destroyClippingCap } from './clip-cap.js';
 import { DRAKON_VIEWER_OBJECT_TYPE_KEY, readRhinoUserString } from './drakon-objects.js';
 
+// Name used by Rhino3dmLoader for the material it invents when an object has
+// no assigned material (three.js Loader.DEFAULT_MATERIAL_NAME).
+const DEFAULT_MATERIAL_NAME = '__DEFAULT';
+
 // ── 3dm render-settings helpers ──────────────────────────────────────────────
 
 // Convert a rhino3dm Color object {r,g,b} (0-255, sRGB) to a '#rrggbb' string.
@@ -845,12 +849,45 @@ export async function preprocess3dm(file, skipLayerParse) {
       try {
         // ── Build material lookup table from doc.materials() ─────────────────
         const matLookup = {};
+        // Some Rhino render materials keep their authoritative finish settings
+        // in the document's RDK XML rather than in the simulated ON_Material.
+        const RDK_TYPE_FINISH = {
+          'rdk-plaster-material': { roughness: 1.0, metalness: 0.0 },
+        };
+        const rdkById = new Map();
+        try {
+          const rdkXml = typeof doc.rdkXml === 'function' ? doc.rdkXml() : null;
+          if (typeof rdkXml === 'string' && rdkXml) {
+            const materialRe = /<material\s+type-name="([^"]*)"[^>]*instance-id="([^"]*)"[^>]*>([\s\S]*?)<\/material>/g;
+            let hit;
+            while ((hit = materialRe.exec(rdkXml))) {
+              const params = {};
+              const block = hit[3].match(/<parameters>([\s\S]*?)<\/parameters>/);
+              if (block) {
+                for (const param of block[1].matchAll(/<([a-z0-9-]+)\s+type="double">([^<]*)<\/\1>/g)) {
+                  const value = parseFloat(param[2]);
+                  if (Number.isFinite(value)) params[param[1]] = value;
+                }
+              }
+              rdkById.set(hit[2].toLowerCase(), { type: hit[1], params });
+            }
+          }
+        } catch (error) {
+          console.warn('[pre] RDK material parse err:', error);
+        }
         try {
           const mats = doc.materials();
           if (mats) {
             for (let mi = 0; mi < mats.count; mi++) {
               const m = mats.get(mi);
               if (!m) continue;
+
+              let rdk = null;
+              try {
+                const instanceId = m.renderMaterialInstanceId;
+                if (instanceId) rdk = rdkById.get(String(instanceId).toLowerCase()) ?? null;
+              } catch {}
+              const rdkFinish = rdk ? (RDK_TYPE_FINISH[rdk.type] ?? null) : null;
 
               // Check if physicallyBased is supported
               let isPbrSupported = false;
@@ -863,16 +900,13 @@ export async function preprocess3dm(file, skipLayerParse) {
                 // Three.js as a pale, non-PBR surface while the same material on
                 // a layer is already PBR. Let Rhino's own converter normalise the
                 // record before we read or later copy it to the clean document.
-                if (pb && !pb.supported && typeof m.toPhysicallyBased === 'function') {
+                if (pb && !pb.supported && !rdk && typeof m.toPhysicallyBased === 'function') {
                   try { pb.delete?.(); } catch {}
                   pb = null;
                   m.toPhysicallyBased();
                   pb = m.physicallyBased();
                 }
-                if (pb && pb.supported) {
-                  isPbrSupported = true;
-                  pbr = pb;
-                }
+                if (pb && pb.supported) pbr = pb;
               } catch {}
 
               // Extract base color — PBR base color may be white (#ffffff)
@@ -884,7 +918,7 @@ export async function preprocess3dm(file, skipLayerParse) {
               // Prefer the real diffuse channel, then use those explicit material
               // colours as a faithful legacy fallback.
               let mColor = null;
-              const colorToHex = (c, scale = 255) => {
+              const colorToHex = (c, scale = 1) => {
                 if (!c) return null;
                 const r = Math.round((c.r ?? c.R ?? 0) * scale);
                 const g = Math.round((c.g ?? c.G ?? 0) * scale);
@@ -894,9 +928,12 @@ export async function preprocess3dm(file, skipLayerParse) {
                   ? null
                   : `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
               };
-              if (isPbrSupported && pbr) {
+              if (pbr) {
                 try {
                   mColor = colorToHex(pbr.baseColor, 255);
+                  // `supported` can still expose an empty PBR view for RDK
+                  // materials. Only treat it as authoritative when populated.
+                  if (mColor) isPbrSupported = true;
                 } catch {}
               }
               if (!mColor) {
@@ -922,39 +959,41 @@ export async function preprocess3dm(file, skipLayerParse) {
                 } catch {}
               }
 
-              // Extract roughness:
-              // Rhino Physically Based materials store roughness DIRECTLY in reflectionGlossiness
-              // (0.0 = smooth, 1.0 = rough) — do NOT invert.
-              // Legacy Blinn-Phong materials store "glossiness" (inverse) there, but PBR is far more common.
+              // Extract roughness and metalness. For Custom/RDK materials,
+              // reflection polish controls roughness while reflectivity—not
+              // shine—controls metalness.
+              const clamp01 = value => Math.min(Math.max(value, 0), 1);
+              const finiteNumber = value =>
+                (typeof value === 'number' && Number.isFinite(value)) ? value : null;
               let mRoughness = 0.5;
-              if (isPbrSupported && pbr) {
+              let mMetalness = 0.0;
+              if (rdkFinish) {
+                mRoughness = rdkFinish.roughness;
+                mMetalness = rdkFinish.metalness;
+              } else if (isPbrSupported && pbr) {
                 try {
                   const r = pbr.roughness;
                   if (typeof r === 'number' && r >= 0 && r <= 1) mRoughness = r;
                 } catch {}
-              } else {
-                try {
-                  const rg = m.reflectionGlossiness;
-                  if (typeof rg === 'number' && rg >= 0 && rg <= 1) mRoughness = rg;
-                } catch {}
-              }
-
-              // Metalness via shine intensity — shine=255 → metalness=1.0
-              let mMetalness = 0.0;
-              if (isPbrSupported && pbr) {
                 try {
                   const met = pbr.metallic;
                   if (typeof met === 'number' && met >= 0 && met <= 1) mMetalness = met;
                 } catch {}
               } else {
                 try {
-                  const shine = m.shine;
-                  if (typeof shine === 'number' && shine > 0) mMetalness = Math.min(shine / 255, 1.0);
-                  // PBR materials sometimes expose reflectivity directly
-                  if (mMetalness < 0.01) {
-                    const ref = m.reflectivity;
-                    if (typeof ref === 'number' && ref > 0) mMetalness = Math.min(ref, 1.0);
+                  const polish = finiteNumber(rdk?.params?.['polish-amount']);
+                  if (polish !== null) {
+                    mRoughness = 1 - clamp01(polish);
+                  } else {
+                    const glossiness = finiteNumber(m.reflectionGlossiness);
+                    if (glossiness !== null && glossiness >= 0 && glossiness <= 1) {
+                      mRoughness = glossiness;
+                    }
                   }
+                  const reflectivity = finiteNumber(rdk?.params?.reflectivity)
+                    ?? finiteNumber(m.reflectivity)
+                    ?? 0;
+                  if (reflectivity > 0) mMetalness = clamp01(reflectivity);
                 } catch {}
               }
 
@@ -2326,6 +2365,34 @@ export function postProcessModel(model, addEdgesFlag, colorsAreSRGBStoredAsLinea
         }
       }
     }
+    // Apply the RDK-derived finish to object-assigned materials before the
+    // viewer captures its baseline clones. Rhino3dmLoader does not populate
+    // these values for Custom and several stock RDK material types.
+    const materialAttrs = child.userData?.attributes || {};
+    const sourceValue = typeof materialAttrs.materialSource === 'object'
+      ? materialAttrs.materialSource?.value
+      : materialAttrs.materialSource;
+    const directMaterial = sourceValue !== undefined && sourceValue !== null && sourceValue !== 0;
+    const materialIndex = materialAttrs.materialIndex;
+    const parsedMaterial = directMaterial && typeof materialIndex === 'number' && materialIndex >= 0
+      ? S.parsedMaterials?.[materialIndex]
+      : null;
+    const objectMaterials = Array.isArray(child.material) ? child.material : [child.material];
+    for (const material of objectMaterials) {
+      if (!material) continue;
+      if (parsedMaterial) {
+        if (material.roughness !== undefined) material.roughness = parsedMaterial.roughness;
+        if (material.metalness !== undefined) material.metalness = parsedMaterial.metalness;
+        material.userData = material.userData || {};
+        material.userData.__roughnessFromFile = true;
+        material.needsUpdate = true;
+      } else if (colorsAreSRGBStoredAsLinear && material.name === DEFAULT_MATERIAL_NAME) {
+        if (material.roughness !== undefined) material.roughness = 1.0;
+        if (material.metalness !== undefined) material.metalness = 0.0;
+        material.needsUpdate = true;
+      }
+    }
+
     if (child.material?.color) child.userData.materialColor = child.material.color.clone();
     fixMaterialTransparency(child.material);
     child.userData.originalMaterial = child.material.clone();
@@ -2711,6 +2778,9 @@ export async function loadGeometryFromGLB(glbBuffer, fileName, fileSize) {
   setToolbarModelState(true);
   
   const extractEdges = document.getElementById('chk-edges-panel')?.checked ?? true;
+  // A GLB/.rhv has no live Rhino material table; do not leak the table from a
+  // previously opened .3dm into nodes that happen to reuse an index.
+  S.parsedMaterials = {};
   // .rhv packages embed a GLB — colors are already linear, so skip the
   // 3dm-specific sRGB→linear conversion (would otherwise darken the scene
   // on reopen and the brightness wouldn't match the original 3dm load).
