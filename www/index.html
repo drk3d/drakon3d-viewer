@@ -350,12 +350,18 @@
       </div>
       <div id="layer-panel-materials-view" class="hidden">
         <p class="materials-apply-hint" data-i18n="materials.apply_hint">Applies to selected objects. With nothing selected, applies to all detected objects of the material type.</p>
-        <section class="material-preset-section" aria-labelledby="metal-materials-heading">
-          <h3 id="metal-materials-heading">Metals</h3>
+        <section class="material-preset-section" data-material-category="metal" aria-labelledby="metal-materials-heading">
+          <div class="material-preset-heading">
+            <h3 id="metal-materials-heading">Metals</h3>
+            <button id="metal-material-toggle" class="material-section-toggle" type="button" aria-expanded="false" data-i18n="materials.more">More</button>
+          </div>
           <div id="metal-material-grid" class="material-preset-grid"></div>
         </section>
-        <section class="material-preset-section" aria-labelledby="gem-materials-heading">
-          <h3 id="gem-materials-heading">Gems</h3>
+        <section class="material-preset-section" data-material-category="gem" aria-labelledby="gem-materials-heading">
+          <div class="material-preset-heading">
+            <h3 id="gem-materials-heading">Gems</h3>
+            <button id="gem-material-toggle" class="material-section-toggle" type="button" aria-expanded="false" data-i18n="materials.more">More</button>
+          </div>
           <div id="gem-material-grid" class="material-preset-grid"></div>
         </section>
       </div>

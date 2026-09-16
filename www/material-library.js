@@ -107,6 +107,10 @@ function materialNamesFor(object) {
 }
 
 function isDetectedMetal(object) {
+  // Gemstone materials can arrive from Rhino with a high PBR metalness value.
+  // Gem identity is more specific than that numeric fallback, so never allow a
+  // recognised gem to be included in a whole-model metal preset operation.
+  if (isDetectedGem(object)) return false;
   if (object.userData?.customMaterial?.materialCategory === 'metal') return true;
   if (materialNamesFor(object).some(name => METAL_NAME_PATTERN.test(name))) return true;
 
@@ -294,14 +298,52 @@ function renderPresetGrid(gridTarget, presets, applyPreset) {
   }
 }
 
+let expandedMaterialsCategory = null;
+
+function renderCollapsiblePresetCategory({ category, gridId, toggleId, presets, previewCount, previewPresets, applyPreset }) {
+  const section = document.querySelector(`[data-material-category="${category}"]`);
+  const toggle = document.getElementById(toggleId);
+  const expanded = expandedMaterialsCategory === category;
+  const hasMore = presets.length > previewCount;
+
+  section?.classList.toggle('is-expanded', expanded);
+  renderPresetGrid(gridId, expanded || !hasMore ? presets : (previewPresets || presets.slice(0, previewCount)), applyPreset);
+
+  if (!toggle) return;
+  toggle.hidden = !hasMore;
+  toggle.dataset.i18n = expanded ? 'materials.less' : 'materials.more';
+  toggle.textContent = t(toggle.dataset.i18n);
+  toggle.setAttribute('aria-expanded', String(expanded));
+  toggle.onclick = () => {
+    expandedMaterialsCategory = expanded ? null : category;
+    renderMaterialsPanel();
+  };
+}
+
 function isMobileDevice() {
   return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
     || (/Macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
 }
 
 export function renderMaterialsPanel() {
-  renderPresetGrid('metal-material-grid', METAL_PRESETS, presetId => applyMetalPreset(presetId));
-  renderPresetGrid('gem-material-grid', GEM_PRESETS, presetId => applyGemPreset(presetId));
+  renderCollapsiblePresetCategory({
+    category: 'metal',
+    gridId: 'metal-material-grid',
+    toggleId: 'metal-material-toggle',
+    presets: METAL_PRESETS,
+    previewCount: 3,
+    applyPreset: presetId => applyMetalPreset(presetId)
+  });
+  renderCollapsiblePresetCategory({
+    category: 'gem',
+    gridId: 'gem-material-grid',
+    toggleId: 'gem-material-toggle',
+    presets: GEM_PRESETS,
+    previewCount: 6,
+    previewPresets: ['diamond', 'emerald', 'ruby', 'sapphire', 'amethyst', 'aquamarine']
+      .map(id => GEM_PRESETS.find(preset => preset.id === id)),
+    applyPreset: presetId => applyGemPreset(presetId)
+  });
 }
 
 export function renderObjectMaterialsPanel(container, objects = S.selectedObjects) {

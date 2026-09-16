@@ -1472,12 +1472,38 @@ body.dark-theme .footer-logo.light-only {
 .material-preset-section {
   padding: 2px 2px 0;
 }
-.material-preset-section h3 {
+.material-preset-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
   margin: 0 0 6px;
+}
+.material-preset-heading h3 {
+  margin: 0;
   color: var(--text);
   font-size: 0.72rem;
   font-weight: 600;
 }
+.material-section-toggle {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.material-section-toggle:hover,
+.material-section-toggle:focus-visible {
+  color: var(--text);
+  text-decoration: underline;
+  outline: none;
+}
+.material-section-toggle[hidden] { display: none; }
 .material-preset-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
