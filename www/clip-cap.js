@@ -31,6 +31,19 @@ let _stencilMeshFront = null; // stencil writer — front faces (decrement)
 let _mergedGeo   = null; // merged position-only geometry (world space)
 let _modelCenter = null; // THREE.Vector3 — model bbox center (for plane placement)
 
+// Unpack interleaved and/or normalized positions into plain model-space floats.
+// Quantized .rhv meshes cannot be read safely through attribute.array[i * 3].
+function _readPositions(attr) {
+  const n = attr.count;
+  const out = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    out[i * 3]     = attr.getX(i);
+    out[i * 3 + 1] = attr.getY(i);
+    out[i * 3 + 2] = attr.getZ(i);
+  }
+  return out;
+}
+
 // A section cap only makes sense for CLOSED (watertight) solids. The stencil
 // count runs along the WHOLE view ray (depthTest off), so an OPEN mesh anywhere
 // in the column stays unbalanced and paints the cap color onto it even when the
@@ -43,18 +56,23 @@ let _modelCenter = null; // THREE.Vector3 — model bbox center (for plane place
 // unwelded-but-closed solids are correctly recognised while genuinely open
 // meshes (furniture shells, ground planes, flat panels) are excluded.
 // Returns true only if every welded edge is shared by ≥2 triangles (no holes).
-function _isClosedSolid(geo) {
-  const pos = geo.attributes?.position;
-  if (!pos) return false;
-  const idx = geo.index ? geo.index.array : null;
-  const triCount = idx ? idx.length / 3 : pos.count / 3;
+function _isClosedSolid(xyz, indexArr) {
+  if (!xyz) return false;
+  const idx = indexArr;
+  const triCount = idx ? idx.length / 3 : xyz.length / 9;
   if (triCount < 4) return false;                 // too few tris to bound a volume
   if (triCount > 300000) return true;             // too big to weld-check; assume solid
-  if (!geo.boundingBox) geo.computeBoundingBox();
-  const bb = geo.boundingBox;
-  const diag = Math.hypot(bb.max.x - bb.min.x, bb.max.y - bb.min.y, bb.max.z - bb.min.z);
+  let minX = Infinity, minY = Infinity, minZ = Infinity;
+  let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+  for (let i = 0; i < xyz.length; i += 3) {
+    const x = xyz[i], y = xyz[i + 1], z = xyz[i + 2];
+    if (x < minX) minX = x; if (x > maxX) maxX = x;
+    if (y < minY) minY = y; if (y > maxY) maxY = y;
+    if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
+  }
+  const diag = Math.hypot(maxX - minX, maxY - minY, maxZ - minZ);
   const inv = 1 / Math.max(diag * 1e-4, 1e-6);    // weld tolerance ∝ mesh size
-  const arr = pos.array;
+  const arr = xyz;
   const vmap = new Map(); let nextId = 0;
   const idFor = vi => {
     const k = Math.round(arr[vi*3]*inv) + ',' + Math.round(arr[vi*3+1]*inv) + ',' + Math.round(arr[vi*3+2]*inv);
@@ -89,12 +107,15 @@ export function buildClippingCap() {
     const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
     if (mats.length > 0 && mats.every(m => m?.transparent && (m?.opacity ?? 1) < 0.5)) return;
     const srcGeo = mesh.geometry;
-    if (!srcGeo?.attributes?.position) return;
-    if (!_isClosedSolid(srcGeo)) return;  // section fill is for closed solids only
+    const srcPos = srcGeo?.attributes?.position;
+    if (!srcPos) return;
+    const xyz = _readPositions(srcPos);
+    const idx = srcGeo.index ? srcGeo.index.array : null;
+    if (!_isClosedSolid(xyz, idx)) return;  // section fill is for closed solids only
 
     mesh.updateWorldMatrix(true, false);
     const g = new THREE.BufferGeometry();
-    g.setAttribute('position', srcGeo.attributes.position.clone());
+    g.setAttribute('position', new THREE.BufferAttribute(xyz, 3));
     if (srcGeo.index) g.setIndex(srcGeo.index.clone());
     g.applyMatrix4(mesh.matrixWorld);
     geos.push(g);

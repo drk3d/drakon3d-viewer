@@ -1047,6 +1047,15 @@ export function applyExactEdgeSurfaceOffset(mesh) {
   }
 }
 
+function _isEdgeExcludedByParent(child) {
+  let p = child.parent;
+  while (p) {
+    if (p.name === 'annotations-group' || p === S.measurementGroup) return true;
+    p = p.parent;
+  }
+  return false;
+}
+
 export function addEdges(mesh, thresholdAngle) {
   if (!mesh || !mesh.isMesh || mesh.isLine || !mesh.geometry) return;
   // Guard here as well as at the call sites: addEdges is reached from load,
@@ -1054,20 +1063,45 @@ export function addEdges(mesh, thresholdAngle) {
   // acquire dihedral edges through any of them.
   if (!isEdgeEligible(mesh)) return;
 
-  // Skip if mesh is part of annotations
-  let isAnn = false;
-  let p = mesh.parent;
-  while (p) {
-    if (p.name === 'annotations-group') { isAnn = true; break; }
-    p = p.parent;
-  }
-  if (isAnn) return;
+  if (_isEdgeExcludedByParent(mesh)) return;
 
   const angle = typeof thresholdAngle === 'number' ? thresholdAngle : (S.edgeThresholdAngle ?? 30);
   const eg   = new THREE.EdgesGeometry(mesh.geometry, angle);
   const line = new THREE.LineSegments(eg, new THREE.LineBasicMaterial({ color: 0x000000 }));
   line.name = 'rhino-edges';
   mesh.add(line);
+}
+
+// Return eligible meshes that do not already have exact or calculated edges.
+// Existing file-supplied Brep edges are deliberately preserved.
+export function findMeshesNeedingEdges() {
+  const out = [];
+  if (!S.scene) return out;
+  S.scene.traverse(child => {
+    if (!child.isMesh || child.isLine) return;
+    if (['rhino-edges', 'rhino-outline', 'selection-outline', 'ground-plane'].includes(child.name)) return;
+    if (!child.geometry || !isEdgeEligible(child)) return;
+    if (child.children?.some(c => c.name === 'rhino-edges')) return;
+    if (_isEdgeExcludedByParent(child)) return;
+    out.push(child);
+  });
+  return out;
+}
+
+export function countTriangles(meshes) {
+  let tris = 0;
+  for (const mesh of meshes) {
+    const geometry = mesh.geometry;
+    if (!geometry) continue;
+    if (geometry.index) tris += geometry.index.count / 3;
+    else if (geometry.attributes?.position) tris += geometry.attributes.position.count / 3;
+  }
+  return Math.round(tris);
+}
+
+export function buildEdgesFor(meshes) {
+  const angle = S.edgeThresholdAngle ?? 30;
+  for (const mesh of meshes) addEdges(mesh, angle);
 }
 
 export function recreateAllEdges(thresholdAngle) {
@@ -1087,20 +1121,7 @@ export function recreateAllEdges(thresholdAngle) {
       // strip edges off an object that will not get them back.
       if (!isEdgeEligible(child)) return;
 
-      // Skip if child is part of annotations OR the measurement group.
-      // Building EdgesGeometry on every measurement sphere on every slider
-      // change is wasteful and triggers a side effect in three.js where
-      // opaque depthTest:false meshes stop rendering after the subsequent
-      // applyDisplayMode() — see issue history.
-      let skip = false;
-      let p = child.parent;
-      while (p) {
-        if (p.name === 'annotations-group' || p === S.measurementGroup) {
-          skip = true; break;
-        }
-        p = p.parent;
-      }
-      if (skip) return;
+      if (_isEdgeExcludedByParent(child)) return;
 
       const oldEdges = child.getObjectByName('rhino-edges');
       // Edges the file supplied came from Brep topology: exact, with no dihedral

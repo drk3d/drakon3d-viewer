@@ -20,7 +20,7 @@ import { S } from './state.js';
 import { updateSliderFill, updateAllSliderFills, updateSelectIcon, showLoading, hideLoading, showToast, bindSliderDblClickInput, beginSave, setActiveShareId } from './helpers.js';
 import { setupLights, updateSunLight, updateShadowCasting, addGroundPlane, removeGroundPlane, computeVisibleBoundingBox } from './lighting.js';
 import { switchToOrtho, switchToPersp, switchToTwoPoint, apply2PointConstraints, installTwoPointDragHandler, setViewPreset, setWalkthroughMode, triggerCameraTransition, fitCameraToBox, fitCameraToObject, fitCameraToSelected, saveCustomView, renderNamedViewsUI, updateAdaptiveClipping } from './camera.js';
-import { applySceneBackground, applyFileBackground, applyDisplayMode, applyEnvironmentPreset, applyLayerColorsToModel, recreateAllEdges, setEdgeAngleUniform } from './display.js';
+import { applySceneBackground, applyFileBackground, applyDisplayMode, applyEnvironmentPreset, applyLayerColorsToModel, recreateAllEdges, setEdgeAngleUniform, findMeshesNeedingEdges, countTriangles, buildEdgesFor } from './display.js';
 import { renderLayerUI, updateLayerVisibility } from './layers.js';
 import { renderMaterialsPanel } from './material-library.js';
 import { createAnnotationSprites } from './annotations.js';
@@ -1714,9 +1714,28 @@ function bindUI() {
   };
 
   document.getElementById('chk-edges-panel').addEventListener('change', e => {
-    updateModeSetting('edges', e.target.checked);
-    updateModeSetting('curves', e.target.checked); // curves follow edges check state
-    applyDisplayMode();
+    const on = e.target.checked;
+    updateModeSetting('edges', on);
+    updateModeSetting('curves', on); // curves follow edges check state
+
+    // Edges may have been deferred for a heavy model or may not have been
+    // supplied by the file. Turning the overlay on must create missing edges,
+    // not merely unhide edge objects that already exist.
+    const pending = on ? findMeshesNeedingEdges() : [];
+    if (pending.length === 0) { applyDisplayMode(); return; }
+
+    const finish = () => {
+      try { buildEdgesFor(pending); } finally { hideLoading(); }
+      S.edgesDeferred = false;
+      S.deferredStats = null;
+      applyDisplayMode();
+    };
+    if (countTriangles(pending) > 100000) {
+      showLoading(t('msg.edges_building'));
+      requestAnimationFrame(() => requestAnimationFrame(finish));
+    } else {
+      finish();
+    }
   });
   document.getElementById('chk-shadows-panel').addEventListener('change', e => {
     S.shadowsEnabled = e.target.checked;
