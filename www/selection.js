@@ -86,6 +86,7 @@ export function onPointerDown(event) {
     && i.object.name !== 'ground-plane'
     && i.object.visible);
 
+  const groupMode = S.selectMode === 'group';
   const multi = S.selectMode === 'multi' || event.shiftKey || event.ctrlKey || event.metaKey;
 
   if (hit) {
@@ -103,24 +104,96 @@ export function onPointerDown(event) {
       }
     }
 
+    const selectedTargets = groupMode ? getGroupSelectionTargets(obj) : [obj];
+
     if (multi) {
-      const idx = S.selectedObjects.indexOf(obj);
-      if (idx > -1) {
-        S.selectedObjects.splice(idx, 1);
-        clearSelectionOutline(obj);
-      } else {
-        S.selectedObjects.push(obj);
-        addSelectionOutline(obj);
-      }
+      // Modifier-clicking a group treats its members as one selection unit:
+      // add the whole group, or remove it only when all members are selected.
+      const allSelected = selectedTargets.every(target => S.selectedObjects.includes(target));
+      selectedTargets.forEach(target => {
+        const idx = S.selectedObjects.indexOf(target);
+        if (allSelected && idx > -1) {
+          S.selectedObjects.splice(idx, 1);
+          clearSelectionOutline(target);
+        } else if (!allSelected && idx === -1) {
+          S.selectedObjects.push(target);
+          addSelectionOutline(target);
+        }
+      });
     } else {
       clearSelection();
-      S.selectedObjects.push(obj);
-      addSelectionOutline(obj);
+      selectedTargets.forEach(target => {
+        S.selectedObjects.push(target);
+        addSelectionOutline(target);
+      });
     }
   } else {
     clearSelection();
   }
 
+  refreshSelectionUi();
+}
+
+function isSelectableObject(object) {
+  return Boolean(
+    object
+    && (object.isMesh || object.isLine || object.isLineSegments || object.isSprite)
+    && object.name !== 'rhino-edges'
+    && object.name !== 'rhino-outline'
+    && object.name !== 'selection-outline'
+    && object.name !== 'ground-plane'
+    && object.visible
+  );
+}
+
+function getGroupIndices(object) {
+  // Rhino3dmLoader exposes native 3DM groups as groupIds. groupIndices is our
+  // retained bridge for models that pass through the cleaned loading document.
+  const raw = object?.userData?.attributes?.groupIndices
+    ?? object?.userData?.attributes?.groupIds
+    ?? object?.userData?.groupIndices;
+  if (!raw || typeof raw[Symbol.iterator] !== 'function') return [];
+  return [...new Set(Array.from(raw).map(Number).filter(Number.isInteger))];
+}
+
+function getGroupSelectionTargets(object) {
+  const groupIndices = getGroupIndices(object);
+  if (!groupIndices.length || !S.currentModel) return [object];
+
+  const groupSet = new Set(groupIndices);
+  const members = [];
+  S.currentModel.traverse(child => {
+    if (!isSelectableObject(child)) return;
+    if (getGroupIndices(child).some(groupIndex => groupSet.has(groupIndex))) {
+      members.push(child);
+    }
+  });
+  return members.length ? members : [object];
+}
+
+export function expandSelectionToGroups() {
+  if (!S.selectedObjects.length) return false;
+
+  const expanded = [];
+  S.selectedObjects.forEach(object => {
+    getGroupSelectionTargets(object).forEach(member => {
+      if (!expanded.includes(member)) expanded.push(member);
+    });
+  });
+  const changed = expanded.length !== S.selectedObjects.length
+    || expanded.some((object, index) => object !== S.selectedObjects[index]);
+  if (!changed) return false;
+
+  clearSelection();
+  expanded.forEach(object => {
+    S.selectedObjects.push(object);
+    addSelectionOutline(object);
+  });
+  refreshSelectionUi();
+  return true;
+}
+
+function refreshSelectionUi() {
   if (S.gumballActive) {
     document.getElementById('object-properties').classList.add('hidden');
     setupGumballHelper();

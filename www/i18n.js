@@ -43,6 +43,7 @@ export const TRANSLATIONS = {
     'select.none':        'None',
     'select.single':      'Single',
     'select.multi':       'Multi-Select',
+    'select.group':       'Group',
     'select.invert':      'Invert Selection',
     'select.gems':        'Gems',
 
@@ -304,6 +305,7 @@ export const TRANSLATIONS = {
     'select.none':        '없음',
     'select.single':      '단일',
     'select.multi':       '다중 선택',
+    'select.group':       '그룹',
     'select.invert':      '선택 반전',
     'select.gems':        '보석',
 
@@ -565,6 +567,7 @@ export const TRANSLATIONS = {
     'select.none':        'Aucun',
     'select.single':      'Simple',
     'select.multi':       'Sélection multiple',
+    'select.group':       'Groupe',
     'select.invert':      'Inverser la sélection',
     'select.gems':        'Gemmes',
 
@@ -787,6 +790,7 @@ export const TRANSLATIONS = {
     'select.none':        'Keine',
     'select.single':      'Einzeln',
     'select.multi':       'Mehrfachauswahl',
+    'select.group':       'Gruppe',
     'select.invert':      'Auswahl umkehren',
     'select.gems':        'Edelsteine',
 
@@ -1009,6 +1013,7 @@ export const TRANSLATIONS = {
     'select.none':        'Ninguno',
     'select.single':      'Individual',
     'select.multi':       'Selección múltiple',
+    'select.group':       'Grupo',
     'select.invert':      'Invertir selección',
     'select.gems':        'Gemas',
 
@@ -1231,6 +1236,7 @@ export const TRANSLATIONS = {
     'select.none':        'Nessuno',
     'select.single':      'Singolo',
     'select.multi':       'Selezione multipla',
+    'select.group':       'Gruppo',
     'select.invert':      'Inverti selezione',
     'select.gems':        'Gemme',
 
@@ -1453,6 +1459,7 @@ export const TRANSLATIONS = {
     'select.none':        'なし',
     'select.single':      '単体選択',
     'select.multi':       '複数選択',
+    'select.group':       'グループ',
     'select.invert':      '選択を反転',
     'select.gems':        '宝石',
 
@@ -1675,6 +1682,7 @@ export const TRANSLATIONS = {
     'select.none':        '无',
     'select.single':      '单选',
     'select.multi':       '多选',
+    'select.group':       '组',
     'select.invert':      '反向选择',
     'select.gems':        '宝石',
 
@@ -1897,6 +1905,7 @@ export const TRANSLATIONS = {
     'select.none':        '無',
     'select.single':      '單選',
     'select.multi':       '多選',
+    'select.group':       '群組',
     'select.invert':      '反向選取',
     'select.gems':        '寶石',
 
@@ -2119,6 +2128,7 @@ export const TRANSLATIONS = {
     'select.none':        'Nenhum',
     'select.single':      'Individual',
     'select.multi':       'Seleção múltipla',
+    'select.group':       'Grupo',
     'select.invert':      'Inverter seleção',
     'select.gems':        'Gemas',
 
@@ -2341,6 +2351,7 @@ export const TRANSLATIONS = {
     'select.none':        'Žádný',
     'select.single':      'Jeden',
     'select.multi':       'Vícenásobný výběr',
+    'select.group':       'Skupina',
     'select.invert':      'Invertovat výběr',
     'select.gems':        'Drahokamy',
 
@@ -2563,6 +2574,7 @@ export const TRANSLATIONS = {
     'select.none':        'Brak',
     'select.single':      'Pojedynczy',
     'select.multi':       'Zaznaczenie wielokrotne',
+    'select.group':       'Grupa',
     'select.invert':      'Odwróć zaznaczenie',
     'select.gems':        'Kamienie szlachetne',
 

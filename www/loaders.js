@@ -659,6 +659,7 @@ export async function preprocess3dm(file, skipLayerParse) {
   S.parsedAnnotations = [];
   S.parsed3dmFileInfo = null;
   S._objLayerById = new Map();
+  S._objGroupIndicesById = new Map();
   S._objDrakonTypeById = new Map();
   S._instanceLayerByPos = new Map();
   S._wireframeFallback = new Map();
@@ -1547,6 +1548,23 @@ export async function preprocess3dm(file, skipLayerParse) {
           }
         } catch {}
 
+        // Keep Rhino group membership by object UUID. The clean document used
+        // for loading can omit the original group table, so the ID bridge lets
+        // us restore the membership on the corresponding Three.js object.
+        try {
+          const id = attr?.id;
+          const rawGroupIndices = typeof attr?.getGroupList === 'function'
+            ? attr.getGroupList()
+            : [];
+          const groupIndices = Array.from(rawGroupIndices || [])
+            .map(Number)
+            .filter(Number.isInteger);
+          if (id && groupIndices.length > 0) {
+            S._objGroupIndicesById = S._objGroupIndicesById || new Map();
+            S._objGroupIndicesById.set(id, [...new Set(groupIndices)]);
+          }
+        } catch {}
+
         // The Share command copies the originating Drakon custom-object type
         // to Attribute User Text in its temporary snapshot. Rhino3dmLoader
         // does not expose Drakon's native custom Rhino object class, so keep
@@ -2230,6 +2248,9 @@ export function postProcessModel(model, addEdgesFlag, colorsAreSRGBStoredAsLinea
       } catch {}
       attrs.layerIndex = realLayerIndex;
 
+      const groupIndices = S._objGroupIndicesById?.get(attrs.id);
+      if (groupIndices?.length) attrs.groupIndices = [...groupIndices];
+
       const drakonType = S._objDrakonTypeById?.get(attrs.id);
       if (drakonType) child.userData.drakonObjectType = drakonType;
     }
@@ -2726,11 +2747,11 @@ export async function handleFile(file, rhinoLoader, gltfLoader, fileHandle = nul
           applyGtaoClipBox(box);
           if (S.groundEnabled) addGroundPlane(box);
           applyFileBackground();
-          if (S.fileSkylightEnabled) {
-            changeDisplayMode('rendered');
-          } else {
-            applyDisplayMode();
-          }
+          // Opening policy is always Rendered. resetSettingsToDefault() has
+          // already set that mode before loading, so this must force the pass:
+          // otherwise changeDisplayMode() returns early and the imported
+          // materials are not applied until the user changes one manually.
+          changeDisplayMode('rendered', true);
           createAnnotationSprites();
           renderNamedViewsUI();
           setFileName(file.name);

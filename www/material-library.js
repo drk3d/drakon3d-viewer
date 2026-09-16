@@ -96,14 +96,19 @@ function isModelMesh(object) {
 function materialNamesFor(object) {
   const layerIndex = object.userData?.attributes?.layerIndex ?? 0;
   const layer = S.parsedLayers.find(entry => entry.index === layerIndex);
-  return [
+  const names = [
     object.userData?.customMaterial?.name,
     object.userData?.rhinoObjectMaterial?.name,
     object.userData?.originalMaterial?.name,
-    object.userData?.renderedMaterial?.name,
-    layer?.customMaterial?.name,
-    layer?.originalCustomMaterial?.name
-  ].filter(Boolean);
+    object.userData?.renderedMaterial?.name
+  ];
+  // A layer material is relevant only for Rhino ByLayer objects. Including it
+  // for ByObject geometry can classify an entire metal setting as a gemstone
+  // merely because its organisational layer happens to carry Diamond.
+  if (object.userData?.isMaterialByLayer) {
+    names.push(layer?.customMaterial?.name, layer?.originalCustomMaterial?.name);
+  }
+  return names.filter(Boolean);
 }
 
 function isDetectedMetal(object) {

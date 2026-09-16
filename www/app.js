@@ -42,7 +42,7 @@ import {
   rebuildClippingGrid, applyClipWidgetVisibility
 } from './tools.js';
 import { initPenInput } from './pen-input.js';
-import { onPointerDown, clearSelection, updatePropertiesPanel, addSelectionOutline, setupGumballHelper, clearGumballHelper, ensureOriginalTransform } from './selection.js';
+import { onPointerDown, clearSelection, updatePropertiesPanel, addSelectionOutline, setupGumballHelper, clearGumballHelper, ensureOriginalTransform, expandSelectionToGroups } from './selection.js';
 import { buildClippingCap, destroyClippingCap, setClippingCapEnabled, setClippingCapColor, updateClippingCapPose } from './clip-cap.js';
 
 // Notes UI is loaded lazily so the rest of the app boots even if the user
@@ -2236,6 +2236,7 @@ function bindUI() {
       triggerBtn.title = `Selection Mode (${label})`;
       updateSelectIcon(S.selectMode);
       if (S.selectMode === 'none') { clearSelection(); updatePropertiesPanel(); }
+      else if (S.selectMode === 'group') expandSelectionToGroups();
     });
   });
 
@@ -4305,10 +4306,11 @@ export function applyModeSettings(mode) {
 }
 
 // ── Switch display mode and apply its visibility settings ──
-export function changeDisplayMode(mode) {
-  if (S.currentMode === mode) return;
-  
-  if (!History.suppress) {
+export function changeDisplayMode(mode, force = false) {
+  const modeChanged = S.currentMode !== mode;
+  if (!modeChanged && !force) return;
+
+  if (modeChanged && !History.suppress) {
     History.push({
       type: 'displayMode',
       before: S.currentMode,

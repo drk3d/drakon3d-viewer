@@ -258,9 +258,11 @@ export function updateSelectIcon(mode) {
   if (!btn) return;
   const iconSingle = btn.querySelector('.icon-select-single');
   const iconMulti  = btn.querySelector('.icon-select-multi');
+  const iconGroup  = btn.querySelector('.icon-select-group');
   const iconNone   = btn.querySelector('.icon-select-none');
   if (iconSingle) iconSingle.style.display = mode === 'single' ? '' : 'none';
   if (iconMulti)  iconMulti.style.display  = mode === 'multi'  ? '' : 'none';
+  if (iconGroup)  iconGroup.style.display  = mode === 'group'  ? '' : 'none';
   if (iconNone)   iconNone.style.display   = mode === 'none'   ? '' : 'none';
 }
 
