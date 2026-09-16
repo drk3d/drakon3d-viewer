@@ -176,6 +176,7 @@ export function applyFileBackground() {
   document.getElementById('picker-c2')?.classList.toggle('hidden', isSolid);
   document.getElementById('picker-c3')?.classList.toggle('hidden', !isGrad4);
   document.getElementById('picker-c4')?.classList.toggle('hidden', !isGrad4);
+  document.getElementById('btn-bg-swap-colors')?.classList.toggle('hidden', newType !== 'gradient2' && newType !== 'radial');
   document.getElementById('bg-radial-section')?.classList.toggle('hidden', !isRadial);
 
   // Apply file sun settings (on/off, azimuth, elevation, intensity) as well

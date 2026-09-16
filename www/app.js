@@ -1552,6 +1552,7 @@ function bindUI() {
   const bgSwatchC2 = document.getElementById('bg-panel-swatch-c2');
   const bgSwatchC3 = document.getElementById('bg-panel-swatch-c3');
   const bgSwatchC4 = document.getElementById('bg-panel-swatch-c4');
+  const bgSwapColors = document.getElementById('btn-bg-swap-colors');
 
   bgTypeSelect?.addEventListener('change', () => {
     const val = bgTypeSelect.value;
@@ -1563,6 +1564,7 @@ function bindUI() {
     document.getElementById('picker-c2')?.classList.toggle('hidden', isSolid || isHdr);
     document.getElementById('picker-c3')?.classList.toggle('hidden', !isGrad4 || isHdr);
     document.getElementById('picker-c4')?.classList.toggle('hidden', !isGrad4 || isHdr);
+    bgSwapColors?.classList.toggle('hidden', val !== 'gradient2' && val !== 'radial');
     const radialSection = document.getElementById('bg-radial-section');
     if (radialSection) radialSection.classList.toggle('hidden', !isRadial || isHdr);
     applySceneBackground();
@@ -1705,6 +1707,15 @@ function bindUI() {
   bindBgInput(bgPanelC2, bgSwatchC2);
   bindBgInput(bgPanelC3, bgSwatchC3);
   bindBgInput(bgPanelC4, bgSwatchC4);
+
+  bgSwapColors?.addEventListener('click', () => {
+    if (!bgPanelC1 || !bgPanelC2) return;
+    const color1 = bgPanelC1.value;
+    bgPanelC1.value = bgPanelC2.value;
+    bgPanelC2.value = color1;
+    bgPanelC1.dispatchEvent(new Event('input', { bubbles: true }));
+    bgPanelC2.dispatchEvent(new Event('input', { bubbles: true }));
+  });
 
   // ── 4. Visibility checkboxes ──
   const updateModeSetting = (key, val) => {

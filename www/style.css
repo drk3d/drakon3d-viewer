@@ -1733,6 +1733,33 @@ body.dark-theme .footer-logo.light-only {
   align-items: center;
   margin-top: 8px;
 }
+.bg-color-swap-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 2px;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.15s;
+}
+.bg-color-swap-btn:hover,
+.bg-color-swap-btn:focus-visible {
+  border-color: var(--panel-border-color);
+  background: var(--surface-hi);
+  outline: none;
+}
+.bg-color-swap-btn:active { transform: scale(0.92); }
+.bg-color-swap-btn img {
+  display: block;
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  pointer-events: none;
+}
 .color-circle-wrap {
   display: flex;
   flex-direction: column;

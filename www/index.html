@@ -374,6 +374,13 @@
           </div>
           <div id="gem-material-grid" class="material-preset-grid"></div>
         </section>
+        <section class="material-preset-section" data-material-category="background" aria-labelledby="background-materials-heading">
+          <div class="material-preset-heading">
+            <h3 id="background-materials-heading" data-i18n="materials.background">Background</h3>
+            <button id="background-material-toggle" class="material-section-toggle" type="button" aria-expanded="false" data-i18n="materials.more">More</button>
+          </div>
+          <div id="background-material-grid" class="material-preset-grid"></div>
+        </section>
       </div>
     </div>
   </aside>
@@ -382,7 +389,7 @@
   <aside id="settings-right-panel" class="right-panel">
     <div class="right-panel-header">
       <h2 data-i18n="panel.settings">Settings</h2>
-      <span id="app-version-tag" class="app-version-tag">Drakon3D Viewer v1.1</span>
+      <span id="app-version-tag" class="app-version-tag">Drakon3D Viewer v1.2</span>
       <button id="btn-close-settings-panel" class="icon-btn sm" title="Close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
           <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -417,6 +424,9 @@
               <input type="text" id="bg-panel-c2" data-coloris value="#18181c" class="layer-color-picker-input bg-coloris-input" inputmode="none">
             </div>
           </div>
+          <button id="btn-bg-swap-colors" class="bg-color-swap-btn hidden" type="button" title="Swap colors" data-i18n-title="bg.swap_colors">
+            <img src="assets/switch-colors.png" alt="" draggable="false">
+          </button>
           <div id="picker-c3" class="color-circle-wrap hidden">
             <div class="color-circle" id="bg-panel-swatch-c3" style="background:#2d3748" title="Color 3">
               <input type="text" id="bg-panel-c3" data-coloris value="#2d3748" class="layer-color-picker-input bg-coloris-input" inputmode="none">
