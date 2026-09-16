@@ -561,10 +561,7 @@ async function getSocialSharePage(id, request, env, ctx) {
     });
   }
 
-  // The share page runs on this Worker.  Using its own origin keeps the
-  // generated model link usable even if a branded share subdomain is routed
-  // somewhere else.
-  const publicOrigin = new URL(request.url).origin;
+  const publicOrigin = optionalShareOrigin(env) || new URL(request.url).origin;
   const shareUrl = new URL(`/s/${id}`, publicOrigin).toString();
   const title = model.customMetadata?.filename || 'Shared Drakon3D model';
   return new Response(socialShareHtml(title, shareUrl), {
