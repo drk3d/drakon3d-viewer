@@ -188,6 +188,11 @@ export const S = {
   annotationScale:       1.0,   // scale for imported Rhino annotations (dims/text/dots)
   measurementScale:      1.0,   // scale for the Distance/Angle measurement tool only
 
+  // Stylus-only input (palm rejection) while a measurement tool is active.
+  // Both values are restored and persisted by pen-input.js.
+  penOnlyMeasure: true,
+  penDetected:    false,
+
   // ── Note tool ────────────────────────────────────────────────────────────
   noteToolState: null,  // truthy when the Note tool is active
   notes:         [],    // [{ id, position:[x,y,z], text, color, createdAt, marker:<Sprite> }]

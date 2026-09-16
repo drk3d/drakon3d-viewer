@@ -41,6 +41,7 @@ import {
   cancelCurrentInProgressMeasurement, updateMeasurementScales,
   rebuildClippingGrid, applyClipWidgetVisibility
 } from './tools.js';
+import { initPenInput } from './pen-input.js';
 import { onPointerDown, clearSelection, updatePropertiesPanel, addSelectionOutline, setupGumballHelper, clearGumballHelper, ensureOriginalTransform } from './selection.js';
 import { buildClippingCap, destroyClippingCap, setClippingCapEnabled, setClippingCapColor, updateClippingCapPose } from './clip-cap.js';
 
@@ -615,6 +616,10 @@ function init() {
 
   // 2-Point Perspective drag interception (no-op until twoPointActive=true)
   installTwoPointDragHandler();
+
+  // Filter palm and single-finger input while measuring with a stylus. This
+  // must run after OrbitControls has attached to the renderer canvas.
+  initPenInput();
 
   S.renderer.localClippingEnabled = true;
   S.scene.add(S.measurementGroup);
