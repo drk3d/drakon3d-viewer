@@ -2584,7 +2584,7 @@ export function clearCurrentModel() {
       child.userData.renderedMaterial?.dispose();
       child.userData.customMaterial = null;
     }
-    if (child.name === 'rhino-edges') {
+    if (child.name === 'rhino-edges' || child.name === 'gem-wires') {
       child.geometry?.dispose();
       child.material?.dispose();
     }

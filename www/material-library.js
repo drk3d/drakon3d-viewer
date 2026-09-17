@@ -103,6 +103,7 @@ const GEM_NAME_PATTERN = /\b(?:almandite|amethyst|aquamarine|aventurine|chalcedo
 function isModelMesh(object) {
   return object?.isMesh
     && object.name !== 'rhino-edges'
+    && object.name !== 'gem-wires'
     && object.name !== 'rhino-outline'
     && object.name !== 'selection-outline'
     && object.name !== 'ground-plane';

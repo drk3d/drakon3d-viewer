@@ -81,6 +81,7 @@ export function onPointerDown(event) {
   const hit = allHits.find(i =>
     (i.object.isMesh || i.object.isLine || i.object.isLineSegments || i.object.isSprite)
     && i.object.name !== 'rhino-edges'
+    && i.object.name !== 'gem-wires'
     && i.object.name !== 'rhino-outline'
     && i.object.name !== 'selection-outline'
     && i.object.name !== 'ground-plane'
@@ -139,6 +140,7 @@ function isSelectableObject(object) {
     object
     && (object.isMesh || object.isLine || object.isLineSegments || object.isSprite)
     && object.name !== 'rhino-edges'
+    && object.name !== 'gem-wires'
     && object.name !== 'rhino-outline'
     && object.name !== 'selection-outline'
     && object.name !== 'ground-plane'

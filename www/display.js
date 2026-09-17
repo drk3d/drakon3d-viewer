@@ -4,6 +4,86 @@ import { setupLights, updateGroundAppearance, applyFileSunSettings } from './lig
 import { isPageVisuallyDark } from './helpers.js';
 import { createGemstoneMaterial, gemstoneKindFromNames, gemstoneWhiteFallbackColorFromNames } from './gem-material.js';
 import { catalogueMaterialOverrideFromNames } from './material-library.js';
+import { isDrakonGemType } from './drakon-objects.js';
+import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
+import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+
+const GEM_WIRES_NAME = 'gem-wires';
+const GEM_WIRE_LINE_WIDTH = 2.5;
+const GEM_WIRE_NAME_PATTERN = /\b(?:gem|diamond|almandite|amethyst|aquamarine|aventurine|chalcedony|citrine|emerald|garnet|hiddenite|jade|kunzite|lapis\s+lazuli|malachite|opal|pearl|precious\s+beryl|quartz|ruby|sapphire|topaz|tourmaline|turquoise|zircon)\b/i;
+
+function isGemWireTarget(mesh) {
+  if (mesh?.userData?.customMaterial?.materialCategory === 'gem') return true;
+  if (isDrakonGemType(mesh?.userData?.drakonObjectType)) return true;
+  if (/\bgem\b/i.test(mesh?.userData?.attributes?.name || mesh?.name || '')) return true;
+
+  const layerIndex = mesh?.userData?.attributes?.layerIndex ?? 0;
+  const layer = S.parsedLayers.find(entry => entry.index === layerIndex);
+  const names = [
+    mesh?.userData?.rhinoObjectMaterial?.name,
+    mesh?.userData?.renderedMaterial?.name,
+    mesh?.userData?.originalMaterial?.name,
+    mesh?.userData?.customMaterial?.name
+  ];
+  if (mesh?.userData?.isMaterialByLayer) {
+    names.push(layer?.customMaterial?.name, layer?.originalCustomMaterial?.name);
+  }
+  return names.some(name => GEM_WIRE_NAME_PATTERN.test(String(name || '')));
+}
+
+function getGemWireOverlay(mesh) {
+  let wires = mesh.getObjectByName(GEM_WIRES_NAME);
+  if (wires || !mesh.geometry) return wires;
+
+  // EdgesGeometry keeps the visible facet boundaries but drops the coplanar
+  // diagonals Three.js uses internally to triangulate an n-gon.
+  const sourceEdges = new THREE.EdgesGeometry(mesh.geometry, 1);
+  if (!sourceEdges.attributes.position?.count) {
+    sourceEdges.dispose();
+    return null;
+  }
+
+  // WebGL's ordinary LineBasicMaterial is fixed at one pixel on nearly every
+  // device. LineSegments2 is a shader-based line that stays visibly thick in
+  // shaded mode, including on high-DPI mobile screens.
+  const geometry = new LineSegmentsGeometry();
+  geometry.setPositions(sourceEdges.attributes.position.array);
+  sourceEdges.dispose();
+  const material = new LineMaterial({
+    color: 0x000000,
+    linewidth: GEM_WIRE_LINE_WIDTH,
+    depthWrite: false,
+    toneMapped: false
+  });
+  material.resolution.set(window.innerWidth, window.innerHeight);
+  wires = new LineSegments2(geometry, material);
+  wires.name = GEM_WIRES_NAME;
+  wires.userData.isGemWireOverlay = true;
+  // Gem wires are visual overlays, never selectable model geometry.
+  wires.raycast = () => {};
+  mesh.add(wires);
+  return wires;
+}
+
+function updateGemWireOverlay(mesh, visible) {
+  const wires = visible ? getGemWireOverlay(mesh) : mesh.getObjectByName(GEM_WIRES_NAME);
+  if (!wires) return;
+  wires.visible = visible;
+  wires.renderOrder = 2;
+  wires.material.depthWrite = false;
+  wires.material.color.setHex(0x000000);
+  wires.material.resolution?.set(window.innerWidth, window.innerHeight);
+}
+
+export function updateGemWireResolutions() {
+  if (!S.currentModel) return;
+  S.currentModel.traverse(child => {
+    if (child.name === GEM_WIRES_NAME) {
+      child.material?.resolution?.set(window.innerWidth, window.innerHeight);
+    }
+  });
+}
 
 // ── Skybox sphere for rendered mode (bypasses tone mapping) ─────────────────
 // In rendered mode with ACES tone mapping, scene.background color gets compressed.
@@ -253,7 +333,7 @@ export function applyDisplayMode() {
       S.outlinePass.enabled = true;
       const meshes = [];
       S.currentModel.traverse(c => {
-        if (c.isMesh && c.name !== 'rhino-edges' && c.name !== 'rhino-outline'
+        if (c.isMesh && c.name !== 'rhino-edges' && c.name !== 'gem-wires' && c.name !== 'rhino-outline'
             && c.name !== 'selection-outline' && c.name !== 'ground-plane') {
           meshes.push(c);
         }
@@ -354,7 +434,7 @@ export function applyDisplayMode() {
   if (S.currentModel) {
     const _b = new THREE.Box3();
     S.currentModel.traverse(c => {
-      if (c.isMesh && !['rhino-edges','rhino-outline','selection-outline','ground-plane'].includes(c.name))
+      if (c.isMesh && !['rhino-edges','gem-wires','rhino-outline','selection-outline','ground-plane'].includes(c.name))
         _b.expandByObject(c);
     });
     if (!_b.isEmpty()) {
@@ -425,6 +505,7 @@ export function applyDisplayMode() {
   const edgeOverlay = document.getElementById('chk-edges-panel')?.checked ?? true;
 
   S.currentModel.traverse(child => {
+    if (child.name === GEM_WIRES_NAME) return;
     if (!((child.isMesh || child.isLine) && child.userData.originalMaterial)) return;
     if (child.name === 'rhino-outline') return;
     if (child.name === 'selection-outline') return;
@@ -506,6 +587,9 @@ export function applyDisplayMode() {
 
     const orig  = child.userData.originalMaterial;
     const edges = child.getObjectByName('rhino-edges');
+    const isGem = isGemWireTarget(child);
+    const showGemWires = isGem && (S.currentMode === 'shaded' || S.currentMode === 'wireframe');
+    updateGemWireOverlay(child, showGemWires);
     if (edges) edges.renderOrder = 0;
     // Surfaces carrying exact edges get a larger depth offset below, so they must
     // not share a material with surfaces that have none.
@@ -521,15 +605,17 @@ export function applyDisplayMode() {
         // geometry was never built at load), so the model looked shaded.
         child.material = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: true });
         let wfEdges = edges;
-        if (!wfEdges && child.isMesh && child.geometry) {
+        if (!isGem && !wfEdges && child.isMesh && child.geometry) {
           // Built on demand when edges weren't generated at load time.
           addEdges(child);
           wfEdges = child.getObjectByName('rhino-edges');
         }
         if (wfEdges) {
-          wfEdges.visible = true;
-          // Use raw color which has automatic theme inversion for black/white lines
-          wfEdges.material.color.copy(rawColor());
+          wfEdges.visible = !isGem;
+          if (!isGem) {
+            // Use raw color which has automatic theme inversion for black/white lines
+            wfEdges.material.color.copy(rawColor());
+          }
         }
         break;
       }
@@ -553,7 +639,7 @@ export function applyDisplayMode() {
           ? build()
           : shareMaterial(materialKey('shaded', child, base), build);
         if (edges) {
-          edges.visible = edgeOverlay;
+          edges.visible = isGem ? false : edgeOverlay;
           edges.material.color.setHex(0x000000);
           edges.renderOrder = 1;
           edges.material.depthWrite = false;
@@ -1081,7 +1167,7 @@ export function findMeshesNeedingEdges() {
   if (!S.scene) return out;
   S.scene.traverse(child => {
     if (!child.isMesh || child.isLine) return;
-    if (['rhino-edges', 'rhino-outline', 'selection-outline', 'ground-plane'].includes(child.name)) return;
+    if (['rhino-edges', 'gem-wires', 'rhino-outline', 'selection-outline', 'ground-plane'].includes(child.name)) return;
     if (!child.geometry || !isEdgeEligible(child)) return;
     if (child.children?.some(c => c.name === 'rhino-edges')) return;
     if (_isEdgeExcludedByParent(child)) return;
@@ -1117,7 +1203,7 @@ export function recreateAllEdges(thresholdAngle) {
   if (!S.scene) return;
 
   S.scene.traverse(child => {
-    if (child.isMesh && !['rhino-edges', 'rhino-outline', 'selection-outline', 'ground-plane'].includes(child.name)) {
+    if (child.isMesh && !['rhino-edges', 'gem-wires', 'rhino-outline', 'selection-outline', 'ground-plane'].includes(child.name)) {
       // No dihedral edges exist on ineligible geometry, so there is nothing to
       // rebuild — and returning here also makes sure the removal below can never
       // strip edges off an object that will not get them back.
@@ -1153,7 +1239,7 @@ export function recreateAllEdges(thresholdAngle) {
 export function applyLayerColorsToModel(model) {
   if (!S.parsedLayers.length) return;
   model.traverse(child => {
-    if (child.name === 'rhino-edges' || child.name === 'rhino-outline' || child.name === 'selection-outline') return;
+    if (child.name === 'rhino-edges' || child.name === 'gem-wires' || child.name === 'rhino-outline' || child.name === 'selection-outline') return;
     if ((!child.isMesh && !child.isLine) || !child.userData.originalMaterial) return;
     const attrs = child.userData.attributes || {};
     if (child.userData.isColorByLayer) {

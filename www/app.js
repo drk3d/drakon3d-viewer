@@ -20,7 +20,7 @@ import { S } from './state.js';
 import { updateSliderFill, updateAllSliderFills, updateSelectIcon, showLoading, hideLoading, showToast, bindSliderDblClickInput, beginSave, setActiveShareId } from './helpers.js';
 import { setupLights, updateSunLight, updateShadowCasting, addGroundPlane, removeGroundPlane, computeVisibleBoundingBox } from './lighting.js';
 import { switchToOrtho, switchToPersp, switchToTwoPoint, apply2PointConstraints, installTwoPointDragHandler, setViewPreset, setWalkthroughMode, triggerCameraTransition, fitCameraToBox, fitCameraToObject, fitCameraToSelected, saveCustomView, renderNamedViewsUI, updateAdaptiveClipping } from './camera.js';
-import { applySceneBackground, applyFileBackground, applyDisplayMode, applyEnvironmentPreset, applyLayerColorsToModel, recreateAllEdges, setEdgeAngleUniform, findMeshesNeedingEdges, countTriangles, buildEdgesFor } from './display.js';
+import { applySceneBackground, applyFileBackground, applyDisplayMode, applyEnvironmentPreset, applyLayerColorsToModel, recreateAllEdges, setEdgeAngleUniform, findMeshesNeedingEdges, countTriangles, buildEdgesFor, updateGemWireResolutions } from './display.js';
 import { renderLayerUI, updateLayerVisibility } from './layers.js';
 import { renderMaterialsPanel } from './material-library.js';
 import { createAnnotationSprites } from './annotations.js';
@@ -2163,7 +2163,7 @@ function bindUI() {
     const box = new THREE.Box3();
     S.currentModel.traverse(child => {
       if (child.isMesh && child.visible &&
-          child.name !== 'rhino-edges' && child.name !== 'rhino-outline' &&
+          child.name !== 'rhino-edges' && child.name !== 'gem-wires' && child.name !== 'rhino-outline' &&
           child.name !== 'selection-outline' && child.name !== 'ground-plane') {
         box.expandByObject(child);
       }
@@ -2264,7 +2264,7 @@ function bindUI() {
     const inverted = [];
     S.currentModel.traverse(child => {
       if (!(child.isMesh || child.isLine || child.isLineSegments)) return;
-      if (!child.visible || child.name === 'rhino-edges' || child.name === 'rhino-outline' ||
+      if (!child.visible || child.name === 'rhino-edges' || child.name === 'gem-wires' || child.name === 'rhino-outline' ||
           child.name === 'selection-outline' || child.name === 'ground-plane') return;
       if (!selected.has(child)) inverted.push(child);
     });
@@ -2311,7 +2311,7 @@ function bindUI() {
     };
 
     S.currentModel.traverse(child => {
-      if (child.name === 'rhino-edges' || child.name === 'rhino-outline' || child.name === 'selection-outline' || child.name === 'ground-plane') return;
+      if (child.name === 'rhino-edges' || child.name === 'gem-wires' || child.name === 'rhino-outline' || child.name === 'selection-outline' || child.name === 'ground-plane') return;
 
       const isCandidate = child.isMesh || child.isLine || child.isLineSegments || (child.parent === S.annotationGroup);
       if (isCandidate) {
@@ -3970,6 +3970,7 @@ function onWindowResize() {
   }
   S.renderer.setSize(window.innerWidth, window.innerHeight);
   S.composer.setSize(window.innerWidth, window.innerHeight);
+  updateGemWireResolutions();
   // Recalculate camera FOV from constant Lens Length on window resize
   try {
     updateLensCamera();
@@ -4086,7 +4087,7 @@ async function exportGLB(writeHandle = null, customFileName = null) {
   const toHide = [];
   S.currentModel.traverse(child => {
     if (child.name === 'rhino-outline' || child.name === 'selection-outline' ||
-        child.name === 'rhino-edges'   || child.name === 'ground-plane') {
+        child.name === 'rhino-edges'   || child.name === 'gem-wires' || child.name === 'ground-plane') {
       if (child.visible) { toHide.push(child); child.visible = false; }
     }
   });
@@ -4138,7 +4139,7 @@ function selectObjectsByName(query) {
 
   S.currentModel.traverse(child => {
     if (!(child.isMesh || child.isLine || child.isLineSegments)) return;
-    if (child.name === 'rhino-edges' || child.name === 'rhino-outline' ||
+    if (child.name === 'rhino-edges' || child.name === 'gem-wires' || child.name === 'rhino-outline' ||
         child.name === 'selection-outline' || child.name === 'ground-plane') return;
     const name = child.userData?.attributes?.name || child.name || '';
     if (name.toLowerCase().includes(normalizedQuery)) {
@@ -4166,7 +4167,7 @@ function searchObjects(query) {
 
   const matches = [];
   S.currentModel.traverse(child => {
-    if (child.isMesh && child.name !== 'rhino-edges' &&
+    if (child.isMesh && child.name !== 'rhino-edges' && child.name !== 'gem-wires' &&
         child.name !== 'rhino-outline' && child.name !== 'ground-plane') {
       const name = child.userData?.attributes?.name || child.name || '';
       if (name.toLowerCase().includes(query.toLowerCase())) matches.push(child);

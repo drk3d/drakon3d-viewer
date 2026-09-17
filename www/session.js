@@ -380,6 +380,12 @@ export async function buildSessionBuffer(customFileName = null) {
         if (child.visible) { toHide.push(child); child.visible = false; }
         return;
       }
+      // Gem facet wires are generated locally for shaded/wireframe mode and
+      // must never become persistent scene geometry in an RHV export.
+      if (child.name === 'gem-wires') {
+        if (child.visible) { toHide.push(child); child.visible = false; }
+        return;
+      }
       // Edges are kept only when they cannot be rebuilt from the exported GLB.
       // Exact ones — read from Brep/SubD topology, marked with role — have no
       // source in the file: the NURBS topology never makes it into a GLB, so
