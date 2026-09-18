@@ -1122,6 +1122,17 @@
     </div>
   </div>
 
-  <script type="module" src="app.js?v=drakon-1.3"></script>
+  <script>
+    // This is deliberately inline rather than part of app.js: app.js is
+    // imported by internal Viewer modules, so adding a query string to its URL
+    // would create a second application instance. This runs on every fresh
+    // embed document and hides the complete top bar before Viewer bootstraps.
+    const embedQuery = new URLSearchParams(window.location.search);
+    if (embedQuery.get('embed') === '1' && embedQuery.get('header') === '0') {
+      document.documentElement.classList.add('embed-hides-header');
+      document.getElementById('top-bar')?.style.setProperty('display', 'none', 'important');
+    }
+  </script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>
