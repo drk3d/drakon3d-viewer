@@ -7,16 +7,13 @@ import { GEM_PRESETS, METAL_PRESETS } from './material-library.js';
 // that name to Drakon's calculation: grams = volume(mm³) * density / 1000.
 const WEIGHT_MATERIALS = [
   ['Metal', 'Palladium 18K', 14.62], ['Metal', 'Platinum 950', 21.40],
-  ['Metal', 'Platinum 950 Sand Blast', 21.40],
   ['Metal', 'Rhodium', 12.44], ['Metal', 'Rose Gold 10K', 11.59],
   ['Metal', 'Rose Gold 14K', 13.26], ['Metal', 'Rose Gold 18K', 15.02],
-  ['Metal', 'Rose Gold 18K Sand Blast', 15.02],
-  ['Metal', 'Silver 925', 10.35], ['Metal', 'Silver 925 Sand Blast', 10.35],
+  ['Metal', 'Silver 925', 10.35],
   ['Metal', 'White Gold 10K', 11.07],
   ['Metal', 'White Gold 14K', 12.61], ['Metal', 'White Gold 18K', 15.66],
-  ['Metal', 'White Gold 18K Sand Blast', 15.66],
   ['Metal', 'Yellow Gold 10K', 11.57], ['Metal', 'Yellow Gold 14K', 13.07],
-  ['Metal', 'Yellow Gold 18K', 15.53], ['Metal', 'Yellow Gold 18K Sand Blast', 15.53],
+  ['Metal', 'Yellow Gold 18K', 15.53],
   ['Metal', 'Yellow Gold 19.25K', 15.40],
   ['Metal', 'Yellow Gold 22K', 17.70],
   ['Gem', 'Almandite Violet', 3.90], ['Gem', 'Amethyst', 2.65],
@@ -44,7 +41,9 @@ const WEIGHT_MATERIALS = [
 function normaliseMaterialName(name) {
   return String(name || '')
     .trim().toLocaleLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ')
-    .replace(/(?:\s+(?:ray\s*traced|cabochon))+$/, '');
+    // These suffixes describe only the render/cut/finish variant. They have
+    // the same density and must aggregate under the base material in Weight.
+    .replace(/(?:\s+(?:ray\s*traced|cabochon|sand\s*blast(?:ed)?))+$/, '');
 }
 
 const MATERIAL_BY_NAME = new Map(
@@ -175,7 +174,11 @@ export function getWeightRows(objects = null) {
     ...entry,
     value: entry.category === 'Gem' ? entry.grams * 5 : entry.grams,
     unit: entry.category === 'Gem' ? 'ct' : 'g'
-  })).sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: 'base' }));
+  })).sort((left, right) => {
+    const categoryOrder = { Metal: 0, Gem: 1 };
+    const categoryDifference = (categoryOrder[left.category] ?? 2) - (categoryOrder[right.category] ?? 2);
+    return categoryDifference || left.name.localeCompare(right.name, undefined, { sensitivity: 'base' });
+  });
 }
 
 export function renderWeightPanel(container, objects = S.selectedObjects) {
