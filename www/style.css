@@ -279,6 +279,7 @@ body.dark-theme .dark-only {
 }
 
 .empty-title {
+  margin: 0;
   font-size: 1rem;
   font-weight: 600;
   color: var(--text-2);

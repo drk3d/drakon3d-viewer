@@ -1,7 +1,7 @@
 {
   "name": "Drakon3D Viewer",
   "short_name": "Drakon3D",
-  "description": "A local-first web viewer for Rhino 3DM and other CAD/3D files",
+  "description": "Interactive 3D jewelry viewer for e-commerce and design review",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

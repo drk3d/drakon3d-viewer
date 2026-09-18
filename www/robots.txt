@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://viewer.drakon3d.com/sitemap.xml

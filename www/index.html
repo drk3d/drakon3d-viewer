@@ -4,10 +4,33 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>Drakon3D Viewer</title>
-  
-  <meta name="description" content="View and explore 3D jewelry models online with Drakon3D Viewer.">
+
+  <meta name="description" content="Interactive 3D jewelry viewer for e-commerce. Showcase rings, gemstones and custom jewelry online in the browser with Drakon3D.">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://viewer.drakon3d.com/">
+  <meta name="application-name" content="Drakon3D Viewer">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Drakon3D">
+  <meta property="og:title" content="Drakon3D Viewer">
+  <meta property="og:description" content="Interactive 3D jewelry viewer for e-commerce. Showcase rings, gemstones and custom jewelry online in the browser.">
+  <meta property="og:url" content="https://viewer.drakon3d.com/">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Drakon3D Viewer">
+  <meta name="twitter:description" content="Interactive 3D jewelry viewer for e-commerce, custom design review and online sales.">
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "Drakon3D Viewer",
+      "url": "https://viewer.drakon3d.com/",
+      "description": "Interactive 3D jewelry viewer for e-commerce. Showcase rings, gemstones and custom jewelry online in the browser with Drakon3D.",
+      "applicationCategory": "BusinessApplication",
+      "applicationSubCategory": "3D jewelry viewer",
+      "operatingSystem": "Web",
+      "browserRequirements": "Requires a modern browser with WebGL support",
+      "inLanguage": "en"
+    }
+  </script>
   <!-- iOS PWA: "Add to Home Screen" full-screen app behavior.
        Desktop / Android / iOS Safari browser-mode all ignore apple-* tags. -->
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -24,7 +47,7 @@
   <meta name="theme-color" content="#0c0b09"/>
 
   <link rel="stylesheet" href="libs/coloris.min.css">
-  <link rel="stylesheet" href="style.css?v=drakon-1.3">
+  <link rel="stylesheet" href="style.css?v=drakon-1.4">
   <!-- Fonts: use the OS system-font stack from style.css (no webfont download) -->
   <script src="libs/coloris.min.js"></script>
   <script src="libs/rhino3dm.min.js"></script>
@@ -32,6 +55,14 @@
 <body>
 
   <div id="canvas-container"></div>
+
+  <!-- Keep the landing purpose early in the document for search engines and
+       screen readers. It remains the same visible empty state until a model
+       is loaded. -->
+  <main id="empty-state" aria-labelledby="viewer-landing-title">
+    <h1 id="viewer-landing-title" class="empty-title" data-i18n="empty.title">3D Jewelry Viewer</h1>
+    <p class="empty-sub" data-i18n="empty.sub">Explore jewelry models in 3D for e-commerce and design review. Open the FILE sidebar or drop a .3dm, .glb, .stp file here.</p>
+  </main>
 
   <!-- ── Top Bar ── -->
   <header id="top-bar">
@@ -819,11 +850,6 @@
 
   <!-- Color Adjustment panel removed — sliders are now in Settings > Lighting -->
 
-  <!-- ── Empty State ── -->
-  <div id="empty-state">
-    <p class="empty-title" data-i18n="empty.title">No model loaded</p>
-    <p class="empty-sub" data-i18n="empty.sub">Open the FILE sidebar or drop a .3dm, .glb, .stp file here</p>
-  </div>
   <div id="loading" class="hidden">
     <div class="spinner"></div>
     <p id="loading-text">Loading…</p>

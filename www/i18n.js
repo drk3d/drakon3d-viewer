@@ -208,8 +208,8 @@ export const TRANSLATIONS = {
 
     'lang.label':         'Language',
 
-    'empty.title':        'No model loaded',
-    'empty.sub':          'Open the FILE sidebar or drop a .3dm, .glb, .stp file here',
+    'empty.title':        '3D Jewelry Viewer',
+    'empty.sub':          'Explore jewelry models in 3D for e-commerce and design review. Open the FILE sidebar or drop a .3dm, .glb, .stp file here.',
 
     'turntable.spring':      'Speed',
     'turntable.continuous':  'Auto-Rotate',
