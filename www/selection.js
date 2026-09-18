@@ -149,6 +149,55 @@ function isSelectableObject(object) {
   );
 }
 
+function isEffectivelyVisible(object) {
+  for (let current = object; current; current = current.parent) {
+    if (!current.visible) return false;
+  }
+  return true;
+}
+
+function belongsToLayer(object, layerIndex) {
+  if (object?.userData?.attributes?.layerIndex === layerIndex
+      || object?.userData?.layerIndex === layerIndex) return true;
+
+  // Block contents inherit the instance's visible layer. Selecting that
+  // layer should select the contained geometry just as clicking it does.
+  for (let current = object?.parent; current; current = current.parent) {
+    if (current.userData?.instanceLayerIndex === layerIndex) return true;
+  }
+  return false;
+}
+
+// Replaces the current selection with visible selectable objects assigned to
+// one layer. Kept in selection.js so outlines, Properties, and Gumball stay
+// in sync with normal canvas selection.
+export function selectObjectsByLayer(layerIndex) {
+  if (!S.currentModel || !Number.isInteger(layerIndex)) return 0;
+
+  const targets = [];
+  const collect = object => {
+    if (isSelectableObject(object)
+        && isEffectivelyVisible(object)
+        && belongsToLayer(object, layerIndex)) {
+      targets.push(object);
+    }
+  };
+
+  S.currentModel.traverse(collect);
+  if (S.annotationGroup && S.annotationGroup.parent !== S.currentModel) {
+    S.annotationGroup.traverse(collect);
+  }
+  if (targets.length === 0) return 0;
+
+  clearSelection();
+  targets.forEach(object => {
+    S.selectedObjects.push(object);
+    addSelectionOutline(object);
+  });
+  refreshSelectionUi();
+  return targets.length;
+}
+
 function getGroupIndices(object) {
   // Rhino3dmLoader exposes native 3DM groups as groupIds. groupIndices is our
   // retained bridge for models that pass through the cleaned loading document.

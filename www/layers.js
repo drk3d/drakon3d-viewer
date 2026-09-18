@@ -1,6 +1,8 @@
 import { S } from './state.js';
 import { applyLayerColorsToModel, applyDisplayMode } from './display.js';
 import { createAnnotationSprites } from './annotations.js';
+import { selectObjectsByLayer } from './selection.js';
+import { t } from './i18n.js';
 
 // Tracks which parent layers are collapsed (by layer index). Persists across
 // re-renders within a session; stale indices from a previous file are harmless.
@@ -119,6 +121,16 @@ export function renderLayerUI() {
                width:100%;padding:0 2px;outline:none;transition:border-bottom 0.2s;"
         onfocus="this.style.borderBottom='1px solid var(--primary)'"
         onblur="this.style.borderBottom='1px solid transparent'">
+      <button class="layer-select-btn icon-btn sm" data-index="${layer.index}"
+        style="color:var(--text-2);background:transparent;border:none;cursor:pointer;
+               flex-shrink:0;width:18px;height:18px;" title="${t('layer.select_objects')}"
+        data-i18n-title="layer.select_objects" aria-label="${t('layer.select_objects')}">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/>
+          <path d="M13 13l6 6"/>
+        </svg>
+      </button>
       <button class="layer-toggle-btn icon-btn sm ${layer.visible ? 'active' : ''}"
         data-index="${layer.index}"
         style="color:${visColor};background:transparent;border:none;cursor:pointer;
@@ -186,6 +198,13 @@ export function renderLayerUI() {
         renderLayerUI();
         updateLayerVisibility();
       }
+    });
+  });
+
+  list.querySelectorAll('.layer-select-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      selectObjectsByLayer(parseInt(e.currentTarget.dataset.index));
     });
   });
 
