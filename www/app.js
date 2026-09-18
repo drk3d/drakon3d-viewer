@@ -144,6 +144,7 @@ const _sharedModelId       = _viewerQuery.get('share');
 // Individual controls are opt-in flags so future embed options can be added
 // without breaking existing embedded share links.
 const _isEmbedSession       = _viewerQuery.get('embed') === '1';
+const _embedHidesHeader     = _isEmbedSession && _viewerQuery.get('header') === '0';
 const _embedHidesFileMenu   = _isEmbedSession && _viewerQuery.get('file') === '0';
 const _embedUsesFullViewport = _isEmbedSession && _viewerQuery.get('viewport') === 'full';
 const _sharePrepareToken   = _readSharePrepareToken();
@@ -154,6 +155,7 @@ const _viewerHomeUrl       = 'https://viewer.drakon3d.com/';
 
 if (_isEmbedSession) {
   document.documentElement.classList.add('embed-session');
+  if (_embedHidesHeader) document.documentElement.classList.add('embed-hides-header');
   if (_embedUsesFullViewport) document.documentElement.classList.add('embed-full-viewport');
 }
 
@@ -176,7 +178,8 @@ if (_hasPlainPackage || _hasEncryptedPackage || _sharedModelId) {
   }
 
   // Optional: hide the File menu entirely. Export packages use the global
-  // flag; embeds use `?embed=1&file=0`. A plain `embed=1` keeps it visible.
+  // flag; embeds use `?embed=1&file=0`. `header=0` hides the whole header,
+  // including File, so it intentionally needs no separate File menu flag.
   if (window.__RHV_HIDE_FILE__ || _embedHidesFileMenu) {
     const fileBtn = document.getElementById('btn-file');
     if (fileBtn) fileBtn.style.display = 'none';

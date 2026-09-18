@@ -69,6 +69,7 @@ test('the social share page provides browser and direct share choices for an act
   assert.match(html, /WhatsApp/);
   assert.match(html, /mailto:/);
   assert.match(html, /Embed/);
+  assert.match(html, /Hide header/);
   assert.match(html, /Fit 3D viewport to embed size/);
   assert.match(html, /id="close-share"/);
   assert.match(html, new RegExp(`/s/${SHARE_ID}`));
@@ -85,12 +86,12 @@ test('an embedded public share forwards only its presentation flags into Viewer'
   });
 
   const response = await worker.fetch(new Request(
-    `https://worker.example/s/${SHARE_ID}?embed=1&file=0&viewport=full&ignored=value`,
+    `https://worker.example/s/${SHARE_ID}?embed=1&header=0&file=0&viewport=full&ignored=value`,
   ), environment, { waitUntil() {} });
   const html = await response.text();
 
   assert.equal(response.status, 200);
-  assert.match(html, new RegExp(`share=${SHARE_ID}\\u0026embed=1\\u0026file=0\\u0026viewport=full`));
+  assert.match(html, new RegExp(`share=${SHARE_ID}\\u0026embed=1\\u0026header=0\\u0026file=0\\u0026viewport=full`));
   assert.doesNotMatch(html, /ignored=value/);
 });
 
