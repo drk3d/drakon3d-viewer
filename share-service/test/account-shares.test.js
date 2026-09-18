@@ -69,7 +69,8 @@ test('the social share page provides browser and direct share choices for an act
   assert.match(html, /WhatsApp/);
   assert.match(html, /mailto:/);
   assert.match(html, /Embed/);
-  assert.match(html, /Keep 3D viewport full size/);
+  assert.match(html, /Fit 3D viewport to embed size/);
+  assert.match(html, /id="close-share"/);
   assert.match(html, new RegExp(`/s/${SHARE_ID}`));
 });
 
