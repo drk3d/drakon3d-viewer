@@ -100,6 +100,15 @@ function isModelMesh(object) {
     && object.name !== 'ground-plane';
 }
 
+function isEffectivelyVisible(object) {
+  // A visible mesh can still sit under a hidden instance/group. The renderer
+  // hides it in that case, so whole-family Material operations must too.
+  for (let current = object; current; current = current.parent) {
+    if (!current.visible) return false;
+  }
+  return true;
+}
+
 function materialNamesFor(object) {
   const layerIndex = object.userData?.attributes?.layerIndex ?? 0;
   const layer = S.parsedLayers.find(entry => entry.index === layerIndex);
@@ -255,7 +264,9 @@ export function applyMetalPreset(presetId, targetObjects = null) {
   const targets = selectedMeshes.length > 0 ? selectedMeshes : [];
   if (targets.length === 0) {
     S.currentModel.traverse(object => {
-      if (isModelMesh(object) && isDetectedMetal(object)) targets.push(object);
+      if (isModelMesh(object) && isEffectivelyVisible(object) && isDetectedMetal(object)) {
+        targets.push(object);
+      }
     });
   }
 
@@ -280,7 +291,9 @@ export function applyGemPreset(presetId, targetObjects = null) {
   const targets = selectedMeshes.length > 0 ? selectedMeshes : [];
   if (targets.length === 0) {
     S.currentModel.traverse(object => {
-      if (isModelMesh(object) && isDetectedGem(object)) targets.push(object);
+      if (isModelMesh(object) && isEffectivelyVisible(object) && isDetectedGem(object)) {
+        targets.push(object);
+      }
     });
   }
 
