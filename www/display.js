@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { S, getEffectiveEnvironmentPreset } from './state.js';
 import { setupLights, updateGroundAppearance, applyFileSunSettings } from './lighting.js';
-import { isPageVisuallyDark } from './helpers.js';
+import { isPageVisuallyDark, updateSliderFill } from './helpers.js';
+import { BACKGROUND_PRESETS } from './background-presets.js';
 import { createGemstoneMaterial, gemstoneKindFromNames, gemstoneWhiteFallbackColorFromNames } from './gem-material.js';
 import { catalogueMaterialOverrideFromNames } from './material-library.js';
 import { isDrakonGemType } from './drakon-objects.js';
@@ -13,6 +14,48 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 const GEM_WIRES_NAME = 'gem-wires';
 const GEM_WIRE_LINE_WIDTH = 2.5;
 const GEM_WIRE_NAME_PATTERN = /\b(?:gem|diamond|almandite|amethyst|aquamarine|aventurine|chalcedony|citrine|emerald|garnet|hiddenite|jade|kunzite|lapis\s+lazuli|malachite|opal|pearl|precious\s+beryl|quartz|ruby|sapphire|topaz|tourmaline|turquoise|zircon)\b/i;
+
+function setBackgroundColor(inputId, swatchId, color) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  input.value = color;
+  const colorisWrapper = input.parentElement?.classList.contains('clr-field') ? input.parentElement : null;
+  if (colorisWrapper) colorisWrapper.style.color = color;
+  const swatch = document.getElementById(swatchId);
+  if (swatch) swatch.style.background = color;
+}
+
+// Applies the exact settings used by the Background choices in Materials.
+// `applyFileBackground` calls this too, so imported 3DM backgrounds are
+// translated to the Viewer presets rather than reproducing arbitrary Rhino
+// colors that may not suit jewelry presentation.
+export function applyBackgroundPreset(presetId) {
+  const preset = BACKGROUND_PRESETS.find(entry => entry.id === presetId);
+  const typeSelect = document.getElementById('bg-type-select');
+  if (!preset || !typeSelect) return false;
+
+  typeSelect.value = preset.type;
+  setBackgroundColor('bg-panel-c1', 'bg-panel-swatch-c1', preset.color1);
+  setBackgroundColor('bg-panel-c2', 'bg-panel-swatch-c2', preset.color2);
+
+  const spread = document.getElementById('bg-radial-spread');
+  if (spread) {
+    spread.value = String(preset.spread);
+    const valueLabel = document.getElementById('bg-radial-spread-val');
+    if (valueLabel) valueLabel.textContent = `${Math.round(preset.spread * 100)}%`;
+    updateSliderFill(spread);
+  }
+
+  const isRadial = preset.type === 'radial';
+  document.getElementById('picker-c1')?.classList.remove('hidden');
+  document.getElementById('picker-c2')?.classList.remove('hidden');
+  document.getElementById('picker-c3')?.classList.add('hidden');
+  document.getElementById('picker-c4')?.classList.add('hidden');
+  document.getElementById('btn-bg-swap-colors')?.classList.remove('hidden');
+  document.getElementById('bg-radial-section')?.classList.toggle('hidden', !isRadial);
+  applySceneBackground();
+  return true;
+}
 
 function isGemWireTarget(mesh) {
   if (mesh?.userData?.customMaterial?.materialCategory === 'gem') return true;
@@ -216,50 +259,27 @@ export function applySceneBackground() {
 }
 
 export function applyFileBackground() {
-  const bgSel    = document.getElementById('bg-type-select');
-  const c1Input  = document.getElementById('bg-panel-c1');
-  const c2Input  = document.getElementById('bg-panel-c2');
-  const c3Input  = document.getElementById('bg-panel-c3');
-  const c4Input  = document.getElementById('bg-panel-c4');
-  if (!bgSel) return;
+  const sourceColors = [
+    S.fileBackgroundColorTop,
+    S.fileBackgroundColorBottom,
+    S.fileBackgroundColorTL,
+    S.fileBackgroundColorTR,
+    S.fileBackgroundColorBL,
+    S.fileBackgroundColorBR
+  ].filter(color => /^#[0-9a-f]{6}$/i.test(String(color || '')));
 
-  // bg type — driven by S.fileDefaultBgStyle (loaders.js sets it from
-  // rs.backgroundStyle enum, with 4-corner upgrade if RDK XML carries one).
-  let newType = 'solid';
-  const styleStr = String(S.fileDefaultBgStyle || '').toLowerCase();
-  if (styleStr === 'gradient4')      newType = 'gradient4';
-  else if (styleStr === 'gradient2') newType = 'gradient2';
-  else if (styleStr === 'solid')     newType = 'solid';
-  else if (styleStr.includes('gradient')) newType = 'gradient2';
-  bgSel.value = newType;
-
-  // Colors — already stored as sRGB hex strings in state (no THREE.Color round-trip).
-  const isDark = isPageVisuallyDark();
-  const defaults = isDark
-    ? { c1: '#24252a', c2: '#1b1c20', c3: '#2d3748', c4: '#1a202c' }
-    : { c1: '#ffffff', c2: '#e0e0e0', c3: '#d6dae0', c4: '#bfc4cc' };
-
-  // For gradient4, prefer 4 explicit corners. Map TL→c1, TR→c2, BL→c3, BR→c4
-  // (matches the bilinear-weight layout in applySceneBackground's gradient4 branch).
-  const hex1 = (newType === 'gradient4' ? S.fileBackgroundColorTL : S.fileBackgroundColorTop)    || defaults.c1;
-  const hex2 = (newType === 'gradient4' ? S.fileBackgroundColorTR : S.fileBackgroundColorBottom) || defaults.c2;
-  const hex3 = (newType === 'gradient4' ? S.fileBackgroundColorBL : null) || defaults.c3;
-  const hex4 = (newType === 'gradient4' ? S.fileBackgroundColorBR : null) || defaults.c4;
-
-  updateColorPickerInput(c1Input, hex1);
-  updateColorPickerInput(c2Input, hex2);
-  updateColorPickerInput(c3Input, hex3);
-  updateColorPickerInput(c4Input, hex4);
-
-  const isSolid  = newType === 'solid';
-  const isRadial = newType === 'radial';
-  const isGrad4  = newType === 'gradient4';
-  document.getElementById('picker-c1')?.classList.remove('hidden');
-  document.getElementById('picker-c2')?.classList.toggle('hidden', isSolid);
-  document.getElementById('picker-c3')?.classList.toggle('hidden', !isGrad4);
-  document.getElementById('picker-c4')?.classList.toggle('hidden', !isGrad4);
-  document.getElementById('btn-bg-swap-colors')?.classList.toggle('hidden', newType !== 'gradient2' && newType !== 'radial');
-  document.getElementById('bg-radial-section')?.classList.toggle('hidden', !isRadial);
+  // Map Rhino's authored background to a dependable jewelry-viewer preset.
+  // White/light document backgrounds use the same Light card in Materials;
+  // black/dark ones use the same Dark card. This deliberately avoids copying
+  // the source RGB values one-for-one.
+  const toLuminance = hex => {
+    const [r, g, b] = [1, 3, 5].map(offset => parseInt(hex.slice(offset, offset + 2), 16) / 255);
+    return (0.2126 * r) + (0.7152 * g) + (0.0722 * b);
+  };
+  const averageLuminance = sourceColors.length
+    ? sourceColors.reduce((total, color) => total + toLuminance(color), 0) / sourceColors.length
+    : (isPageVisuallyDark() ? 0 : 1);
+  applyBackgroundPreset(averageLuminance >= 0.5 ? 'light' : 'dark');
 
   // Apply file sun settings (on/off, azimuth, elevation, intensity) as well
   try {
@@ -267,18 +287,6 @@ export function applyFileBackground() {
   } catch (err) {
     console.warn('[display] applyFileSunSettings err:', err);
   }
-}
-
-function updateColorPickerInput(inputEl, hex) {
-  if (!inputEl) return;
-  inputEl.value = hex;
-  const wrapper = inputEl.parentNode;
-  if (wrapper && wrapper.classList.contains('clr-field')) {
-    wrapper.style.color = hex;
-    const btn = wrapper.querySelector('button');
-    if (btn) btn.style.backgroundColor = hex;
-  }
-  inputEl.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
 // ── Display Modes ────────────────────────────────────────────────────────────

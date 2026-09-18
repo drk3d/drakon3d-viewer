@@ -1,10 +1,15 @@
 import { S } from './state.js';
-import { applyDisplayMode, applySceneBackground } from './display.js';
-import { showToast, updateSliderFill } from './helpers.js';
+import { applyBackgroundPreset, applyDisplayMode } from './display.js';
+import { showToast } from './helpers.js';
 import { History } from './history.js';
 import { t } from './i18n.js';
 import { isDrakonGemType } from './drakon-objects.js';
 import { isLegacyGem } from './legacy-gems.js';
+import { BACKGROUND_PRESETS } from './background-presets.js';
+
+// Preserve the previous public module exports for any standalone integrations.
+export { BACKGROUND_PRESETS } from './background-presets.js';
+export { applyBackgroundPreset } from './display.js';
 
 // Drakon catalogue presets. Physical values come from the supplied
 // materials.rhv library; Zircon is intentionally absent because its source
@@ -79,21 +84,6 @@ export const GEM_PRESETS = [
   { id: 'pearl-black', name: 'Pearl Black', icon: gemIcon('pearl-black'), colorLinear: [0.01161225, 0.01520851, 0.01161225], roughness: 0.55, clearcoat: 0.55, ior: 1.43902438 },
   { id: 'pearl', name: 'Pearl', icon: gemIcon('pearl'), color: '#EEEAE3', roughness: 0.2, clearcoat: 0.86, ior: 1.43902438 },
   { id: 'turquoise', name: 'Turquoise', icon: gemIcon('turquoise'), color: '#4CBBC2', roughness: 0.15, clearcoat: 0.32, ior: 2.33333333 }
-];
-
-export const BACKGROUND_PRESETS = [
-  {
-    id: 'light', labelKey: 'materials.background_light', icon: 'assets/materials/background-light.png',
-    type: 'gradient2', color1: '#ffffff', color2: '#a0a0a0', spread: 0.5
-  },
-  {
-    id: 'dark', labelKey: 'materials.background_dark', icon: 'assets/materials/background-dark.png',
-    type: 'radial', color1: '#121212', color2: '#000000', spread: 1
-  },
-  {
-    id: 'dark-blue', labelKey: 'materials.background_dark_blue', icon: 'assets/materials/background-dark-blue.png',
-    type: 'radial', color1: '#020114', color2: '#000000', spread: 1
-  }
 ];
 
 const CATALOGUE_PRESETS = [...METAL_PRESETS, ...GEM_PRESETS];
@@ -304,44 +294,6 @@ export function applyGemPreset(presetId, targetObjects = null) {
   showToast(`${preset.name} applied to ${targets.length} object${targets.length === 1 ? '' : 's'}.`);
 }
 
-function setBackgroundColor(inputId, swatchId, color) {
-  const input = document.getElementById(inputId);
-  if (!input) return;
-  input.value = color;
-  const colorisWrapper = input.parentElement?.classList.contains('clr-field') ? input.parentElement : null;
-  if (colorisWrapper) colorisWrapper.style.color = color;
-  const swatch = document.getElementById(swatchId);
-  if (swatch) swatch.style.background = color;
-}
-
-export function applyBackgroundPreset(presetId) {
-  const preset = BACKGROUND_PRESETS.find(entry => entry.id === presetId);
-  const typeSelect = document.getElementById('bg-type-select');
-  if (!preset || !typeSelect) return;
-
-  typeSelect.value = preset.type;
-  setBackgroundColor('bg-panel-c1', 'bg-panel-swatch-c1', preset.color1);
-  setBackgroundColor('bg-panel-c2', 'bg-panel-swatch-c2', preset.color2);
-
-  const spread = document.getElementById('bg-radial-spread');
-  if (spread) {
-    spread.value = String(preset.spread);
-    const valueLabel = document.getElementById('bg-radial-spread-val');
-    if (valueLabel) valueLabel.textContent = `${Math.round(preset.spread * 100)}%`;
-    updateSliderFill(spread);
-  }
-
-  const isRadial = preset.type === 'radial';
-  document.getElementById('picker-c1')?.classList.remove('hidden');
-  document.getElementById('picker-c2')?.classList.remove('hidden');
-  document.getElementById('picker-c3')?.classList.add('hidden');
-  document.getElementById('picker-c4')?.classList.add('hidden');
-  document.getElementById('btn-bg-swap-colors')?.classList.remove('hidden');
-  document.getElementById('bg-radial-section')?.classList.toggle('hidden', !isRadial);
-  applySceneBackground();
-  showToast(`${t(preset.labelKey)} — ${t('materials.background')}`);
-}
-
 function renderPresetGrid(gridTarget, presets, applyPreset) {
   const grid = typeof gridTarget === 'string' ? document.getElementById(gridTarget) : gridTarget;
   if (!grid) return;
@@ -420,7 +372,12 @@ export function renderMaterialsPanel() {
     toggleId: 'background-material-toggle',
     presets: BACKGROUND_PRESETS,
     previewCount: 3,
-    applyPreset: presetId => applyBackgroundPreset(presetId)
+    applyPreset: presetId => {
+      const preset = BACKGROUND_PRESETS.find(entry => entry.id === presetId);
+      if (applyBackgroundPreset(presetId) && preset) {
+        showToast(`${t(preset.labelKey)} — ${t('materials.background')}`);
+      }
+    }
   });
 }
 

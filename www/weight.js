@@ -55,6 +55,13 @@ function isModelMesh(object) {
   return object?.isMesh && !['rhino-edges', 'rhino-outline', 'selection-outline', 'ground-plane'].includes(object.name);
 }
 
+function isEffectivelyVisible(object) {
+  for (let current = object; current; current = current.parent) {
+    if (!current.visible) return false;
+  }
+  return true;
+}
+
 function materialNamesFor(object) {
   const layer = S.parsedLayers.find(entry => entry.index === (object.userData?.attributes?.layerIndex ?? 0));
   return [
@@ -159,7 +166,11 @@ export function getWeightRows(objects = null) {
     ? objects.filter(isModelMesh)
     : (() => {
         const all = [];
-        S.currentModel?.traverse(object => { if (isModelMesh(object)) all.push(object); });
+        // With no selection, Weight represents exactly what the user can see.
+        // Walk ancestors as well because an entire layer/group can be hidden.
+        S.currentModel?.traverse(object => {
+          if (isModelMesh(object) && isEffectivelyVisible(object)) all.push(object);
+        });
         return all;
       })();
   const unitScale = unitToMillimetres(S.modelUnit);
