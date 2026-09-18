@@ -5,6 +5,7 @@ import { History } from './history.js';
 import { bindSliderDblClickInput } from './helpers.js';
 import { t } from './i18n.js';
 import { renderObjectMaterialsPanel } from './material-library.js';
+import { renderWeightPanel } from './weight.js';
 
 // ── Pointer hit-test / selection ─────────────────────────────────────────────
 
@@ -289,7 +290,7 @@ export function clearSelection() {
 
 // ── Properties panel ──────────────────────────────────────────────────────────
 
-let _activePropTab = 'props'; // 'props' | 'materials' | 'usertext'
+let _activePropTab = 'props'; // 'props' | 'materials' | 'weight' | 'usertext'
 let _lastPropSelection = [];
 let _utSortCol = null;        // null | 'key' | 'value'
 let _utSortDir = 'asc';       // 'asc' | 'desc'
@@ -298,6 +299,7 @@ function _setPropTab(tab) {
   _activePropTab = tab;
   document.getElementById('prop-tab-props')?.classList.toggle('active', tab === 'props');
   document.getElementById('prop-tab-materials')?.classList.toggle('active', tab === 'materials');
+  document.getElementById('prop-tab-weight')?.classList.toggle('active', tab === 'weight');
   document.getElementById('prop-tab-usertext')?.classList.toggle('active', tab === 'usertext');
 
   // Keep the floating panel heading in sync with the active view. Store the
@@ -322,9 +324,14 @@ function _switchPropTab(tab) {
 function _bindPropTabs() {
   document.getElementById('prop-tab-props')?.addEventListener('click', () => _switchPropTab('props'));
   document.getElementById('prop-tab-materials')?.addEventListener('click', () => _switchPropTab('materials'));
+  document.getElementById('prop-tab-weight')?.addEventListener('click', () => _switchPropTab('weight'));
   document.getElementById('prop-tab-usertext')?.addEventListener('click', () => _switchPropTab('usertext'));
 }
 _bindPropTabs();
+
+export function showWeightPanel() {
+  _switchPropTab('weight');
+}
 
 function _getUserText(obj) {
   // Normalise whatever getUserStrings() returns into [{key, value}] pairs.
@@ -357,7 +364,7 @@ function _getUserText(obj) {
 
 export function updatePropertiesPanel() {
   const panel = document.getElementById('object-properties');
-  if (!S.selectedObjects.length) {
+  if (!S.selectedObjects.length && _activePropTab !== 'weight') {
     _lastPropSelection = [];
     panel.classList.add('hidden');
     return;
@@ -366,7 +373,7 @@ export function updatePropertiesPanel() {
   const selectionChanged = S.selectedObjects.length !== _lastPropSelection.length
     || S.selectedObjects.some((object, index) => object !== _lastPropSelection[index]);
   if (selectionChanged) {
-    _setPropTab(S.currentMode === 'rendered' ? 'materials' : 'props');
+    if (_activePropTab !== 'weight') _setPropTab(S.currentMode === 'rendered' ? 'materials' : 'props');
     _lastPropSelection = [...S.selectedObjects];
   }
 
@@ -374,6 +381,12 @@ export function updatePropertiesPanel() {
 
   if (_activePropTab === 'materials') {
     renderObjectMaterialsPanel(document.getElementById('prop-content'), S.selectedObjects);
+    panel.classList.remove('hidden');
+    return;
+  }
+
+  if (_activePropTab === 'weight') {
+    renderWeightPanel(document.getElementById('prop-content'), S.selectedObjects);
     panel.classList.remove('hidden');
     return;
   }

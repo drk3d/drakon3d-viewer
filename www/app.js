@@ -42,7 +42,7 @@ import {
   rebuildClippingGrid, applyClipWidgetVisibility
 } from './tools.js';
 import { initPenInput } from './pen-input.js';
-import { onPointerDown, clearSelection, updatePropertiesPanel, addSelectionOutline, setupGumballHelper, clearGumballHelper, ensureOriginalTransform, expandSelectionToGroups } from './selection.js';
+import { onPointerDown, clearSelection, updatePropertiesPanel, addSelectionOutline, setupGumballHelper, clearGumballHelper, ensureOriginalTransform, expandSelectionToGroups, showWeightPanel } from './selection.js';
 import { buildClippingCap, destroyClippingCap, setClippingCapEnabled, setClippingCapColor, updateClippingCapPose } from './clip-cap.js';
 
 // Notes UI is loaded lazily so the rest of the app boots even if the user
@@ -2379,6 +2379,12 @@ function bindUI() {
     deactivateAllTools();
     activateNoteTool();
     updateToolsDropdownActiveState();
+  });
+
+  document.getElementById('btn-tool-weight')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.getElementById('tools-dropdown')?.classList.add('hidden');
+    showWeightPanel();
   });
 
   document.getElementById('btn-tool-clipping').addEventListener('click', (e) => {
