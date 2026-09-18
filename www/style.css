@@ -2303,17 +2303,43 @@ body.light-theme #progress-bar-container {
 
 /* ── Dark Mode Fixes ── */
 
-/* Keep the unused Settings slider track distinct from the dark panel while
-   preserving the white thumb and the primary-colour filled portion. */
-[data-theme="dark"] input[type="range"],
-body.dark-theme input[type="range"] {
+/* The Settings sliders use 7px vertical padding for a generous hit target.
+   Their input content box is therefore zero-height.  Painting the dark track
+   on the input and clipping to that box made it invisible, so paint the
+   actual browser track instead. */
+[data-theme="dark"] .sliders-grid input[type="range"],
+body.dark-theme .sliders-grid input[type="range"] {
+  height: 14px;
+  padding: 0;
+  background: transparent !important;
+  background-clip: border-box !important;
+}
+[data-theme="dark"] .sliders-grid input[type="range"]::-webkit-slider-runnable-track,
+body.dark-theme .sliders-grid input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
   background: linear-gradient(to right,
     var(--primary) 0%,
     var(--primary) var(--fill, 50%),
     rgba(255,255,255,0.40) var(--fill, 50%),
     rgba(255,255,255,0.40) 100%
-  ) !important;
-  background-clip: content-box !important;
+  );
+  border-radius: 999px;
+}
+[data-theme="dark"] .sliders-grid input[type="range"]::-webkit-slider-thumb,
+body.dark-theme .sliders-grid input[type="range"]::-webkit-slider-thumb {
+  margin-top: -5px;
+}
+[data-theme="dark"] .sliders-grid input[type="range"]::-moz-range-track,
+body.dark-theme .sliders-grid input[type="range"]::-moz-range-track {
+  height: 4px;
+  background: rgba(255,255,255,0.40);
+  border-radius: 999px;
+}
+[data-theme="dark"] .sliders-grid input[type="range"]::-moz-range-progress,
+body.dark-theme .sliders-grid input[type="range"]::-moz-range-progress {
+  height: 4px;
+  background: var(--primary);
+  border-radius: 999px;
 }
 
 /* Issue 8: Native <select> option text visible in dark mode */
