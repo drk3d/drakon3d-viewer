@@ -540,7 +540,12 @@ async function getShareLandingPage(id, request, env, ctx) {
   const landingUrl = new URL(request.url);
   if (landingUrl.searchParams.get('embed') === '1') {
     viewerUrl.searchParams.set('embed', '1');
-    if (landingUrl.searchParams.get('header') === '0') viewerUrl.searchParams.set('header', '0');
+    if (landingUrl.searchParams.get('header') === '0') {
+      viewerUrl.searchParams.set('header', '0');
+      // A distinct Viewer document URL prevents an iframe from reusing its
+      // pre-header-hide document from the browser or the Wix preview cache.
+      viewerUrl.searchParams.set('embedVersion', '2');
+    }
     if (landingUrl.searchParams.get('file') === '0') viewerUrl.searchParams.set('file', '0');
     if (landingUrl.searchParams.get('viewport') === 'full') viewerUrl.searchParams.set('viewport', 'full');
   }

@@ -155,7 +155,14 @@ const _viewerHomeUrl       = 'https://viewer.drakon3d.com/';
 
 if (_isEmbedSession) {
   document.documentElement.classList.add('embed-session');
-  if (_embedHidesHeader) document.documentElement.classList.add('embed-hides-header');
+  if (_embedHidesHeader) {
+    document.documentElement.classList.add('embed-hides-header');
+    // Do this inline as well as in CSS. Existing iframe visitors can have an
+    // older cached stylesheet, whereas the header must never remain visible
+    // when the generated embed link explicitly requests header=0.
+    const topBar = document.getElementById('top-bar');
+    if (topBar) topBar.style.display = 'none';
+  }
   if (_embedUsesFullViewport) document.documentElement.classList.add('embed-full-viewport');
 }
 
