@@ -2032,6 +2032,19 @@ body.dark-theme .footer-logo.light-only {
   box-sizing: border-box;
 }
 
+/* Keep the Background > Spread value inside the existing Settings panel.
+   Only its range track is allowed to shrink on narrow layouts. */
+#bg-radial-section {
+  min-width: 0;
+}
+#bg-radial-section .slider-row {
+  grid-template-columns: 85px minmax(0, 1fr) 45px;
+  min-width: 0;
+}
+#bg-radial-section input[type="range"] {
+  min-width: 0;
+}
+
 /* ── HTML Dynamic Layer List Items ── */
 .layer-editable-name {
   background: none;
