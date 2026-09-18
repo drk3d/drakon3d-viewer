@@ -306,9 +306,11 @@ function _setPropTab(tab) {
   // key on the heading so a later language change updates it as well.
   const titleKey = tab === 'materials'
     ? 'props.tab_materials'
-    : tab === 'usertext'
-      ? 'props.tab_usertext'
-      : 'props.title';
+    : tab === 'weight'
+      ? 'props.tab_weight'
+      : tab === 'usertext'
+        ? 'props.tab_usertext'
+        : 'props.title';
   const title = document.querySelector('#object-properties .prop-drag-handle h3');
   if (title) {
     title.dataset.i18n = titleKey;
