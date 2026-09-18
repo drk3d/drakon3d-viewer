@@ -482,7 +482,7 @@ export const TRANSLATIONS = {
 
     'lang.label':         '언어',
 
-    'empty.title':        '모델이 로드되지 않았습니다',
+    'empty.title':        '3D 주얼리 뷰어',
     'empty.sub':          'FILE(파일) 사이드바를 열거나 .3dm, .glb, .stp 파일을 여기에 놓으세요',
 
     'turntable.spring':      '속도',
@@ -739,7 +739,7 @@ export const TRANSLATIONS = {
 
     'lang.label':         'Langue',
 
-    'empty.title':        'Aucun modèle chargé',
+    'empty.title':        'Visionneuse 3D de bijoux',
     'empty.sub':          'Ouvrez la barre latérale FILE (Fichier) ou déposez un fichier .3dm, .glb, .stp ici',
 
     'turntable.spring':   'Rotation ressort',
@@ -974,7 +974,7 @@ export const TRANSLATIONS = {
 
     'lang.label':         'Sprache',
 
-    'empty.title':        'Kein Modell geladen',
+    'empty.title':        '3D-Schmuck-Viewer',
     'empty.sub':          'Öffnen Sie die Seitenleiste FILE (Datei) oder legen Sie eine .3dm, .glb, .stp Datei hier ab',
 
     'turntable.spring':   'Federdrehung',
@@ -1209,7 +1209,7 @@ export const TRANSLATIONS = {
 
     'lang.label':         'Idioma',
 
-    'empty.title':        'No hay modelo cargado',
+    'empty.title':        'Visor 3D de joyería',
     'empty.sub':          'Abre la barra lateral FILE (Archivo) o suelta un archivo .3dm, .glb, .stp aquí',
 
     'turntable.spring':   'Giro de resorte',
@@ -1444,7 +1444,7 @@ export const TRANSLATIONS = {
 
     'lang.label':         'Lingua',
 
-    'empty.title':        'Nessun modello caricato',
+    'empty.title':        'Visualizzatore 3D di gioielli',
     'empty.sub':          'Apri la barra laterale FILE o trascina un file .3dm, .glb, .stp qui',
 
     'turntable.spring':   'Rotazione a molla',
@@ -1679,7 +1679,7 @@ export const TRANSLATIONS = {
 
     'lang.label':         '言語',
 
-    'empty.title':        'モデルが読み込まれていません',
+    'empty.title':        '3Dジュエリービューア',
     'empty.sub':          'FILE(ファイル) サイドバーを開くか、.3dm, .glb, .stp ファイルをここにドロップ',
 
     'turntable.spring':   'スプリング回転',
@@ -1914,7 +1914,7 @@ export const TRANSLATIONS = {
 
     'lang.label':         '语言',
 
-    'empty.title':        '未加载模型',
+    'empty.title':        '3D 珠宝查看器',
     'empty.sub':          '打开 FILE(文件) 侧边栏或将 .3dm, .glb, .stp 文件拖放至此',
 
     'turntable.spring':   '弹簧旋转',
@@ -2149,7 +2149,7 @@ export const TRANSLATIONS = {
 
     'lang.label':         '語言',
 
-    'empty.title':        '未載入模型',
+    'empty.title':        '3D 珠寶檢視器',
     'empty.sub':          '開啟 FILE(檔案) 側邊欄或將 .3dm, .glb, .stp 檔案拖曳至此',
 
     'turntable.spring':   '彈簧旋轉',
@@ -2384,7 +2384,7 @@ export const TRANSLATIONS = {
 
     'lang.label':         'Idioma',
 
-    'empty.title':        'Nenhum modelo carregado',
+    'empty.title':        'Visualizador 3D de joalharia',
     'empty.sub':          'Abra a barra lateral FILE (Arquivo) ou solte um arquivo .3dm, .glb, .stp aqui',
 
     'turntable.spring':   'Giro por mola',
@@ -2619,7 +2619,7 @@ export const TRANSLATIONS = {
 
     'lang.label':         'Jazyk',
 
-    'empty.title':        'Není načten žádný model',
+    'empty.title':        '3D prohlížeč šperků',
     'empty.sub':          'Otevřete postranní panel FILE (Soubor) nebo přetáhněte soubor .3dm, .glb, .stp sem',
 
     'turntable.spring':   'Pružinové otáčení',
@@ -2854,7 +2854,7 @@ export const TRANSLATIONS = {
 
     'lang.label':         'Język',
 
-    'empty.title':        'Nie załadowano modelu',
+    'empty.title':        'Przeglądarka biżuterii 3D',
     'empty.sub':          'Otwórz pasek boczny FILE (Plik) lub upuść plik .3dm, .glb, .stp tutaj',
 
     'turntable.spring':   'Obrót sprężynowy',
