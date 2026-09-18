@@ -2303,14 +2303,15 @@ body.light-theme #progress-bar-container {
 
 /* ── Dark Mode Fixes ── */
 
-/* Issue 7: Slider bar more visible in dark mode */
+/* Keep the unused Settings slider track distinct from the dark panel while
+   preserving the white thumb and the primary-colour filled portion. */
 [data-theme="dark"] input[type="range"],
 body.dark-theme input[type="range"] {
   background: linear-gradient(to right,
     var(--primary) 0%,
     var(--primary) var(--fill, 50%),
-    rgba(255,255,255,0.32) var(--fill, 50%),
-    rgba(255,255,255,0.32) 100%
+    rgba(255,255,255,0.40) var(--fill, 50%),
+    rgba(255,255,255,0.40) 100%
   ) !important;
   background-clip: content-box !important;
 }
