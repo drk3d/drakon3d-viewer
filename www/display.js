@@ -5,6 +5,7 @@ import { isPageVisuallyDark } from './helpers.js';
 import { createGemstoneMaterial, gemstoneKindFromNames, gemstoneWhiteFallbackColorFromNames } from './gem-material.js';
 import { catalogueMaterialOverrideFromNames } from './material-library.js';
 import { isDrakonGemType } from './drakon-objects.js';
+import { isLegacyGem } from './legacy-gems.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
@@ -16,6 +17,7 @@ const GEM_WIRE_NAME_PATTERN = /\b(?:gem|diamond|almandite|amethyst|aquamarine|av
 function isGemWireTarget(mesh) {
   if (mesh?.userData?.customMaterial?.materialCategory === 'gem') return true;
   if (isDrakonGemType(mesh?.userData?.drakonObjectType)) return true;
+  if (isLegacyGem(mesh)) return true;
   if (/\bgem\b/i.test(mesh?.userData?.attributes?.name || mesh?.name || '')) return true;
 
   const layerIndex = mesh?.userData?.attributes?.layerIndex ?? 0;
@@ -728,7 +730,12 @@ export function applyDisplayMode() {
           base?.name,
           child.userData.originalMaterial?.name
         ];
-        const gemstoneKind = gemstoneKindFromNames(...gemstoneNames);
+        const namedGemstoneKind = gemstoneKindFromNames(...gemstoneNames);
+        // RhinoGold and older Drakon/Panther gems often have no usable Rhino
+        // material name. Their verified object identity is sufficient to use
+        // the neutral Diamond presentation, while a named Ruby/Sapphire/etc.
+        // continues to take precedence whenever the file provides one.
+        const gemstoneKind = namedGemstoneKind || (isLegacyGem(child) ? 'diamond' : null);
         const gemstoneWhiteFallbackColor = gemstoneWhiteFallbackColorFromNames(...gemstoneNames);
         // A material selected from the Viewer catalogue must control the gem
         // shader's tint directly. Reading it back only from the cloned source
@@ -736,7 +743,9 @@ export function applyDisplayMode() {
         // colour, most visibly when switching a coloured stone to Diamond.
         const gemstoneColorOverride = effectiveCustom?.materialCategory === 'gem'
           ? effectiveCustom
-          : null;
+          : (!namedGemstoneKind && isLegacyGem(child)
+              ? catalogueMaterialOverrideFromNames('Diamond')
+              : null);
 
         const buildRendered = () => {
         let m = detachedFromOwnMaterial ? defaultLayerMaterial() : base.clone();

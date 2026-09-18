@@ -14,6 +14,7 @@ import { t } from './i18n.js';
 import { setToolbarModelState, changeDisplayMode } from './app.js';
 import { destroyClippingCap } from './clip-cap.js';
 import { DRAKON_VIEWER_OBJECT_TYPE_KEY, readRhinoUserString } from './drakon-objects.js';
+import { findLegacyGemGeometry, findLegacyGemSignals, isMatrixGemBlockName, LEGACY_GEM_USER_STRING_KEY } from './legacy-gems.js';
 
 // Name used by Rhino3dmLoader for the material it invents when an object has
 // no assigned material (three.js Loader.DEFAULT_MATERIAL_NAME).
@@ -661,6 +662,7 @@ export async function preprocess3dm(file, skipLayerParse) {
   S._objLayerById = new Map();
   S._objGroupIndicesById = new Map();
   S._objDrakonTypeById = new Map();
+  S._objLegacyGemById = new Map();
   S._instanceLayerByPos = new Map();
   S._wireframeFallback = new Map();
   S._brepEdgesById = new Map();
@@ -689,6 +691,7 @@ export async function preprocess3dm(file, skipLayerParse) {
     const buf = await file.arrayBuffer();
     const doc = S.rhinoInstance.File3dm.fromByteArray(new Uint8Array(buf));
     if (!doc) return file;
+    const legacyGemSignals = findLegacyGemSignals(new Uint8Array(buf));
 
     const safeInst = (obj, cls) => !!(cls && (obj instanceof cls));
 
@@ -1243,17 +1246,55 @@ export async function preprocess3dm(file, skipLayerParse) {
     // recursive flattening below, where one block's flatten may need to look
     // up another block's members.
     const idefMembersMap = new Map();
+    const matrixGemIdefIds = new Set();
     try {
       const tmpDefs = doc.instanceDefinitions();
       for (let i = 0; i < tmpDefs.count; i++) {
         const tmpIdef = tmpDefs.get(i);
         if (tmpIdef) {
+          const idefId = String(tmpIdef.id).toLowerCase();
           const tmpIds = tmpIdef.getObjectIds() || [];
-          idefMembersMap.set(String(tmpIdef.id).toLowerCase(), Array.from(tmpIds));
+          idefMembersMap.set(idefId, Array.from(tmpIds));
+          if (isMatrixGemBlockName(tmpIdef.name)) matrixGemIdefIds.add(idefId);
           tmpIdef.delete();
         }
       }
     } catch (e) { console.warn('[pre] idef members map err:', e); }
+
+    // Matrix identifies a gem by its block-definition name, not just its
+    // component geometry. Propagate that source identity to every member now;
+    // the flattening pass below retains the member attribute IDs.
+    const tagMatrixGemIdefMembers = (idefId, visited = new Set()) => {
+      const key = String(idefId).toLowerCase();
+      if (visited.has(key)) return;
+      visited.add(key);
+      const memberIds = idefMembersMap.get(key) || [];
+      for (const memberId of memberIds) {
+        let member = null, geometry = null, attributes = null;
+        try {
+          member = doc.objects().findId(memberId);
+          geometry = member?.geometry();
+          attributes = member?.attributes();
+          const id = attributes?.id;
+          if (id) S._objLegacyGemById.set(id, 'matrix');
+          if (geometry?.constructor?.name === 'InstanceReference' && geometry.parentIdefId) {
+            tagMatrixGemIdefMembers(geometry.parentIdefId, visited);
+          }
+        } catch (error) {
+          console.warn('[pre] Matrix gem block inspection err:', error);
+        } finally {
+          try { geometry?.delete(); } catch {}
+          try { attributes?.delete(); } catch {}
+          try { member?.delete(); } catch {}
+        }
+      }
+    };
+    matrixGemIdefIds.forEach(idefId => tagMatrixGemIdefMembers(idefId));
+
+    const writeLegacyGemMarker = (attributes, source) => {
+      if (!attributes || !source) return;
+      try { attributes.setUserString?.(LEGACY_GEM_USER_STRING_KEY, source); } catch {}
+    };
 
     // Recursively flatten an instance definition: nested InstanceReference
     // members are expanded into transformed clones of the referenced block's
@@ -1288,7 +1329,12 @@ export async function preprocess3dm(file, skipLayerParse) {
             }
           } else if (g && a) {
             const clone = (typeof g.duplicate === 'function') ? g.duplicate() : null;
-            if (clone) { geomArr.push(clone); attrArr.push(a); a !== null && (modelObj._keepAttr = true); }
+            if (clone) {
+              writeLegacyGemMarker(a, S._objLegacyGemById.get(a.id));
+              geomArr.push(clone);
+              attrArr.push(a);
+              a !== null && (modelObj._keepAttr = true);
+            }
           }
         } catch (e) { console.warn('[pre] flatten member err:', e.message); }
         try { if (g) g.delete(); } catch {}
@@ -1520,6 +1566,21 @@ export async function preprocess3dm(file, skipLayerParse) {
         geom = modelObj.geometry();
         attr = modelObj.attributes();
         if (!geom) continue;
+
+        // UserDictionary is intentionally not exposed by rhino3dm.js. Its
+        // binary payload is still part of geometry.encode(), so use the same
+        // stable keys that Drakon's desktop converter uses. The resulting map
+        // is joined back to Three.js meshes by the unmodified Rhino object ID.
+        try {
+          const id = attr?.id;
+          if (id && !S._objLegacyGemById.has(id)) {
+            const source = findLegacyGemGeometry(geom, legacyGemSignals);
+            if (source) S._objLegacyGemById.set(id, source);
+          }
+          if (id) writeLegacyGemMarker(attr, S._objLegacyGemById.get(id));
+        } catch (error) {
+          console.warn('[pre] legacy gem inspection err:', error);
+        }
 
         // Skip objects that live on a Layout page (PageSpace) — the viewer
         // only shows the model-space scene. ActiveSpace: None=0, ModelSpace=1, PageSpace=2.
@@ -2253,6 +2314,10 @@ export function postProcessModel(model, addEdgesFlag, colorsAreSRGBStoredAsLinea
 
       const drakonType = S._objDrakonTypeById?.get(attrs.id);
       if (drakonType) child.userData.drakonObjectType = drakonType;
+
+      const legacyGemSource = readRhinoUserString(attrs, LEGACY_GEM_USER_STRING_KEY)
+        || S._objLegacyGemById?.get(attrs.id);
+      if (legacyGemSource) child.userData.legacyGem = { source: legacyGemSource };
     }
 
     // ── Tag iRefObject groups with the InstanceReference's own layer index

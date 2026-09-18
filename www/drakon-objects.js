@@ -23,7 +23,9 @@ export function readRhinoUserString(attributes, key) {
   } catch {}
 
   try {
-    const raw = attributes?.getUserStrings?.();
+    const raw = typeof attributes?.getUserStrings === 'function'
+      ? attributes.getUserStrings()
+      : attributes?.userStrings;
     if (Array.isArray(raw)) {
       for (const entry of raw) {
         const entryKey = String(entry?.key ?? entry?.[0] ?? '');

@@ -22,7 +22,7 @@ import { setupLights, updateSunLight, updateShadowCasting, addGroundPlane, remov
 import { switchToOrtho, switchToPersp, switchToTwoPoint, apply2PointConstraints, installTwoPointDragHandler, setViewPreset, setWalkthroughMode, triggerCameraTransition, fitCameraToBox, fitCameraToObject, fitCameraToSelected, saveCustomView, renderNamedViewsUI, updateAdaptiveClipping } from './camera.js';
 import { applySceneBackground, applyFileBackground, applyDisplayMode, applyEnvironmentPreset, applyLayerColorsToModel, recreateAllEdges, setEdgeAngleUniform, findMeshesNeedingEdges, countTriangles, buildEdgesFor, updateGemWireResolutions } from './display.js';
 import { renderLayerUI, updateLayerVisibility } from './layers.js';
-import { renderMaterialsPanel } from './material-library.js';
+import { isDetectedGem, renderMaterialsPanel } from './material-library.js';
 import { createAnnotationSprites } from './annotations.js';
 import { saveSession, loadSession, exportPackage, buildSessionBuffer } from './session.js';
 import { handleFile, clearCurrentModel } from './loaders.js';
@@ -4171,7 +4171,8 @@ function selectObjectsByName(query) {
     if (child.name === 'rhino-edges' || child.name === 'gem-wires' || child.name === 'rhino-outline' ||
         child.name === 'selection-outline' || child.name === 'ground-plane') return;
     const name = child.userData?.attributes?.name || child.name || '';
-    if (name.toLowerCase().includes(normalizedQuery)) {
+    if (name.toLowerCase().includes(normalizedQuery)
+        || (normalizedQuery === 'gem' && isDetectedGem(child))) {
       S.selectedObjects.push(child);
       addSelectionOutline(child);
     }

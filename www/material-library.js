@@ -4,6 +4,7 @@ import { showToast, updateSliderFill } from './helpers.js';
 import { History } from './history.js';
 import { t } from './i18n.js';
 import { isDrakonGemType } from './drakon-objects.js';
+import { isLegacyGem } from './legacy-gems.js';
 
 // Drakon catalogue presets. Physical values come from the supplied
 // materials.rhv library; Zircon is intentionally absent because its source
@@ -146,9 +147,10 @@ function isDetectedMetal(object) {
   return metalness >= 0.85;
 }
 
-function isDetectedGem(object) {
+export function isDetectedGem(object) {
   return object.userData?.customMaterial?.materialCategory === 'gem'
     || isDrakonGemType(object.userData?.drakonObjectType)
+    || isLegacyGem(object)
     || /\bgem\b/i.test(object.userData?.attributes?.name || object.name || '')
     || materialNamesFor(object).some(name => GEM_NAME_PATTERN.test(name));
 }

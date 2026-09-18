@@ -1,6 +1,7 @@
 import { S } from './state.js';
 import { t } from './i18n.js';
 import { GEM_PRESETS, METAL_PRESETS } from './material-library.js';
+import { isLegacyGem } from './legacy-gems.js';
 
 // Densities are sourced from Drakon's Factory .rmtl materials. The Viewer
 // receives only the Rhino material name from a .3dm, so this catalogue bridges
@@ -71,6 +72,9 @@ function materialForObject(object) {
     const material = MATERIAL_BY_NAME.get(normaliseMaterialName(name));
     if (material) return material;
   }
+  // Legacy gems with no named Rhino material (notably RhinoGold) are rendered
+  // as Diamond by the Viewer, so use the same density for the Weight panel.
+  if (isLegacyGem(object)) return MATERIAL_BY_NAME.get('diamond') || null;
   return null;
 }
 
