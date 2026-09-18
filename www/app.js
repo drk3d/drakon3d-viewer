@@ -138,12 +138,24 @@ animate();
 // the normal session loader — no fetch, no server needed.
 const _hasPlainPackage     = typeof window.__RHV_PACKAGE__ === 'string' && window.__RHV_PACKAGE__.length;
 const _hasEncryptedPackage = window.__RHV_PACKAGE_ENCRYPTED__ && typeof window.__RHV_PACKAGE_ENCRYPTED__.data === 'string';
-const _sharedModelId       = new URLSearchParams(window.location.search).get('share');
+const _viewerQuery         = new URLSearchParams(window.location.search);
+const _sharedModelId       = _viewerQuery.get('share');
+// `embed=1` marks an iframe session without changing its controls by itself.
+// Individual controls are opt-in flags so future embed options can be added
+// without breaking existing embedded share links.
+const _isEmbedSession       = _viewerQuery.get('embed') === '1';
+const _embedHidesFileMenu   = _isEmbedSession && _viewerQuery.get('file') === '0';
+const _embedUsesFullViewport = _isEmbedSession && _viewerQuery.get('viewport') === 'full';
 const _sharePrepareToken   = _readSharePrepareToken();
 // This is deliberately fixed in the published viewer. It keeps links clean
 // (`?share=<id>`) and prevents a link from selecting an arbitrary file source.
 const _sharedModelApi      = 'https://drakon3d-share.lingering-voice-78d0.workers.dev';
 const _viewerHomeUrl       = 'https://viewer.drakon3d.com/';
+
+if (_isEmbedSession) {
+  document.documentElement.classList.add('embed-session');
+  if (_embedUsesFullViewport) document.documentElement.classList.add('embed-full-viewport');
+}
 
 if (_hasPlainPackage || _hasEncryptedPackage || _sharedModelId) {
   // A public Drakon Share is a review session, not an author's workspace.
@@ -163,8 +175,9 @@ if (_hasPlainPackage || _hasEncryptedPackage || _sharedModelId) {
       .forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
   }
 
-  // Optional: hide the File menu entirely (export option).
-  if (window.__RHV_HIDE_FILE__) {
+  // Optional: hide the File menu entirely. Export packages use the global
+  // flag; embeds use `?embed=1&file=0`. A plain `embed=1` keeps it visible.
+  if (window.__RHV_HIDE_FILE__ || _embedHidesFileMenu) {
     const fileBtn = document.getElementById('btn-file');
     if (fileBtn) fileBtn.style.display = 'none';
   }

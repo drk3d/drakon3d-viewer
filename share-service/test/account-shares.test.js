@@ -68,7 +68,29 @@ test('the social share page provides browser and direct share choices for an act
   assert.match(html, /Share with an app/);
   assert.match(html, /WhatsApp/);
   assert.match(html, /mailto:/);
+  assert.match(html, /Embed/);
+  assert.match(html, /Keep 3D viewport full size/);
   assert.match(html, new RegExp(`/s/${SHARE_ID}`));
+});
+
+test('an embedded public share forwards only its presentation flags into Viewer', async () => {
+  const environment = createEnvironment(() => ({ ok: true }));
+  environment.SHARES.objects.set(`shares/${SHARE_ID}.3dm`, {
+    size: 11,
+    customMetadata: {
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      filename: 'Solitaire.3dm',
+    },
+  });
+
+  const response = await worker.fetch(new Request(
+    `https://worker.example/s/${SHARE_ID}?embed=1&file=0&viewport=full&ignored=value`,
+  ), environment, { waitUntil() {} });
+  const html = await response.text();
+
+  assert.equal(response.status, 200);
+  assert.match(html, new RegExp(`share=${SHARE_ID}\\u0026embed=1\\u0026file=0\\u0026viewport=full`));
+  assert.doesNotMatch(html, /ignored=value/);
 });
 
 test('the account endpoint returns only the authenticated license share records', async () => {

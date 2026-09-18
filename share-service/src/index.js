@@ -535,6 +535,14 @@ async function getShareLandingPage(id, request, env, ctx) {
 
   const viewerUrl = new URL(requiredViewerOrigin(env));
   viewerUrl.searchParams.set('share', id);
+  // Embed controls are declared on the existing public share URL. Preserve
+  // only the known presentation flags when that URL redirects into Viewer.
+  const landingUrl = new URL(request.url);
+  if (landingUrl.searchParams.get('embed') === '1') {
+    viewerUrl.searchParams.set('embed', '1');
+    if (landingUrl.searchParams.get('file') === '0') viewerUrl.searchParams.set('file', '0');
+    if (landingUrl.searchParams.get('viewport') === 'full') viewerUrl.searchParams.set('viewport', 'full');
+  }
   // The landing page can be served through the branded reverse proxy even
   // while the storage Worker continues to run on workers.dev.  Keep the
   // preview URL on that public host so social-card crawlers receive an image
@@ -800,13 +808,19 @@ function socialShareHtml(title, shareUrl) {
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Share ${escapedTitle}</title>
 <style>
-*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#111;color:#fff;font:16px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}.card{width:min(100%,440px);padding:28px;border:1px solid #353535;border-radius:16px;background:#1c1c1c;box-shadow:0 16px 48px #0007}h1{font-size:24px;margin:0 0 8px;overflow-wrap:anywhere}p{color:#c4c4c4;margin:0 0 22px}.actions{display:grid;gap:10px}.action{display:block;width:100%;padding:13px 16px;border:0;border-radius:9px;background:#fff;color:#111;text-align:center;font:inherit;font-weight:650;text-decoration:none;cursor:pointer}.secondary{background:#2c2c2c;color:#fff}.url{margin-top:18px;color:#aaa;font-size:12px;overflow-wrap:anywhere}</style>
-</head><body><main class="card"><h1>Share model</h1><p>${escapedTitle}</p><div class="actions"><button class="action" id="native-share" type="button">Share with an app</button><a class="action secondary" href="${safeHtmlTitle(whatsappUrl)}" target="_blank" rel="noopener">WhatsApp</a><a class="action secondary" href="${safeHtmlTitle(emailUrl)}">Email</a><a class="action secondary" href="${safeHtmlTitle(facebookUrl)}" target="_blank" rel="noopener">Facebook</a><button class="action secondary" id="copy-link" type="button">Copy link</button></div><div class="url">${escapedShareUrl}</div></main><script>
+*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#111;color:#fff;font:16px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}.card{width:min(100%,440px);padding:28px;border:1px solid #353535;border-radius:16px;background:#1c1c1c;box-shadow:0 16px 48px #0007}h1{font-size:24px;margin:0 0 8px;overflow-wrap:anywhere}p{color:#c4c4c4;margin:0 0 22px}.actions{display:grid;gap:10px}.action{display:block;width:100%;padding:13px 16px;border:0;border-radius:9px;background:#fff;color:#111;text-align:center;font:inherit;font-weight:650;text-decoration:none;cursor:pointer}.secondary{background:#2c2c2c;color:#fff}.url{margin-top:18px;color:#aaa;font-size:12px;overflow-wrap:anywhere}.embed-panel{display:grid;gap:13px}.embed-panel h2{font-size:19px;margin:0}.embed-option{display:flex;justify-content:space-between;gap:16px;align-items:center;color:#ddd;font-size:14px}.embed-option input{width:17px;height:17px;accent-color:#fff}.embed-code{width:100%;min-height:150px;resize:vertical;border:1px solid #454545;border-radius:9px;background:#111;color:#eee;padding:10px;font:12px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace}.embed-help{margin:0;color:#aaa;font-size:12px}</style>
+</head><body><main class="card"><h1>Share model</h1><p>${escapedTitle}</p><div class="actions" id="share-actions"><button class="action" id="native-share" type="button">Share with an app</button><a class="action secondary" href="${safeHtmlTitle(whatsappUrl)}" target="_blank" rel="noopener">WhatsApp</a><a class="action secondary" href="${safeHtmlTitle(emailUrl)}">Email</a><a class="action secondary" href="${safeHtmlTitle(facebookUrl)}" target="_blank" rel="noopener">Facebook</a><button class="action secondary" id="embed-link" type="button">Embed</button><button class="action secondary" id="copy-link" type="button">Copy link</button></div><section class="embed-panel" id="embed-panel" hidden><h2>Embed model</h2><label class="embed-option">Hide File menu <input id="embed-hide-file" type="checkbox" checked></label><label class="embed-option">Keep 3D viewport full size <input id="embed-full-viewport" type="checkbox" checked></label><textarea id="embed-code" class="embed-code" readonly spellcheck="false" aria-label="Embed code"></textarea><p class="embed-help">This uses the same share link and preserves its password, expiry and permissions.</p><button class="action" id="copy-embed" type="button">Copy embed code</button><button class="action secondary" id="close-embed" type="button">Back</button></section><div class="url">${escapedShareUrl}</div></main><script>
 const shareUrl=${JSON.stringify(shareUrl)};const shareData={title:'Drakon3D model',text:'View this Drakon3D model.',url:shareUrl};
 const copyButton=document.querySelector('#copy-link');
 async function copyLink(){try{await navigator.clipboard.writeText(shareUrl);copyButton.textContent='Link copied';setTimeout(()=>copyButton.textContent='Copy link',1800)}catch{copyButton.textContent='Copy unavailable'}}
 copyButton.addEventListener('click',copyLink);
 document.querySelector('#native-share').addEventListener('click',async()=>{if(typeof navigator.share==='function'){try{await navigator.share(shareData);return}catch(error){if(error&&error.name==='AbortError')return}}await copyLink()});
+const shareActions=document.querySelector('#share-actions'),embedPanel=document.querySelector('#embed-panel'),embedCode=document.querySelector('#embed-code'),hideFile=document.querySelector('#embed-hide-file'),fullViewport=document.querySelector('#embed-full-viewport'),copyEmbed=document.querySelector('#copy-embed');
+function updateEmbedCode(){const url=new URL(shareUrl);url.searchParams.set('embed','1');if(hideFile.checked)url.searchParams.set('file','0');else url.searchParams.delete('file');if(fullViewport.checked)url.searchParams.set('viewport','full');else url.searchParams.delete('viewport');const height=fullViewport.checked?'100vh; min-height:700px':'700px';embedCode.value='<iframe\\n  src="'+url.toString()+'"\\n  style="width:100%; height:'+height+'; border:0; display:block;"\\n  allow="fullscreen"\\n  allowfullscreen>\\n</iframe>'}
+document.querySelector('#embed-link').addEventListener('click',()=>{updateEmbedCode();shareActions.hidden=true;embedPanel.hidden=false;embedCode.focus()});
+document.querySelector('#close-embed').addEventListener('click',()=>{embedPanel.hidden=true;shareActions.hidden=false});
+hideFile.addEventListener('change',updateEmbedCode);fullViewport.addEventListener('change',updateEmbedCode);
+copyEmbed.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(embedCode.value);copyEmbed.textContent='Embed code copied';setTimeout(()=>copyEmbed.textContent='Copy embed code',1800)}catch{copyEmbed.textContent='Copy unavailable'}});
 </script></body></html>`;
 }
 
