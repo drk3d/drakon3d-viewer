@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { S } from './state.js';
-import { t } from './i18n.js?v=drakon-1.6';
+import { t } from './i18n.js';
 import { History } from './history.js';
 import { updateClippingCapPose } from './clip-cap.js';
 

@@ -13,7 +13,7 @@
 
 import * as THREE from 'three';
 import { S } from './state.js';
-import { t } from './i18n.js?v=drakon-1.6';
+import { t } from './i18n.js';
 
 // Inline SVG template — explicit width/height (Chromium refuses to upload
 // viewBox-only SVG <img> elements as WebGL textures, which Firefox accepts).

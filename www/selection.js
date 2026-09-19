@@ -3,7 +3,7 @@ import { S } from './state.js';
 import { applyDisplayMode, ensureOwnMaterial } from './display.js';
 import { History } from './history.js';
 import { bindSliderDblClickInput } from './helpers.js';
-import { t } from './i18n.js?v=drakon-1.6';
+import { t } from './i18n.js';
 import { renderObjectMaterialsPanel } from './material-library.js';
 import { renderWeightPanel } from './weight.js';
 

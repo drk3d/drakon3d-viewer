@@ -5,7 +5,7 @@
 
 import { loadFromCloud, loadScriptOnce, SUPPORTED_EXTENSIONS } from './index.js';
 import { DROPBOX_APP_KEY, isConfigured } from './config.js';
-import { t } from '../i18n.js?v=drakon-1.6';
+import { t } from '../i18n.js';
 
 const DROPBOX_SRC = 'https://www.dropbox.com/static/api/2/dropins.js';
 

@@ -10,7 +10,7 @@ import { createAnnotationSprites } from './annotations.js';
 import { renderNamedViewsUI } from './camera.js';
 import { resetSettingsToDefault } from './session.js';
 import { showLoading, hideLoading, setProgress, setFileName, setActiveShareId, showModelInfo, showModal, showToast } from './helpers.js';
-import { t } from './i18n.js?v=drakon-1.6';
+import { t } from './i18n.js';
 import { setToolbarModelState, changeDisplayMode } from './app.js';
 import { destroyClippingCap } from './clip-cap.js';
 import { DRAKON_VIEWER_OBJECT_TYPE_KEY, readRhinoUserString } from './drakon-objects.js';

@@ -12,7 +12,7 @@
 import { loadFromCloud, loadScriptOnce, SUPPORTED_EXTENSIONS } from './index.js';
 import { ONEDRIVE_CLIENT_ID, isConfigured } from './config.js';
 import { showLoading, hideLoading } from '../helpers.js';
-import { t } from '../i18n.js?v=drakon-1.6';
+import { t } from '../i18n.js';
 
 const MSAL_SRC   = 'https://cdn.jsdelivr.net/npm/@azure/msal-browser@3/lib/msal-browser.min.js';
 const GRAPH_BASE = 'https://graph.microsoft.com/v1.0';
