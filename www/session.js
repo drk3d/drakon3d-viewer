@@ -307,6 +307,8 @@ export async function buildSessionBuffer(customFileName = null) {
       groundEnabled:      S.groundEnabled,
       edgeOverlay:        document.getElementById('chk-edges-panel')?.checked ?? true,
       edgeThresholdAngle: parseFloat(document.getElementById('sl-edge-angle')?.value ?? 30),
+      turntableEnabled:   document.getElementById('btn-tt-toggle')?.classList.contains('active') ?? false,
+      turntableSpeed:     parseFloat(document.getElementById('tt-spring-slider')?.value ?? 0),
       annotationsEnabled: document.getElementById('chk-annotations-panel')?.checked ?? true,
       sunLightEnabled:    document.getElementById('chk-sun-panel')?.checked ?? false,
       sunAzimuth:         parseFloat(document.getElementById('sl-sun-azimuth')?.value ?? 135),
@@ -1112,6 +1114,32 @@ export async function loadSession(file, fileHandle = null) {
       // saved threshold has to be pushed through by hand or the file opens
       // showing every edge regardless of what was saved.
       (await import('./display.js')).setEdgeAngleUniform(S.edgeThresholdAngle ?? 30);
+
+      // Turntable uses a small closure in app.js to distinguish persistent
+      // auto-rotate from a temporary slider drag. Restore it through the same
+      // button/input events a user uses, so that closure, UI and OrbitControls
+      // stay in sync.
+      if (s.turntableEnabled !== undefined || s.turntableSpeed !== undefined) {
+        const turntableEnabled = s.turntableEnabled === true;
+        const requestedSpeed = Number(s.turntableSpeed);
+        const turntableSpeed = Number.isFinite(requestedSpeed)
+          ? Math.max(-5, Math.min(5, requestedSpeed))
+          : 0;
+        const turntableToggle = document.getElementById('btn-tt-toggle');
+        const turntableSlider = document.getElementById('tt-spring-slider');
+        const isTurntableActive = turntableToggle?.classList.contains('active') ?? false;
+        if (turntableEnabled !== isTurntableActive) turntableToggle?.click();
+        if (turntableSlider) {
+          turntableSlider.value = String(turntableEnabled ? turntableSpeed : 0);
+          updateSliderFill(turntableSlider);
+          const turntableValue = document.getElementById('tt-spring-val');
+          if (turntableValue) {
+            const visibleSpeed = turntableEnabled ? turntableSpeed : 0;
+            turntableValue.textContent = `${visibleSpeed >= 0 ? '+' : ''}${visibleSpeed.toFixed(1)}`;
+          }
+          turntableSlider.dispatchEvent(new Event('input'));
+        }
+      }
 
       const bgSel = document.getElementById('bg-type-select');
       if (bgSel && s.bgType) bgSel.value = s.bgType;

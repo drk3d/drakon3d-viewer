@@ -24,7 +24,7 @@ import { applySceneBackground, applyFileBackground, applyDisplayMode, applyEnvir
 import { renderLayerUI, updateLayerVisibility } from './layers.js';
 import { isDetectedGem, renderMaterialsPanel } from './material-library.js';
 import { createAnnotationSprites } from './annotations.js';
-import { saveSession, loadSession, exportPackage, buildSessionBuffer } from './session.js?v=drakon-1.7';
+import { saveSession, loadSession, exportPackage, buildSessionBuffer } from './session.js?v=drakon-1.8';
 import { handleFile, clearCurrentModel } from './loaders.js?v=drakon-1.8';
 import * as GoogleDrive from './cloud/google-drive.js';
 import * as OneDrive from './cloud/onedrive.js';
@@ -445,6 +445,26 @@ async function _saveSharedSessionToCloud() {
       }
       throw new Error(result?.error || 'The model could not be saved to Cloud.');
     }
+    // Keep the link card in the account area and the Share dialog in step with
+    // the just-saved RHV.  This is intentionally best-effort: a transient
+    // preview failure must never make an already-saved cloud session look as
+    // though it failed.
+    try {
+      const preview = await _captureSharedSessionPreview();
+      const previewResponse = await fetch(`${_sharedModelApi}/v1/shares/${encodeURIComponent(_sharedModelId)}/thumbnail`, {
+        method: 'POST',
+        cache: 'no-store',
+        credentials: 'omit',
+        headers: {
+          'Content-Type': 'image/png',
+          'X-Drakon-Prepare-Token': _sharePrepareToken,
+        },
+        body: preview,
+      });
+      if (!previewResponse.ok) throw new Error(`HTTP ${previewResponse.status}`);
+    } catch (previewError) {
+      console.warn('[Drakon Share] Cloud preview refresh failed:', previewError);
+    }
     showToast(`${t('file.save_cloud')} ✓`);
   } catch (error) {
     console.warn('[Drakon Share] Cloud session save failed:', error);
@@ -452,6 +472,41 @@ async function _saveSharedSessionToCloud() {
   } finally {
     if (button) button.disabled = false;
     hideLoading();
+  }
+}
+
+// Captures only a sensibly sized representation of the current viewport for a
+// share card. Rendering into the Viewer canvas preserves the actual scene,
+// background and camera while the original renderer dimensions are restored
+// before the save action completes.
+async function _captureSharedSessionPreview() {
+  const renderer = S.renderer;
+  const camera = S.camera;
+  if (!renderer?.domElement || !camera) throw new Error('The Viewer is not ready to capture a preview.');
+
+  const originalSize = renderer.getSize(new THREE.Vector2());
+  const originalPixelRatio = renderer.getPixelRatio();
+  const originalAspect = camera.aspect;
+  const scale = Math.min(1, 1280 / Math.max(1, originalSize.x), 720 / Math.max(1, originalSize.y));
+  const width = Math.max(1, Math.round(originalSize.x * scale));
+  const height = Math.max(1, Math.round(originalSize.y * scale));
+
+  try {
+    renderer.setPixelRatio(1);
+    renderer.setSize(width, height, false);
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
+    renderer.render(S.scene, camera);
+    const preview = await new Promise(resolve => renderer.domElement.toBlob(resolve, 'image/png'));
+    if (!(preview instanceof Blob) || preview.size === 0) throw new Error('The Viewer returned an empty preview.');
+    if (preview.size > 4 * 1024 * 1024) throw new Error('The preview image is too large.');
+    return preview;
+  } finally {
+    renderer.setPixelRatio(originalPixelRatio);
+    renderer.setSize(originalSize.x, originalSize.y, false);
+    S.composer?.setSize(originalSize.x, originalSize.y);
+    camera.aspect = originalAspect;
+    camera.updateProjectionMatrix();
   }
 }
 

@@ -40,6 +40,7 @@ export class ShareQuotaCoordinator {
       if (action === 'confirm') return quotaJson(await this.confirm(body));
       if (action === 'resize') return quotaJson(await this.resize(body));
       if (action === 'reservePreview') return quotaJson(await this.reservePreview(body));
+      if (action === 'replacePreview') return quotaJson(await this.replacePreview(body));
       if (action === 'releasePreview') return quotaJson(await this.releasePreview(body));
       if (action === 'delete') {
         await this.cleanupExpired(Date.now());
@@ -262,6 +263,35 @@ export class ShareQuotaCoordinator {
       await transaction.put(key, share);
       await transaction.put(GLOBAL_KEY, global);
       return { ok: true };
+    });
+  }
+
+  // Preview images may be refreshed when the share author saves a revised
+  // cloud session. Resize the existing reservation atomically so a failed R2
+  // write can be rolled back to the exact previous amount.
+  async replacePreview(body) {
+    const shareId = boundedId(body?.shareId);
+    const size = safeInteger(body?.size, 1, 4 * 1024 * 1024);
+    const maxLiveBytes = safeInteger(body?.maxLiveBytes, 1, 100 * 1024 * 1024 * 1024);
+    if (!shareId || !size || !maxLiveBytes) return { ok: false, status: 400, error: 'Invalid preview reservation.' };
+
+    return this.ctx.storage.transaction(async transaction => {
+      const key = shareKey(shareId);
+      const share = await transaction.get(key);
+      if (!share || share.state !== 'active') return { ok: false, status: 404, error: 'This share link is unavailable.' };
+
+      const global = (await transaction.get(GLOBAL_KEY)) || emptyGlobalState();
+      const previousSize = Number.isSafeInteger(share.previewSize) ? share.previewSize : 0;
+      const difference = size - previousSize;
+      if (difference > 0 && global.activeBytes + global.pendingBytes + difference > maxLiveBytes) {
+        return { ok: false, status: 503, error: 'Drakon Share is temporarily at capacity. Please try again later.' };
+      }
+
+      share.previewSize = size;
+      global.activeBytes = Math.max(0, global.activeBytes + difference);
+      await transaction.put(key, share);
+      await transaction.put(GLOBAL_KEY, global);
+      return { ok: true, size, previousSize };
     });
   }
 

@@ -33,6 +33,7 @@ async function makeEnvironment(originalSize = 128) {
     puts: [],
     deletes: [],
     quotaRequests: [],
+    previewSize: 0,
   };
   Object.defineProperty(state, 'object', { get: () => objects.get(mainKey) });
 
@@ -65,7 +66,13 @@ async function makeEnvironment(originalSize = 128) {
       get() {
         return {
           async fetch(_url, init) {
-            state.quotaRequests.push(JSON.parse(init.body));
+            const request = JSON.parse(init.body);
+            state.quotaRequests.push(request);
+            if (request.action === 'replacePreview') {
+              const previousSize = state.previewSize;
+              state.previewSize = request.size;
+              return new Response(JSON.stringify({ ok: true, previousSize }));
+            }
             return new Response(JSON.stringify({ ok: true }));
           },
         };
@@ -89,6 +96,20 @@ function request(path, { token = PREPARE_TOKEN, size = 64 } = {}) {
   });
   assert.equal(result.headers.get('Content-Length'), null);
   return result;
+}
+
+function thumbnailRequest(path, { token = PREPARE_TOKEN, size = 64 } = {}) {
+  return new Request(`https://worker.example${path}`, {
+    method: 'POST',
+    headers: {
+      Origin: VIEWER_ORIGIN,
+      'Content-Type': 'image/png',
+      'Content-Length': String(size),
+      'X-Drakon-Prepare-Token': token,
+    },
+    body: new Uint8Array(size),
+    duplex: 'half',
+  });
 }
 
 test('a valid creator token atomically replaces a larger 3DM with RHV', async () => {
@@ -187,6 +208,31 @@ test('the creator can save a revised RHV session to the same prepared share', as
     { action: 'resize', shareId: SHARE_ID, size: 64, maxLiveBytes: 8 * 1024 * 1024 * 1024 },
     { action: 'resize', shareId: SHARE_ID, size: 96, maxLiveBytes: 8 * 1024 * 1024 * 1024 },
   ]);
+});
+
+test('the creator token can refresh the share preview without a Keygen credential', async () => {
+  const { env, state } = await makeEnvironment();
+  const finalization = await worker.fetch(
+    request(`/v1/shares/${SHARE_ID}/model`, { size: 64 }),
+    env,
+    { waitUntil() {} },
+  );
+  assert.equal(finalization.status, 200);
+
+  const response = await worker.fetch(
+    thumbnailRequest(`/v1/shares/${SHARE_ID}/thumbnail`, { size: 48 }),
+    env,
+    { waitUntil() {} },
+  );
+  assert.equal(response.status, 201);
+  assert.deepEqual(await response.json(), { ok: true, updated: false });
+  assert.equal(state.puts.at(-1).key, `shares/${SHARE_ID}.png`);
+  assert.deepEqual(state.quotaRequests.at(-1), {
+    action: 'replacePreview',
+    shareId: SHARE_ID,
+    size: 48,
+    maxLiveBytes: 8 * 1024 * 1024 * 1024,
+  });
 });
 
 test('a session save is unavailable until the initial RHV optimization exists', async () => {

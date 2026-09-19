@@ -594,19 +594,28 @@ async function createThumbnail(id, request, env, origin) {
     return json({ error: 'The preview image must be a PNG.' }, 400, cors(origin, env));
   }
 
-  const configuration = readShareConfiguration(env);
-  const authorization = await validateUploadLicense(request, configuration);
-  if (!authorization.ok) return json({ error: authorization.error, code: authorization.code }, authorization.status, cors(origin, env));
-
   const model = await env.SHARES.head(`shares/${id}.3dm`);
   if (!model || isExpired(model)) return json({ error: 'This share link is unavailable.' }, 404, cors(origin, env));
-  const licenseKey = await sha256Hex(authorization.license.id);
-  if (model.customMetadata?.ownerLicenseKey !== licenseKey) {
-    return json({ error: 'Only the owner can add a preview image.' }, 403, cors(origin, env));
+
+  // A newly shared model opens the Viewer with a short-lived, creator-only
+  // preparation token. Let that same token refresh the preview when Save
+  // (Cloud) replaces its RHV, without exposing a Keygen credential in the
+  // browser. The original plug-in upload path still validates the active
+  // licence and checks the owning licence below.
+  const prepareToken = request.headers.get('X-Drakon-Prepare-Token');
+  const hasPrepareAccess = await isValidPrepareToken(prepareToken, model.customMetadata);
+  const configuration = readShareConfiguration(env);
+  if (!hasPrepareAccess) {
+    const authorization = await validateUploadLicense(request, configuration);
+    if (!authorization.ok) return json({ error: authorization.error, code: authorization.code }, authorization.status, cors(origin, env));
+    const licenseKey = await sha256Hex(authorization.license.id);
+    if (model.customMetadata?.ownerLicenseKey !== licenseKey) {
+      return json({ error: 'Only the owner can add a preview image.' }, 403, cors(origin, env));
+    }
   }
 
   const reservation = await quotaRequest(env, {
-    action: 'reservePreview',
+    action: 'replacePreview',
     shareId: id,
     size: contentLength,
     maxLiveBytes: configuration.maxLiveBytes,
@@ -619,9 +628,18 @@ async function createThumbnail(id, request, env, origin) {
       customMetadata: { expiresAt: model.customMetadata.expiresAt },
     });
     if (!storedPreview || storedPreview.size <= 0) throw new Error('Preview image was empty.');
-    return json({ ok: true }, 201, cors(origin, env));
+    return json({ ok: true, updated: reservation.previousSize > 0 }, reservation.previousSize > 0 ? 200 : 201, cors(origin, env));
   } catch {
-    await quotaRequest(env, { action: 'releasePreview', shareId: id });
+    if (reservation.previousSize > 0) {
+      await quotaRequest(env, {
+        action: 'replacePreview',
+        shareId: id,
+        size: reservation.previousSize,
+        maxLiveBytes: configuration.maxLiveBytes,
+      });
+    } else {
+      await quotaRequest(env, { action: 'releasePreview', shareId: id });
+    }
     return json({ error: 'The preview image could not be stored.' }, 503, cors(origin, env));
   }
 }

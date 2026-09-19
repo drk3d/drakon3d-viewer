@@ -8,7 +8,7 @@ import { fitCameraToObject, fitCameraToBox } from './camera.js';
 import { renderLayerUI, updateLayerVisibility } from './layers.js';
 import { createAnnotationSprites } from './annotations.js';
 import { renderNamedViewsUI } from './camera.js';
-import { resetSettingsToDefault } from './session.js?v=drakon-1.7';
+import { resetSettingsToDefault } from './session.js?v=drakon-1.8';
 import { showLoading, hideLoading, setProgress, setFileName, setActiveShareId, showModelInfo, showModal, showToast } from './helpers.js';
 import { t } from './i18n.js?v=drakon-1.6';
 import { destroyClippingCap } from './clip-cap.js';
