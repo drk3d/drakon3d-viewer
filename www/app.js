@@ -14,7 +14,7 @@ import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
-import { initI18n, setLang, applyI18n, t, currentLang } from './i18n.js?v=drakon-1.7';
+import { initI18n, setLang, applyI18n, t, currentLang } from './i18n.js?v=drakon-1.8';
 
 import { S } from './state.js';
 import { updateSliderFill, updateAllSliderFills, updateSelectIcon, showLoading, hideLoading, showToast, bindSliderDblClickInput, beginSave, setActiveShareId } from './helpers.js';
