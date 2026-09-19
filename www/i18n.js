@@ -111,7 +111,7 @@ export const TRANSLATIONS = {
     'file.capture':       'Capture',
     'file.info':          'File Info',
     'file.no_model':      'No model loaded.',
-    'file.drop_hint':     'Open the FILE sidebar or drop a .3dm, .glb, .stp file here',
+    'file.drop_hint':     'Open the FILE sidebar or drop a .3dm, .stl, .glb, .stp file here',
     'msg.no_render_mesh': '{n} object(s) have no render mesh — shown as wireframe only. To see them shaded, switch to a shaded display mode in Rhino and save the file again (or turn off "Save Small").',
     'msg.load_3dm_failed':    'Failed to load the 3DM file. The file may be damaged or in an unsupported format.',
     'msg.process_3dm_failed': 'An error occurred while processing the 3DM file: {err}',
@@ -209,7 +209,7 @@ export const TRANSLATIONS = {
     'lang.label':         'Language',
 
     'empty.title':        '3D Jewelry Viewer',
-    'empty.sub':          'Explore jewelry models in 3D for e-commerce and design review. Open the FILE sidebar or drop a .3dm, .glb, .stp file here.',
+    'empty.sub':          'Open the FILE sidebar or drop a .3dm, .stl, .glb, .stp file here.',
 
     'turntable.spring':      'Speed',
     'turntable.continuous':  'Auto-Rotate',
@@ -398,7 +398,7 @@ export const TRANSLATIONS = {
     'file.capture':       '캡처',
     'file.info':          '파일 정보',
     'file.no_model':      '모델이 로드되지 않았습니다.',
-    'file.drop_hint':     'FILE(파일) 사이드바를 열거나 .3dm, .glb, .stp 파일을 여기에 놓으세요',
+    'file.drop_hint':     'FILE(파일) 사이드바를 열거나 .3dm, .stl, .glb, .stp 파일을 여기에 놓으세요',
 
     'bg.title':           '배경',
     'bg.solid':           '단색',
@@ -483,7 +483,7 @@ export const TRANSLATIONS = {
     'lang.label':         '언어',
 
     'empty.title':        '3D 주얼리 뷰어',
-    'empty.sub':          'FILE(파일) 사이드바를 열거나 .3dm, .glb, .stp 파일을 여기에 놓으세요',
+    'empty.sub':          'FILE(파일) 사이드바를 열거나 .3dm, .stl, .glb, .stp 파일을 여기에 놓으세요',
 
     'turntable.spring':      '속도',
     'turntable.continuous':  '자동 회전',
@@ -656,7 +656,7 @@ export const TRANSLATIONS = {
     'file.capture':       'Capturer',
     'file.info':          'Infos fichier',
     'file.no_model':      'Aucun modèle chargé.',
-    'file.drop_hint':     'Ouvrez la barre latérale FILE (Fichier) ou déposez un fichier .3dm, .glb, .stp ici',
+    'file.drop_hint':     'Ouvrez la barre latérale FILE (Fichier) ou déposez un fichier .3dm, .stl, .glb, .stp ici',
 
     'bg.title':           'Arrière-plan',
     'bg.solid':           'Uni',
@@ -740,7 +740,7 @@ export const TRANSLATIONS = {
     'lang.label':         'Langue',
 
     'empty.title':        'Visionneuse 3D de bijoux',
-    'empty.sub':          'Ouvrez la barre latérale FILE (Fichier) ou déposez un fichier .3dm, .glb, .stp ici',
+    'empty.sub':          'Ouvrez la barre latérale FILE (Fichier) ou déposez un fichier .3dm, .stl, .glb, .stp ici',
 
     'turntable.spring':   'Rotation ressort',
     'layer.toggle_all':   'Tout basculer',
@@ -891,7 +891,7 @@ export const TRANSLATIONS = {
     'file.capture':       'Erfassen',
     'file.info':          'Dateiinfo',
     'file.no_model':      'Kein Modell geladen.',
-    'file.drop_hint':     'Öffnen Sie die Seitenleiste FILE (Datei) oder legen Sie eine .3dm, .glb, .stp Datei hier ab',
+    'file.drop_hint':     'Öffnen Sie die Seitenleiste FILE (Datei) oder legen Sie eine .3dm, .stl, .glb, .stp Datei hier ab',
 
     'bg.title':           'Hintergrund',
     'bg.solid':           'Einfarbig',
@@ -975,7 +975,7 @@ export const TRANSLATIONS = {
     'lang.label':         'Sprache',
 
     'empty.title':        '3D-Schmuck-Viewer',
-    'empty.sub':          'Öffnen Sie die Seitenleiste FILE (Datei) oder legen Sie eine .3dm, .glb, .stp Datei hier ab',
+    'empty.sub':          'Öffnen Sie die Seitenleiste FILE (Datei) oder legen Sie eine .3dm, .stl, .glb, .stp Datei hier ab',
 
     'turntable.spring':   'Federdrehung',
     'layer.toggle_all':   'Alle umschalten',
@@ -1126,7 +1126,7 @@ export const TRANSLATIONS = {
     'file.capture':       'Capturar',
     'file.info':          'Info del archivo',
     'file.no_model':      'No hay modelo cargado.',
-    'file.drop_hint':     'Abre la barra lateral FILE (Archivo) o suelta un archivo .3dm, .glb, .stp aquí',
+    'file.drop_hint':     'Abre la barra lateral FILE (Archivo) o suelta un archivo .3dm, .stl, .glb, .stp aquí',
 
     'bg.title':           'Fondo',
     'bg.solid':           'Sólido',
@@ -1210,7 +1210,7 @@ export const TRANSLATIONS = {
     'lang.label':         'Idioma',
 
     'empty.title':        'Visor 3D de joyería',
-    'empty.sub':          'Abre la barra lateral FILE (Archivo) o suelta un archivo .3dm, .glb, .stp aquí',
+    'empty.sub':          'Abre la barra lateral FILE (Archivo) o suelta un archivo .3dm, .stl, .glb, .stp aquí',
 
     'turntable.spring':   'Giro de resorte',
     'layer.toggle_all':   'Alternar todo',
@@ -1361,7 +1361,7 @@ export const TRANSLATIONS = {
     'file.capture':       'Acquisisci',
     'file.info':          'Info file',
     'file.no_model':      'Nessun modello caricato.',
-    'file.drop_hint':     'Apri la barra laterale FILE o trascina un file .3dm, .glb, .stp qui',
+    'file.drop_hint':     'Apri la barra laterale FILE o trascina un file .3dm, .stl, .glb, .stp qui',
 
     'bg.title':           'Sfondo',
     'bg.solid':           'Tinta unita',
@@ -1445,7 +1445,7 @@ export const TRANSLATIONS = {
     'lang.label':         'Lingua',
 
     'empty.title':        'Visualizzatore 3D di gioielli',
-    'empty.sub':          'Apri la barra laterale FILE o trascina un file .3dm, .glb, .stp qui',
+    'empty.sub':          'Apri la barra laterale FILE o trascina un file .3dm, .stl, .glb, .stp qui',
 
     'turntable.spring':   'Rotazione a molla',
     'layer.toggle_all':   'Attiva/disattiva tutto',
@@ -1596,7 +1596,7 @@ export const TRANSLATIONS = {
     'file.capture':       'キャプチャ',
     'file.info':          'ファイル情報',
     'file.no_model':      'モデルが読み込まれていません。',
-    'file.drop_hint':     'FILE(ファイル) サイドバーを開くか、.3dm, .glb, .stp ファイルをここにドロップ',
+    'file.drop_hint':     'FILE(ファイル) サイドバーを開くか、.3dm, .stl, .glb, .stp ファイルをここにドロップ',
 
     'bg.title':           '背景',
     'bg.solid':           '単色',
@@ -1680,7 +1680,7 @@ export const TRANSLATIONS = {
     'lang.label':         '言語',
 
     'empty.title':        '3Dジュエリービューア',
-    'empty.sub':          'FILE(ファイル) サイドバーを開くか、.3dm, .glb, .stp ファイルをここにドロップ',
+    'empty.sub':          'FILE(ファイル) サイドバーを開くか、.3dm, .stl, .glb, .stp ファイルをここにドロップ',
 
     'turntable.spring':   'スプリング回転',
     'layer.toggle_all':   'すべて切替',
@@ -1831,7 +1831,7 @@ export const TRANSLATIONS = {
     'file.capture':       '截图',
     'file.info':          '文件信息',
     'file.no_model':      '未加载模型。',
-    'file.drop_hint':     '打开 FILE(文件) 侧边栏或将 .3dm, .glb, .stp 文件拖放至此',
+    'file.drop_hint':     '打开 FILE(文件) 侧边栏或将 .3dm, .stl, .glb, .stp 文件拖放至此',
 
     'bg.title':           '背景',
     'bg.solid':           '纯色',
@@ -1915,7 +1915,7 @@ export const TRANSLATIONS = {
     'lang.label':         '语言',
 
     'empty.title':        '3D 珠宝查看器',
-    'empty.sub':          '打开 FILE(文件) 侧边栏或将 .3dm, .glb, .stp 文件拖放至此',
+    'empty.sub':          '打开 FILE(文件) 侧边栏或将 .3dm, .stl, .glb, .stp 文件拖放至此',
 
     'turntable.spring':   '弹簧旋转',
     'layer.toggle_all':   '全部切换',
@@ -2066,7 +2066,7 @@ export const TRANSLATIONS = {
     'file.capture':       '截圖',
     'file.info':          '檔案資訊',
     'file.no_model':      '未載入模型。',
-    'file.drop_hint':     '開啟 FILE(檔案) 側邊欄或將 .3dm, .glb, .stp 檔案拖曳至此',
+    'file.drop_hint':     '開啟 FILE(檔案) 側邊欄或將 .3dm, .stl, .glb, .stp 檔案拖曳至此',
 
     'bg.title':           '背景',
     'bg.solid':           '純色',
@@ -2150,7 +2150,7 @@ export const TRANSLATIONS = {
     'lang.label':         '語言',
 
     'empty.title':        '3D 珠寶檢視器',
-    'empty.sub':          '開啟 FILE(檔案) 側邊欄或將 .3dm, .glb, .stp 檔案拖曳至此',
+    'empty.sub':          '開啟 FILE(檔案) 側邊欄或將 .3dm, .stl, .glb, .stp 檔案拖曳至此',
 
     'turntable.spring':   '彈簧旋轉',
     'layer.toggle_all':   '全部切換',
@@ -2301,7 +2301,7 @@ export const TRANSLATIONS = {
     'file.capture':       'Capturar',
     'file.info':          'Informações do arquivo',
     'file.no_model':      'Nenhum modelo carregado.',
-    'file.drop_hint':     'Abra a barra lateral FILE (Arquivo) ou solte um arquivo .3dm, .glb, .stp aqui',
+    'file.drop_hint':     'Abra a barra lateral FILE (Arquivo) ou solte um arquivo .3dm, .stl, .glb, .stp aqui',
 
     'bg.title':           'Fundo',
     'bg.solid':           'Sólido',
@@ -2385,7 +2385,7 @@ export const TRANSLATIONS = {
     'lang.label':         'Idioma',
 
     'empty.title':        'Visualizador 3D de joalharia',
-    'empty.sub':          'Abra a barra lateral FILE (Arquivo) ou solte um arquivo .3dm, .glb, .stp aqui',
+    'empty.sub':          'Abra a barra lateral FILE (Arquivo) ou solte um arquivo .3dm, .stl, .glb, .stp aqui',
 
     'turntable.spring':   'Giro por mola',
     'layer.toggle_all':   'Alternar tudo',
@@ -2536,7 +2536,7 @@ export const TRANSLATIONS = {
     'file.capture':       'Zachytit',
     'file.info':          'Informace o souboru',
     'file.no_model':      'Není načten žádný model.',
-    'file.drop_hint':     'Otevřete postranní panel FILE (Soubor) nebo přetáhněte soubor .3dm, .glb, .stp sem',
+    'file.drop_hint':     'Otevřete postranní panel FILE (Soubor) nebo přetáhněte soubor .3dm, .stl, .glb, .stp sem',
 
     'bg.title':           'Pozadí',
     'bg.solid':           'Jednobarevné',
@@ -2620,7 +2620,7 @@ export const TRANSLATIONS = {
     'lang.label':         'Jazyk',
 
     'empty.title':        '3D prohlížeč šperků',
-    'empty.sub':          'Otevřete postranní panel FILE (Soubor) nebo přetáhněte soubor .3dm, .glb, .stp sem',
+    'empty.sub':          'Otevřete postranní panel FILE (Soubor) nebo přetáhněte soubor .3dm, .stl, .glb, .stp sem',
 
     'turntable.spring':   'Pružinové otáčení',
     'layer.toggle_all':   'Přepnout vše',
@@ -2771,7 +2771,7 @@ export const TRANSLATIONS = {
     'file.capture':       'Przechwytaj',
     'file.info':          'Informacje o pliku',
     'file.no_model':      'Nie załadowano modelu.',
-    'file.drop_hint':     'Otwórz pasek boczny FILE (Plik) lub upuść plik .3dm, .glb, .stp tutaj',
+    'file.drop_hint':     'Otwórz pasek boczny FILE (Plik) lub upuść plik .3dm, .stl, .glb, .stp tutaj',
 
     'bg.title':           'Tło',
     'bg.solid':           'Jednolity',
@@ -2855,7 +2855,7 @@ export const TRANSLATIONS = {
     'lang.label':         'Język',
 
     'empty.title':        'Przeglądarka biżuterii 3D',
-    'empty.sub':          'Otwórz pasek boczny FILE (Plik) lub upuść plik .3dm, .glb, .stp tutaj',
+    'empty.sub':          'Otwórz pasek boczny FILE (Plik) lub upuść plik .3dm, .stl, .glb, .stp tutaj',
 
     'turntable.spring':   'Obrót sprężynowy',
     'layer.toggle_all':   'Przełącz wszystko',
