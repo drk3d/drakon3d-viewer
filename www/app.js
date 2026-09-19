@@ -1509,11 +1509,100 @@ function bindUI() {
   });
   saveAsButton?.addEventListener('click', openSystemSaveAs);
   document.getElementById('btn-close-panel').addEventListener('click', () => { clearCurrentModel(); });
-  document.getElementById('btn-share-panel')?.addEventListener('click', () => {
+  const shareDialog = document.getElementById('share-dialog');
+  const shareDialogPreview = document.getElementById('share-dialog-preview');
+  const shareDialogPreviewImage = document.getElementById('share-dialog-preview-image');
+  const shareDialogActions = document.getElementById('share-dialog-actions');
+  const shareEmbedPanel = document.getElementById('share-embed-panel');
+  const shareEmbedCode = document.getElementById('share-embed-code');
+  const shareHideHeader = document.getElementById('share-embed-hide-header');
+  const shareHideFileOption = document.getElementById('share-embed-hide-file-option');
+  const shareHideFile = document.getElementById('share-embed-hide-file');
+  const shareFullViewport = document.getElementById('share-embed-full-viewport');
+  const shareCopyLinkButton = document.getElementById('btn-copy-share-link');
+  const shareCopyEmbedButton = document.getElementById('btn-copy-embed-code');
+  let activeShareDialogUrl = '';
+
+  const closeShareDialog = () => shareDialog?.classList.add('hidden');
+  const copyShareText = async (value, button, copiedKey) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      button.textContent = t(copiedKey);
+      window.setTimeout(() => { button.textContent = t(button.dataset.i18n); }, 1800);
+    } catch {
+      button.textContent = t('share.copy_unavailable');
+      window.setTimeout(() => { button.textContent = t(button.dataset.i18n); }, 1800);
+    }
+  };
+  const updateEmbedCode = () => {
+    if (!activeShareDialogUrl || !shareEmbedCode) return;
+    const url = new URL(activeShareDialogUrl);
+    const headerHidden = !!shareHideHeader?.checked;
+    shareHideFileOption.hidden = headerHidden;
+    url.searchParams.set('embed', '1');
+    if (headerHidden) url.searchParams.set('header', '0');
+    else url.searchParams.delete('header');
+    if (!headerHidden && shareHideFile?.checked) url.searchParams.set('file', '0');
+    else url.searchParams.delete('file');
+    if (shareFullViewport?.checked) url.searchParams.set('viewport', 'full');
+    else url.searchParams.delete('viewport');
+    const height = shareFullViewport?.checked ? '100%; min-height:0' : '700px';
+    shareEmbedCode.value = `<iframe\n  src="${url.toString()}"\n  style="width:100%; height:${height}; border:0; display:block;"\n  allow="fullscreen"\n  allowfullscreen>\n</iframe>`;
+  };
+  const openShareDialog = () => {
     const shareId = S.activeShareId;
     if (!shareId) return;
-    window.open(`https://share.drakon3d.com/share/${encodeURIComponent(shareId)}`, '_blank', 'noopener,noreferrer');
+    activeShareDialogUrl = `https://share.drakon3d.com/s/${encodeURIComponent(shareId)}`;
+    const previewUrl = `https://share.drakon3d.com/v1/shares/${encodeURIComponent(shareId)}/thumbnail`;
+    const message = `View this Drakon3D model: ${activeShareDialogUrl}`;
+    document.getElementById('share-whatsapp-link').href = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    document.getElementById('share-email-link').href = `mailto:?subject=${encodeURIComponent('Drakon3D model')}&body=${encodeURIComponent(message)}`;
+    document.getElementById('share-facebook-link').href = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(activeShareDialogUrl)}`;
+    document.getElementById('share-dialog-url').textContent = activeShareDialogUrl;
+    shareDialogPreview.hidden = false;
+    shareDialogPreviewImage.src = previewUrl;
+    shareDialogActions.classList.remove('hidden');
+    shareEmbedPanel.classList.add('hidden');
+    shareHideHeader.checked = false;
+    shareHideFile.checked = true;
+    shareFullViewport.checked = true;
+    updateEmbedCode();
+    shareDialog.classList.remove('hidden');
     leftPanel.classList.add('hidden');
+  };
+  document.getElementById('btn-share-panel')?.addEventListener('click', openShareDialog);
+  document.getElementById('btn-close-share-dialog')?.addEventListener('click', closeShareDialog);
+  shareDialog?.addEventListener('mousedown', event => { if (event.target === shareDialog) closeShareDialog(); });
+  shareDialogPreviewImage?.addEventListener('error', () => { shareDialogPreview.hidden = true; });
+  shareDialogPreviewImage?.addEventListener('load', () => { shareDialogPreview.hidden = false; });
+  document.getElementById('btn-native-share')?.addEventListener('click', async () => {
+    if (typeof navigator.share === 'function') {
+      try {
+        await navigator.share({ title: 'Drakon3D model', text: 'View this Drakon3D model.', url: activeShareDialogUrl });
+        return;
+      } catch (error) {
+        if (error?.name === 'AbortError') return;
+      }
+    }
+    await copyShareText(activeShareDialogUrl, shareCopyLinkButton, 'share.link_copied');
+  });
+  shareCopyLinkButton?.addEventListener('click', () => copyShareText(activeShareDialogUrl, shareCopyLinkButton, 'share.link_copied'));
+  document.getElementById('btn-show-embed')?.addEventListener('click', () => {
+    updateEmbedCode();
+    shareDialogActions.classList.add('hidden');
+    shareEmbedPanel.classList.remove('hidden');
+    shareEmbedCode?.focus();
+  });
+  document.getElementById('btn-close-embed')?.addEventListener('click', () => {
+    shareEmbedPanel.classList.add('hidden');
+    shareDialogActions.classList.remove('hidden');
+  });
+  shareHideHeader?.addEventListener('change', updateEmbedCode);
+  shareHideFile?.addEventListener('change', updateEmbedCode);
+  shareFullViewport?.addEventListener('change', updateEmbedCode);
+  shareCopyEmbedButton?.addEventListener('click', () => copyShareText(shareEmbedCode.value, shareCopyEmbedButton, 'share.embed_copied'));
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && !shareDialog?.classList.contains('hidden')) closeShareDialog();
   });
   document.getElementById('btn-capture-panel').addEventListener('click', () => {
     document.getElementById('capture-w').value = window.innerWidth;

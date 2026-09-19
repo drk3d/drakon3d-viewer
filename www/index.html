@@ -995,6 +995,42 @@
     </div>
   </div>
 
+  <!-- ── Share Model Dialog (Viewer only; the Cloud account keeps its own share page) ── -->
+  <div id="share-dialog" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="share-dialog-title">
+    <div class="modal-box share-dialog-box">
+      <div class="modal-header">
+        <h3 id="share-dialog-title" data-i18n="share.title">Share model</h3>
+        <button id="btn-close-share-dialog" class="icon-btn sm" data-i18n-title="file.close" title="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body share-dialog-body">
+        <div id="share-dialog-preview" class="share-dialog-preview">
+          <img id="share-dialog-preview-image" alt="">
+        </div>
+        <div id="share-dialog-actions" class="share-dialog-actions">
+          <button id="btn-native-share" class="share-dialog-action share-dialog-action-primary" type="button" data-i18n="share.with_app">Share with an app</button>
+          <a id="share-whatsapp-link" class="share-dialog-action" target="_blank" rel="noopener" data-i18n="share.whatsapp">WhatsApp</a>
+          <a id="share-email-link" class="share-dialog-action" data-i18n="share.email">Email</a>
+          <a id="share-facebook-link" class="share-dialog-action" target="_blank" rel="noopener" data-i18n="share.facebook">Facebook</a>
+          <button id="btn-show-embed" class="share-dialog-action" type="button" data-i18n="share.embed">Embed</button>
+          <button id="btn-copy-share-link" class="share-dialog-action" type="button" data-i18n="share.copy_link">Copy link</button>
+        </div>
+        <section id="share-embed-panel" class="share-embed-panel hidden">
+          <h4 data-i18n="share.embed_title">Embed model</h4>
+          <label class="share-embed-option"><span data-i18n="share.hide_header">Hide header</span><input id="share-embed-hide-header" type="checkbox"></label>
+          <label id="share-embed-hide-file-option" class="share-embed-option"><span data-i18n="share.hide_file">Hide File menu</span><input id="share-embed-hide-file" type="checkbox" checked></label>
+          <label class="share-embed-option"><span data-i18n="share.fit_viewport">Fit 3D viewport to embed size</span><input id="share-embed-full-viewport" type="checkbox" checked></label>
+          <textarea id="share-embed-code" readonly spellcheck="false" aria-label="Embed code"></textarea>
+          <p class="share-embed-help" data-i18n="share.embed_help">This uses the same share link and preserves its password, expiry and permissions.</p>
+          <button id="btn-copy-embed-code" class="share-dialog-action share-dialog-action-primary" type="button" data-i18n="share.copy_embed">Copy embed code</button>
+          <button id="btn-close-embed" class="share-dialog-action" type="button" data-i18n="share.back">Back</button>
+        </section>
+        <p id="share-dialog-url" class="share-dialog-url"></p>
+      </div>
+    </div>
+  </div>
+
 
 
   <!-- ── Bottom Floating View Tools Bar ── -->

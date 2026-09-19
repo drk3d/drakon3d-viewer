@@ -2567,6 +2567,26 @@ body.light-theme .metadata-table td.meta-label {
   color: var(--text-2);
 }
 
+/* ── Viewer Share Dialog ── */
+.share-dialog-box { width: min(calc(100vw - 32px), 440px); max-width: 440px; }
+.share-dialog-body { gap: 14px; }
+.share-dialog-preview { aspect-ratio: 16 / 9; overflow: hidden; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--bg); }
+.share-dialog-preview[hidden] { display: none; }
+.share-dialog-preview img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.share-dialog-actions, .share-embed-panel { display: grid; gap: 10px; }
+.share-embed-panel.hidden { display: none; }
+.share-dialog-action { display: block; width: 100%; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface-hi); color: var(--text); text-align: center; font: inherit; font-size: .82rem; font-weight: 600; text-decoration: none; cursor: pointer; transition: background .15s, border-color .15s, color .15s; }
+.share-dialog-action:hover { background: var(--surface); border-color: var(--primary); }
+.share-dialog-action-primary { border-color: var(--primary); background: var(--primary); color: #fff; }
+.share-dialog-action-primary:hover { background: var(--primary-hi); color: #fff; }
+.share-embed-panel h4 { margin: 0; font-size: .92rem; color: var(--text); }
+.share-embed-option { display: flex; align-items: center; justify-content: space-between; gap: 14px; color: var(--text-2); font-size: .78rem; }
+.share-embed-option[hidden] { display: none; }
+.share-embed-option input { width: 17px; height: 17px; accent-color: var(--primary); flex: 0 0 auto; }
+#share-embed-code { width: 100%; min-height: 145px; resize: vertical; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--bg); color: var(--text); padding: 10px; font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.share-embed-help { margin: 0; color: var(--text-2); font-size: .72rem; line-height: 1.45; }
+.share-dialog-url { margin: 0; color: var(--text-2); font-size: .66rem; overflow-wrap: anywhere; }
+
 /* ── Theme Selector ── */
 .theme-selector {
   display: flex;
