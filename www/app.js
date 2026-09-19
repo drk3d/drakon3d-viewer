@@ -153,7 +153,11 @@ const _isEmbedSession       = _viewerQuery.get('embed') === '1';
 const _embedHidesHeader     = _isEmbedSession && _viewerQuery.get('header') === '0';
 const _embedHidesFileMenu   = _isEmbedSession && _viewerQuery.get('file') === '0';
 const _embedUsesFullViewport = _isEmbedSession && _viewerQuery.get('viewport') === 'full';
-const _sharePrepareToken   = _readSharePrepareToken();
+const _PREPARE_SESSION_PREFIX = 'drakon3d:share-prepare:';
+const _PREPARE_FALLBACK_TTL_MS = 30 * 60 * 1000;
+let _cloudSaveExpiryTimer = null;
+const _sharePreparation    = _readSharePreparation(_sharedModelId);
+const _sharePrepareToken   = _sharePreparation?.token || null;
 // This is deliberately fixed in the published viewer. It keeps links clean
 // (`?share=<id>`) and prevents a link from selecting an arbitrary file source.
 const _sharedModelApi      = 'https://drakon3d-share.lingering-voice-78d0.workers.dev';
@@ -179,6 +183,9 @@ if (_hasPlainPackage || _hasEncryptedPackage || _sharedModelId) {
   if (_sharedModelId) {
     ['btn-open-gdrive', 'btn-open-dropbox']
       .forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+    // A normal share is read-only. The creator-only action is revealed only
+    // after its original, short-lived preparation has completed successfully.
+    _configureSharedSaveAction(false);
   }
 
   // This is a delivered review artifact, not an authoring session — hide the
@@ -203,7 +210,8 @@ if (_hasPlainPackage || _hasEncryptedPackage || _sharedModelId) {
       if (_sharedModelId) {
         const sharedModel = await _loadSharedModel(_sharedModelId, _sharedModelApi, _sharePrepareToken);
         if (_sharePrepareToken) {
-          await _finalizeSharedModel(_sharedModelId, _sharedModelApi, _sharePrepareToken, sharedModel.filename);
+          const finalized = await _finalizeSharedModel(_sharedModelId, _sharedModelApi, _sharePrepareToken, sharedModel.filename);
+          _configureSharedSaveAction(finalized);
         }
         return;
       }
@@ -285,15 +293,80 @@ async function _loadSharedModel(shareId, apiOrigin, prepareToken = null) {
   return { filename };
 }
 
-function _readSharePrepareToken() {
-  const value = new URLSearchParams(window.location.hash.replace(/^#/, '')).get('prepare');
-  return typeof value === 'string' && /^[A-Za-z0-9_-]{32}$/.test(value) ? value : null;
+function _prepareSessionKey(shareId) {
+  return `${_PREPARE_SESSION_PREFIX}${shareId}`;
+}
+
+function _readSharePreparation(shareId) {
+  if (!/^[A-Za-z0-9_-]{24}$/.test(shareId || '')) return null;
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  const token = hash.get('prepare');
+  const tokenIsValid = typeof token === 'string' && /^[A-Za-z0-9_-]{32}$/.test(token);
+  const now = Date.now();
+  if (tokenIsValid) {
+    const suppliedExpiry = Number(hash.get('prepareExpires'));
+    const expiresAt = Number.isSafeInteger(suppliedExpiry) && suppliedExpiry > now
+      ? suppliedExpiry
+      : now + _PREPARE_FALLBACK_TTL_MS;
+    const preparation = { token, expiresAt };
+    try { sessionStorage.setItem(_prepareSessionKey(shareId), JSON.stringify(preparation)); } catch { /* storage is optional */ }
+    return preparation;
+  }
+
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(_prepareSessionKey(shareId)) || 'null');
+    if (typeof saved?.token === 'string' && /^[A-Za-z0-9_-]{32}$/.test(saved.token)
+      && Number.isSafeInteger(saved.expiresAt) && saved.expiresAt > now) {
+      return saved;
+    }
+    sessionStorage.removeItem(_prepareSessionKey(shareId));
+  } catch { /* storage is optional */ }
+  return null;
+}
+
+function _isSharePreparationActive() {
+  return Boolean(_sharePreparation?.token) && Number.isSafeInteger(_sharePreparation.expiresAt)
+    && Date.now() < _sharePreparation.expiresAt;
+}
+
+function _clearSharePreparation() {
+  if (!_sharedModelId) return;
+  try { sessionStorage.removeItem(_prepareSessionKey(_sharedModelId)); } catch { /* storage is optional */ }
+}
+
+function _hideSharedSaveAction() {
+  const button = document.getElementById('btn-save-panel');
+  if (!button) return;
+  button.style.display = 'none';
+  button.dataset.sharedCloudSave = 'false';
+}
+
+function _configureSharedSaveAction(preparationFinished) {
+  if (!_sharedModelId || !preparationFinished || !_isSharePreparationActive()) {
+    _hideSharedSaveAction();
+    return;
+  }
+  const button = document.getElementById('btn-save-panel');
+  if (!button) return;
+  button.style.display = '';
+  button.dataset.sharedCloudSave = 'true';
+  const label = button.querySelector('[data-i18n]');
+  if (label) {
+    label.dataset.i18n = 'file.save_cloud';
+    label.textContent = t('file.save_cloud');
+  }
+  if (_cloudSaveExpiryTimer) window.clearTimeout(_cloudSaveExpiryTimer);
+  _cloudSaveExpiryTimer = window.setTimeout(() => {
+    _clearSharePreparation();
+    _hideSharedSaveAction();
+  }, Math.max(0, _sharePreparation.expiresAt - Date.now()));
 }
 
 function _removeSharePrepareToken() {
   const url = new URL(window.location.href);
   const fragment = new URLSearchParams(url.hash.replace(/^#/, ''));
   fragment.delete('prepare');
+  fragment.delete('prepareExpires');
   const remaining = fragment.toString();
   url.hash = remaining ? `#${remaining}` : '';
   window.history.replaceState(null, '', url.toString());
@@ -322,6 +395,7 @@ async function _finalizeSharedModel(shareId, apiOrigin, prepareToken, sourceFile
       throw new Error(result?.error || 'The compact share could not be stored.');
     }
     showToast('Drakon Share is ready. Link copied to clipboard.');
+    return result?.format === 'rhv' || result?.optimized === true;
   } catch (error) {
     // The public link was created before this best-effort conversion. Keep
     // the original 3DM usable instead of turning an optimisation failure into
@@ -329,8 +403,54 @@ async function _finalizeSharedModel(shareId, apiOrigin, prepareToken, sourceFile
     console.warn('[Drakon Share] RHV optimization was not completed:', error);
     const detail = error?.message || 'Unknown conversion error.';
     showToast(`Share is ready in the original 3DM format. RHV conversion failed: ${detail}`);
+    return false;
   } finally {
     _removeSharePrepareToken();
+    hideLoading();
+  }
+}
+
+async function _saveSharedSessionToCloud() {
+  if (!_sharedModelId || !_sharePrepareToken || !_isSharePreparationActive()) {
+    _clearSharePreparation();
+    _hideSharedSaveAction();
+    return;
+  }
+  if (!S.currentModel) return;
+
+  const button = document.getElementById('btn-save-panel');
+  if (button?.disabled) return;
+  if (button) button.disabled = true;
+  try {
+    showLoading(t('file.save_cloud'));
+    const baseName = (S.currentFileName || 'design').replace(/\.(?:3dm|rhv)$/i, '') || 'design';
+    const { finalBuffer, finalName } = await buildSessionBuffer(baseName);
+    const response = await fetch(`${_sharedModelApi}/v1/shares/${encodeURIComponent(_sharedModelId)}/session`, {
+      method: 'POST',
+      cache: 'no-store',
+      credentials: 'omit',
+      headers: {
+        'Content-Type': 'application/vnd.drakon.rhv',
+        'X-Drakon-Prepare-Token': _sharePrepareToken,
+        'X-Drakon-Filename': encodeURIComponent(`${finalName}.rhv`),
+      },
+      body: finalBuffer,
+    });
+    let result = null;
+    try { result = await response.json(); } catch { /* handled below */ }
+    if (!response.ok) {
+      if (response.status === 403) {
+        _clearSharePreparation();
+        _hideSharedSaveAction();
+      }
+      throw new Error(result?.error || 'The model could not be saved to Cloud.');
+    }
+    showToast(`${t('file.save_cloud')} ✓`);
+  } catch (error) {
+    console.warn('[Drakon Share] Cloud session save failed:', error);
+    showToast(error?.message || 'The model could not be saved to Cloud.');
+  } finally {
+    if (button) button.disabled = false;
     hideLoading();
   }
 }
@@ -1400,7 +1520,14 @@ function bindUI() {
   document.getElementById('btn-open-dropbox')?.addEventListener('click', () => {
     Dropbox.pickAndLoad(cloudLoaders);
   });
-  document.getElementById('btn-save-panel').addEventListener('click', () => { saveSession(); });
+  document.getElementById('btn-save-panel').addEventListener('click', () => {
+    const button = document.getElementById('btn-save-panel');
+    if (button?.dataset.sharedCloudSave === 'true') {
+      _saveSharedSessionToCloud();
+      return;
+    }
+    saveSession();
+  });
 
   const saveAsButton = document.getElementById('btn-save-as-panel');
   let pendingPackageWriteHandle = null;

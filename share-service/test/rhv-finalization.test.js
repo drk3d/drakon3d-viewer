@@ -143,9 +143,60 @@ test('an invalid preparation token cannot read or replace a password-protected s
   assert.equal(replaceResponse.status, 403);
   assert.equal(state.puts.length, 0);
 
+  const saveResponse = await worker.fetch(
+    request(`/v1/shares/${SHARE_ID}/session`, { token: invalidToken }),
+    env,
+    { waitUntil() {} },
+  );
+  assert.equal(saveResponse.status, 403);
+  assert.equal(state.puts.length, 0);
+
   const readResponse = await worker.fetch(new Request(
     `https://worker.example/v1/shares/${SHARE_ID}`,
     { headers: { Origin: VIEWER_ORIGIN, 'X-Drakon-Prepare-Token': invalidToken } },
   ), env, { waitUntil() {} });
   assert.equal(readResponse.status, 403);
+});
+
+test('the creator can save a revised RHV session to the same prepared share', async () => {
+  const { env, state } = await makeEnvironment();
+  const finalization = await worker.fetch(
+    request(`/v1/shares/${SHARE_ID}/model`, { size: 64 }),
+    env,
+    { waitUntil() {} },
+  );
+  assert.equal(finalization.status, 200);
+
+  const response = await worker.fetch(
+    request(`/v1/shares/${SHARE_ID}/session`, { size: 96 }),
+    env,
+    { waitUntil() {} },
+  );
+  const result = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(result.ok, true);
+  assert.equal(result.size, 96);
+  assert.match(result.savedAt, /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(state.puts.length, 4);
+  assert.equal(state.object.size, 96);
+  assert.equal(state.object.customMetadata.format, 'rhv');
+  assert.equal(state.object.customMetadata.filename, 'ring.rhv');
+  assert.equal(state.object.customMetadata.savedAt, result.savedAt);
+  assert.deepEqual(state.quotaRequests, [
+    { action: 'resize', shareId: SHARE_ID, size: 64, maxLiveBytes: 8 * 1024 * 1024 * 1024 },
+    { action: 'resize', shareId: SHARE_ID, size: 96, maxLiveBytes: 8 * 1024 * 1024 * 1024 },
+  ]);
+});
+
+test('a session save is unavailable until the initial RHV optimization exists', async () => {
+  const { env, state } = await makeEnvironment();
+  const response = await worker.fetch(
+    request(`/v1/shares/${SHARE_ID}/session`),
+    env,
+    { waitUntil() {} },
+  );
+
+  assert.equal(response.status, 409);
+  assert.equal(state.puts.length, 0);
 });

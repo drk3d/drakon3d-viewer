@@ -8,7 +8,7 @@ import { ShareQuotaCoordinator } from './share-quota-coordinator.js';
 
 const SHARE_ID_BYTES = 18;
 const PREPARE_TOKEN_BYTES = 24;
-const PREPARE_TOKEN_TTL_MS = 15 * 60 * 1000;
+const PREPARE_TOKEN_TTL_MS = 30 * 60 * 1000;
 const PASSWORD_SALT_BYTES = 16;
 const PASSWORD_HASH_BYTES = 32;
 const PASSWORD_HASH_VERSION = '2';
@@ -38,6 +38,9 @@ export default {
 
     const modelMatch = url.pathname.match(/^\/v1\/shares\/([A-Za-z0-9_-]{24})\/model$/);
     if (modelMatch && request.method === 'POST') return finalizeShare(modelMatch[1], request, env, origin);
+
+    const sessionMatch = url.pathname.match(/^\/v1\/shares\/([A-Za-z0-9_-]{24})\/session$/);
+    if (sessionMatch && request.method === 'POST') return saveSharedSession(sessionMatch[1], request, env, origin);
 
     const thumbnailMatch = url.pathname.match(/^\/v1\/shares\/([A-Za-z0-9_-]{24})\/thumbnail$/);
     if (thumbnailMatch && request.method === 'POST') return createThumbnail(thumbnailMatch[1], request, env, origin);
@@ -144,7 +147,7 @@ async function createShare(request, env, origin) {
   return json({
     id,
     url: shareLaunchUrl(env, id),
-    prepareUrl: sharePrepareUrl(env, id, prepareToken),
+    prepareUrl: sharePrepareUrl(env, id, prepareToken, prepareExpiresAt),
     expiresAt: expiresAt.toISOString(),
     activeLinks: confirmed.activeCount,
     activeLinkLimit: authorization.policy.active,
@@ -402,20 +405,123 @@ function shareUrl(env, id) {
   return viewerUrl.toString();
 }
 
+// The temporary preparation URL authorizes the creator's first Viewer tab for
+// thirty minutes. Once the initial 3DM has been compacted to RHV, that tab
+// may save its current Viewer state back into the *same* public share. This is
+// deliberately separate from finalization: finalization never replaces a 3DM
+// with a larger RHV, while an explicit creator save must preserve every chosen
+// material, camera, visibility and display setting.
+async function saveSharedSession(id, request, env, origin) {
+  const configuration = readShareConfiguration(env);
+  const modelKey = `shares/${id}.3dm`;
+  const model = await env.SHARES.head(modelKey);
+  if (!model || isExpired(model)) {
+    return json({ error: 'This share link is unavailable.' }, 404, cors(origin, env));
+  }
+
+  const prepareToken = request.headers.get('X-Drakon-Prepare-Token');
+  if (!await isValidPrepareToken(prepareToken, model.customMetadata)) {
+    return json({ error: 'The share preparation link is invalid or has expired.' }, 403, cors(origin, env));
+  }
+  if (model.customMetadata?.format !== 'rhv') {
+    return json({ error: 'The share is still being optimized. Please try again.' }, 409, cors(origin, env));
+  }
+
+  const contentType = request.headers.get('Content-Type')?.toLowerCase().split(';')[0].trim();
+  if (contentType !== 'application/vnd.drakon.rhv' || !request.body) {
+    return json({ error: 'A valid RHV model is required.' }, 400, cors(origin, env));
+  }
+
+  const filename = safeFilename(request.headers.get('X-Drakon-Filename'), 'rhv');
+  const savedAt = new Date().toISOString();
+  const temporaryKey = `shares/${id}.${crypto.randomUUID()}.rhv.tmp`;
+  let quotaResized = false;
+  try {
+    const temporaryObject = await env.SHARES.put(temporaryKey, request.body, {
+      httpMetadata: {
+        contentType: 'application/vnd.drakon.rhv',
+        contentDisposition: `inline; filename="${filename}"`,
+      },
+      customMetadata: {
+        ...model.customMetadata,
+        filename,
+        format: 'rhv',
+        savedAt,
+      },
+    });
+    if (!temporaryObject || temporaryObject.size <= 0) throw new Error('The saved model was empty.');
+    if (temporaryObject.size > configuration.maxModelBytes) {
+      return json({ error: 'The saved model exceeds the sharing limit.' }, 413, cors(origin, env));
+    }
+
+    // Reserve any extra capacity before replacing the public object. If R2
+    // fails after this point, the catch below restores the previous accounting.
+    const resized = await quotaRequest(env, {
+      action: 'resize',
+      shareId: id,
+      size: temporaryObject.size,
+      maxLiveBytes: configuration.maxLiveBytes,
+    });
+    if (!resized.ok) {
+      return json({ error: resized.error || 'The saved model could not be stored.' }, resized.status || 503, cors(origin, env));
+    }
+    quotaResized = true;
+
+    const sessionObject = await env.SHARES.get(temporaryKey);
+    if (!sessionObject?.body) throw new Error('The saved model could not be read back.');
+    const storedObject = await env.SHARES.put(modelKey, sessionObject.body, {
+      httpMetadata: {
+        contentType: 'application/vnd.drakon.rhv',
+        contentDisposition: `inline; filename="${filename}"`,
+      },
+      customMetadata: {
+        ...model.customMetadata,
+        filename,
+        format: 'rhv',
+        savedAt,
+      },
+    });
+    if (!storedObject || storedObject.size <= 0) throw new Error('The saved model was empty.');
+
+    return json({ ok: true, size: storedObject.size, format: 'rhv', savedAt }, 200, cors(origin, env));
+  } catch (error) {
+    if (quotaResized) {
+      try {
+        await quotaRequest(env, {
+          action: 'resize',
+          shareId: id,
+          size: model.size,
+          maxLiveBytes: configuration.maxLiveBytes,
+        });
+      } catch (rollbackError) {
+        console.error('Drakon Share session-size rollback failed', rollbackError);
+      }
+    }
+    console.error('Drakon Share session save failed', error);
+    return json({ error: 'The saved model could not be stored.' }, 503, cors(origin, env));
+  } finally {
+    try { await env.SHARES.delete(temporaryKey); }
+    catch (error) { console.error('Drakon Share session temporary cleanup failed', error); }
+  }
+}
+
 function shareLaunchUrl(env, id) {
   const url = new URL(shareUrl(env, id));
   url.searchParams.set('openCloud', '1');
   return url.toString();
 }
 
-function sharePrepareUrl(env, id, token) {
+function sharePrepareUrl(env, id, token, expiresAt) {
   const viewerUrl = new URL(requiredViewerOrigin(env));
   viewerUrl.searchParams.set('share', id);
   viewerUrl.searchParams.set('openCloud', '1');
   // Fragments are not sent in HTTP requests or referrer headers. The viewer
-  // exchanges this short-lived token for the initial model and its one-time
-  // compact RHV replacement.
-  viewerUrl.hash = `prepare=${token}`;
+  // exchanges this short-lived token for the initial model, its one-time
+  // compact RHV replacement, and an optional creator-only session save.
+  const fragment = new URLSearchParams({ prepare: token });
+  const expiresAtMs = Date.parse(expiresAt || '');
+  if (Number.isFinite(expiresAtMs)) fragment.set('prepareExpires', String(expiresAtMs));
+  viewerUrl.hash = fragment.toString();
   return viewerUrl.toString();
 }
 
