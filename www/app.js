@@ -1782,18 +1782,17 @@ function bindUI() {
   };
   const updateEmbedCode = () => {
     if (!activeShareDialogUrl || !shareEmbedCode) return;
-    const url = new URL(activeShareDialogUrl);
     const headerHidden = !!shareHideHeader?.checked;
     shareHideFileOption.hidden = headerHidden;
-    url.searchParams.set('embed', '1');
-    if (headerHidden) url.searchParams.set('header', '0');
-    else url.searchParams.delete('header');
-    if (!headerHidden && shareHideFile?.checked) url.searchParams.set('file', '0');
-    else url.searchParams.delete('file');
-    if (shareFullViewport?.checked) url.searchParams.set('viewport', 'full');
-    else url.searchParams.delete('viewport');
     const height = shareFullViewport?.checked ? '100%; min-height:0' : '700px';
-    shareEmbedCode.value = `<iframe\n  src="${url.toString()}"\n  style="width:100%; height:${height}; border:0; display:block;"\n  allow="fullscreen"\n  allowfullscreen>\n</iframe>`;
+    const attributes = [
+      `  share="${S.activeShareId}"`,
+      headerHidden ? '  hide-header' : '',
+      !headerHidden && shareHideFile?.checked ? '  hide-file' : '',
+      shareFullViewport?.checked ? '  fit-viewport' : '',
+      `  style="width:100%; height:${height}; display:block;"`,
+    ].filter(Boolean).join('\n');
+    shareEmbedCode.value = `<drakon-viewer\n${attributes}>\n</drakon-viewer>\n<script async src="https://viewer.drakon3d.com/embed.js"></script>`;
   };
   const openShareDialog = () => {
     const shareId = S.activeShareId;

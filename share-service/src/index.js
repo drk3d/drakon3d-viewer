@@ -720,7 +720,7 @@ async function getSocialSharePage(id, request, env, ctx) {
   const publicOrigin = optionalShareOrigin(env) || new URL(request.url).origin;
   const shareUrl = new URL(`/s/${id}`, publicOrigin).toString();
   const previewUrl = new URL(`/v1/shares/${id}/thumbnail`, publicOrigin).toString();
-  return new Response(socialShareHtml(shareUrl, previewUrl), {
+  return new Response(socialShareHtml(shareUrl, previewUrl, requiredViewerOrigin(env)), {
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'no-store',
@@ -944,7 +944,7 @@ function shareLandingHtml(title, previewUrl, viewerUrl) {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><meta property="og:type" content="website"><meta property="og:title" content="${title}"><meta property="og:description" content="Open this Drakon 3D design in your browser."><meta property="og:image" content="${escapedPreviewUrl}"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="${title}"><meta name="twitter:image" content="${escapedPreviewUrl}"><meta http-equiv="refresh" content="0;url=${escapedViewerUrl}"><script>location.replace(${JSON.stringify(viewerUrl)})</script></head><body><p>Opening Drakon 3D Viewer… <a href="${escapedViewerUrl}">Continue</a></p></body></html>`;
 }
 
-function socialShareHtml(shareUrl, previewUrl) {
+function socialShareHtml(shareUrl, previewUrl, viewerOrigin) {
   const title = 'Drakon3D model';
   const message = `View this Drakon3D model: ${shareUrl}`;
   const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
@@ -952,6 +952,8 @@ function socialShareHtml(shareUrl, previewUrl) {
   const facebookUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`;
   const escapedShareUrl = safeHtmlTitle(shareUrl);
   const escapedPreviewUrl = safeHtmlTitle(previewUrl);
+  const shareId = new URL(shareUrl).pathname.split('/').pop();
+  const embedScriptUrl = new URL('/embed.js', viewerOrigin).toString();
 
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -966,7 +968,7 @@ async function copyLink(){try{await navigator.clipboard.writeText(shareUrl);copy
 copyButton.addEventListener('click',copyLink);
 document.querySelector('#native-share').addEventListener('click',async()=>{if(typeof navigator.share==='function'){try{await navigator.share(shareData);return}catch(error){if(error&&error.name==='AbortError')return}}await copyLink()});
 const shareActions=document.querySelector('#share-actions'),embedPanel=document.querySelector('#embed-panel'),embedCode=document.querySelector('#embed-code'),hideHeader=document.querySelector('#embed-hide-header'),hideFileOption=document.querySelector('#embed-hide-file-option'),hideFile=document.querySelector('#embed-hide-file'),fullViewport=document.querySelector('#embed-full-viewport'),copyEmbed=document.querySelector('#copy-embed');
-function updateEmbedCode(){const url=new URL(shareUrl),headerHidden=hideHeader.checked;hideFileOption.hidden=headerHidden;url.searchParams.set('embed','1');if(headerHidden)url.searchParams.set('header','0');else url.searchParams.delete('header');if(!headerHidden&&hideFile.checked)url.searchParams.set('file','0');else url.searchParams.delete('file');if(fullViewport.checked)url.searchParams.set('viewport','full');else url.searchParams.delete('viewport');const height=fullViewport.checked?'100%; min-height:0':'700px';embedCode.value='<iframe\\n  src="'+url.toString()+'"\\n  style="width:100%; height:'+height+'; border:0; display:block;"\\n  allow="fullscreen"\\n  allowfullscreen>\\n</iframe>'}
+function updateEmbedCode(){const headerHidden=hideHeader.checked;hideFileOption.hidden=headerHidden;const height=fullViewport.checked?'100%; min-height:0':'700px';const attributes=['  share="${shareId}"',headerHidden?'  hide-header':'',!headerHidden&&hideFile.checked?'  hide-file':'',fullViewport.checked?'  fit-viewport':'','  style="width:100%; height:'+height+'; display:block;"'].filter(Boolean).join('\\n');embedCode.value='<drakon-viewer\\n'+attributes+'>\\n</drakon-viewer>\\n<script async src="${embedScriptUrl}"><\\/script>'}
 document.querySelector('#embed-link').addEventListener('click',()=>{updateEmbedCode();shareActions.hidden=true;embedPanel.hidden=false;embedCode.focus()});
 document.querySelector('#close-embed').addEventListener('click',()=>{embedPanel.hidden=true;shareActions.hidden=false});
 hideHeader.addEventListener('change',updateEmbedCode);hideFile.addEventListener('change',updateEmbedCode);fullViewport.addEventListener('change',updateEmbedCode);

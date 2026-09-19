@@ -71,6 +71,9 @@ test('the social share page provides browser and direct share choices for an act
   assert.match(html, /Embed/);
   assert.match(html, /Hide header/);
   assert.match(html, /Fit 3D viewport to embed size/);
+  assert.match(html, /<drakon-viewer/);
+  assert.match(html, new RegExp(`share="${SHARE_ID}"`));
+  assert.match(html, /viewer\.drakon3d\.com\/embed\.js/);
   assert.match(html, /id="close-share"/);
   assert.match(html, new RegExp(`class="preview"[^>]*><img src="https://share\\.drakon3d\\.com/v1/shares/${SHARE_ID}/thumbnail"`));
   assert.doesNotMatch(html, /Solitaire\.3dm/);
