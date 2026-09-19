@@ -8,7 +8,7 @@ import { handleFile } from '../loaders.js';
 import { loadSession } from '../session.js';
 import { showLoading, hideLoading } from '../helpers.js';
 import { SUPPORTED_EXTENSIONS } from './config.js';
-import { t } from '../i18n.js';
+import { t } from '../i18n.js?v=drakon-1.6';
 
 export { SUPPORTED_EXTENSIONS };
 

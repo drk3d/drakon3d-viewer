@@ -98,7 +98,7 @@ class HistoryManager {
         });
         const toggleBtn = document.getElementById('btn-clip-toggle');
         if (toggleBtn) {
-          const m = await import('./i18n.js');
+          const m = await import('./i18n.js?v=drakon-1.6');
           toggleBtn.classList.toggle('active', S.clippingToggleOn);
           toggleBtn.textContent = S.clippingToggleOn ? m.t('clip.on') : m.t('clip.off');
         }
@@ -112,8 +112,9 @@ class HistoryManager {
         }
       } else if (action.type === 'displayMode') {
         const mode = (key === 'before') ? action.before : action.after;
-        const app = await import('./app.js');
-        app.changeDisplayMode(mode);
+        window.dispatchEvent(new CustomEvent('drakon:change-display-mode', {
+          detail: { mode }
+        }));
       } else if (action.type === 'measurements') {
         const state = (key === 'before') ? action.before : action.after;
         const tools = await import('./tools.js');

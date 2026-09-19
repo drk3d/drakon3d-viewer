@@ -10,8 +10,7 @@ import { createAnnotationSprites } from './annotations.js';
 import { renderNamedViewsUI } from './camera.js';
 import { resetSettingsToDefault } from './session.js';
 import { showLoading, hideLoading, setProgress, setFileName, setActiveShareId, showModelInfo, showModal, showToast } from './helpers.js';
-import { t } from './i18n.js';
-import { setToolbarModelState, changeDisplayMode } from './app.js';
+import { t } from './i18n.js?v=drakon-1.6';
 import { destroyClippingCap } from './clip-cap.js';
 import { DRAKON_VIEWER_OBJECT_TYPE_KEY, readRhinoUserString } from './drakon-objects.js';
 import { findLegacyGemGeometry, findLegacyGemSignals, isMatrixGemBlockName, LEGACY_GEM_USER_STRING_KEY } from './legacy-gems.js';
@@ -19,6 +18,29 @@ import { findLegacyGemGeometry, findLegacyGemSignals, isMatrixGemBlockName, LEGA
 // Name used by Rhino3dmLoader for the material it invents when an object has
 // no assigned material (three.js Loader.DEFAULT_MATERIAL_NAME).
 const DEFAULT_MATERIAL_NAME = '__DEFAULT';
+
+// Kept here rather than importing app.js: loaders is imported by app.js, and
+// the reverse import can make cached module URLs start a second application.
+function setToolbarModelState(loaded) {
+  const center = document.getElementById('top-bar-center');
+  const layerBtn = document.getElementById('btn-layer-panel');
+  const bottomBar = document.getElementById('bottom-view-tools-bar');
+  center?.classList.toggle('no-model', !loaded);
+  layerBtn?.classList.toggle('no-model', !loaded);
+  bottomBar?.classList.toggle('no-model', !loaded);
+}
+
+function applyLoadedDisplayMode() {
+  S.currentMode = 'rendered';
+  const dropdown = document.getElementById('mode-dropdown');
+  const activeItem = dropdown?.querySelector('.dropdown-item[data-mode="rendered"]');
+  if (activeItem) {
+    dropdown.querySelectorAll('.dropdown-item').forEach(button => {
+      button.classList.toggle('active', button === activeItem);
+    });
+  }
+  applyDisplayMode();
+}
 
 // ── 3dm render-settings helpers ──────────────────────────────────────────────
 
@@ -2812,11 +2834,9 @@ export async function handleFile(file, rhinoLoader, gltfLoader, fileHandle = nul
           applyGtaoClipBox(box);
           if (S.groundEnabled) addGroundPlane(box);
           applyFileBackground();
-          // Opening policy is always Rendered. resetSettingsToDefault() has
-          // already set that mode before loading, so this must force the pass:
-          // otherwise changeDisplayMode() returns early and the imported
-          // materials are not applied until the user changes one manually.
-          changeDisplayMode('rendered', true);
+          // Opening policy is always Rendered. Apply it directly here so the
+          // loader stays independent from app.js.
+          applyLoadedDisplayMode();
           createAnnotationSprites();
           renderNamedViewsUI();
           setFileName(file.name);

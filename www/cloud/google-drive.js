@@ -11,7 +11,7 @@ import { loadFromCloud, loadScriptOnce, SUPPORTED_EXTENSIONS } from './index.js'
 import {
   GOOGLE_CLIENT_ID, GOOGLE_API_KEY, GOOGLE_SCOPES, isConfigured,
 } from './config.js';
-import { t } from '../i18n.js';
+import { t } from '../i18n.js?v=drakon-1.6';
 
 const GAPI_SRC = 'https://apis.google.com/js/api.js';
 const GIS_SRC  = 'https://accounts.google.com/gsi/client';

@@ -2,7 +2,7 @@ import { S } from './state.js';
 import { applyLayerColorsToModel, applyDisplayMode } from './display.js';
 import { createAnnotationSprites } from './annotations.js';
 import { selectObjectsByLayer } from './selection.js';
-import { t } from './i18n.js';
+import { t } from './i18n.js?v=drakon-1.6';
 
 // Tracks which parent layers are collapsed (by layer index). Persists across
 // re-renders within a session; stale indices from a previous file are harmless.

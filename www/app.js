@@ -14,7 +14,7 @@ import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
-import { initI18n, setLang, applyI18n, t, currentLang } from './i18n.js';
+import { initI18n, setLang, applyI18n, t, currentLang } from './i18n.js?v=drakon-1.6';
 
 import { S } from './state.js';
 import { updateSliderFill, updateAllSliderFills, updateSelectIcon, showLoading, hideLoading, showToast, bindSliderDblClickInput, beginSave, setActiveShareId } from './helpers.js';
@@ -25,12 +25,12 @@ import { renderLayerUI, updateLayerVisibility } from './layers.js';
 import { isDetectedGem, renderMaterialsPanel } from './material-library.js';
 import { createAnnotationSprites } from './annotations.js';
 import { saveSession, loadSession, exportPackage, buildSessionBuffer } from './session.js';
-import { handleFile, clearCurrentModel } from './loaders.js';
+import { handleFile, clearCurrentModel } from './loaders.js?v=drakon-1.8';
 import * as GoogleDrive from './cloud/google-drive.js';
 import * as OneDrive from './cloud/onedrive.js';
 import * as Dropbox from './cloud/dropbox.js';
 import { isConfigured as isCloudProviderConfigured } from './cloud/config.js';
-import { History } from './history.js';
+import { History } from './history.js?v=drakon-1.8';
 import {
   deactivateAllTools, clearMeasurements, renderMeasurementListUI,
   spawnAngleWidget, handleWidgetPointerDown, handleWidgetPointerMove,
@@ -127,6 +127,11 @@ let barContrastFrameCount = 0;
 // ── Bootstrap ─────────────────────────────────────────────────────────────
 document.getElementById('loading')?.classList.remove('hidden');
 initThemeSync();
+window.addEventListener('drakon:change-display-mode', (event) => {
+  const { mode, force = false } = event.detail || {};
+  if (mode) changeDisplayMode(mode, force);
+});
+
 init();
 animate();
 

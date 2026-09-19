@@ -2,7 +2,7 @@ import { S } from './state.js';
 import { applyBackgroundPreset, applyDisplayMode } from './display.js';
 import { showToast } from './helpers.js';
 import { History } from './history.js';
-import { t } from './i18n.js';
+import { t } from './i18n.js?v=drakon-1.6';
 import { isDrakonGemType } from './drakon-objects.js';
 import { isLegacyGem } from './legacy-gems.js';
 import { BACKGROUND_PRESETS } from './background-presets.js';
