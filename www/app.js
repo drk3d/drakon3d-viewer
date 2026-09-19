@@ -30,7 +30,7 @@ import * as GoogleDrive from './cloud/google-drive.js';
 import * as OneDrive from './cloud/onedrive.js';
 import * as Dropbox from './cloud/dropbox.js';
 import { isConfigured as isCloudProviderConfigured } from './cloud/config.js';
-import { History } from './history.js?v=drakon-1.8';
+import { History } from './history.js';
 import {
   deactivateAllTools, clearMeasurements, renderMeasurementListUI,
   spawnAngleWidget, handleWidgetPointerDown, handleWidgetPointerMove,
