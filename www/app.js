@@ -4558,14 +4558,29 @@ function selectDetectedGems() {
     return;
   }
 
+  const gemDebug = new URLSearchParams(window.location.search).get('gemDebug') === '1';
+  const gemDebugRows = [];
   S.currentModel.traverse(child => {
     // Gems are always mesh geometry. Limiting the operation to visible model
     // meshes prevents hidden helpers — including the invisible centre square
     // in Shaded/Wire — from being included in the Gems selection.
     if (!child.isMesh || !isSelectableModelObject(child) || !isDetectedGem(child)) return;
+    if (gemDebug) {
+      const position = child.getWorldPosition(new THREE.Vector3());
+      gemDebugRows.push([
+        child.type,
+        child.isInstancedMesh ? `instances=${child.count}` : 'mesh',
+        `name=${child.userData?.attributes?.name || child.name || '-'}`,
+        `definition=${child.userData?.attributes?.isInstanceDefinitionObject === true}`,
+        `parent=${child.parent?.type || '-'}`,
+        `parentLayer=${child.parent?.userData?.instanceLayerIndex ?? '-'}`,
+        `at=${position.x.toFixed(2)},${position.y.toFixed(2)},${position.z.toFixed(2)}`
+      ].join(','));
+    }
     S.selectedObjects.push(child);
     addSelectionOutline(child);
   });
+  if (gemDebug) document.title = `Gem debug: ${gemDebugRows.join(' | ') || 'none'}`;
   updatePropertiesPanel();
 }
 
