@@ -95,7 +95,7 @@ input[type="file"] { display: none; }
 /* Keep the entire header clearly distinct from the 3D viewport in dark mode. */
 [data-theme="dark"] #top-bar {
   background: #0c0b09;
-  border-bottom-color: #0c0b09;
+  border-bottom-color: #3a3a3a;
 }
 
 /* Embed-only presentation: leave the canvas at its native full size while
