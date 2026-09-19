@@ -347,6 +347,21 @@ function _hideSharedSaveAction() {
   if (!button) return;
   button.style.display = 'none';
   button.dataset.sharedCloudSave = 'false';
+  _setSavePanelIcon(false);
+}
+
+function _setSavePanelIcon(isCloudSave) {
+  const icon = document.querySelector('#btn-save-panel svg');
+  if (!icon) return;
+  icon.setAttribute('viewBox', '0 0 24 24');
+  icon.setAttribute('fill', 'none');
+  icon.setAttribute('stroke', 'currentColor');
+  icon.setAttribute('stroke-width', '2');
+  icon.setAttribute('stroke-linecap', isCloudSave ? 'round' : 'butt');
+  icon.setAttribute('stroke-linejoin', isCloudSave ? 'round' : 'miter');
+  icon.innerHTML = isCloudSave
+    ? '<path d="M6 18h12a4 4 0 00.6-7.96A6 6 0 007.1 8.6 4.7 4.7 0 006 18z"/><path d="M12 11v6"/><path d="M9.5 13.5L12 11l2.5 2.5"/>'
+    : '<path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>';
 }
 
 function _configureSharedSaveAsAction() {
@@ -375,6 +390,7 @@ function _configureSharedSaveAction(preparationFinished) {
   if (!button) return;
   button.style.display = '';
   button.dataset.sharedCloudSave = 'true';
+  _setSavePanelIcon(true);
   const label = button.querySelector('[data-i18n]');
   if (label) {
     label.dataset.i18n = 'file.save_cloud';
