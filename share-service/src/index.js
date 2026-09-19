@@ -395,6 +395,10 @@ function shareUrl(env, id) {
 
   const viewerUrl = new URL(requiredViewerOrigin(env));
   viewerUrl.searchParams.set('share', id);
+  // Keep shared links on the current Viewer document revision. The landing
+  // page itself is no-store, so this also recovers mobile browsers that still
+  // have an earlier Viewer HTML document in their cache.
+  viewerUrl.searchParams.set('release', '20260919-3');
   return viewerUrl.toString();
 }
 
@@ -535,6 +539,7 @@ async function getShareLandingPage(id, request, env, ctx) {
 
   const viewerUrl = new URL(requiredViewerOrigin(env));
   viewerUrl.searchParams.set('share', id);
+  viewerUrl.searchParams.set('release', '20260919-3');
   // Embed controls are declared on the existing public share URL. Preserve
   // only the known presentation flags when that URL redirects into Viewer.
   const landingUrl = new URL(request.url);

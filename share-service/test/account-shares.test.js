@@ -91,7 +91,7 @@ test('an embedded public share forwards only its presentation flags into Viewer'
   const html = await response.text();
 
   assert.equal(response.status, 200);
-  assert.match(html, new RegExp(`share=${SHARE_ID}\\u0026embed=1\\u0026header=0\\u0026embedVersion=2\\u0026file=0\\u0026viewport=full`));
+  assert.match(html, new RegExp(`share=${SHARE_ID}\\u0026release=20260919-3\\u0026embed=1\\u0026header=0\\u0026embedVersion=2\\u0026file=0\\u0026viewport=full`));
   assert.doesNotMatch(html, /ignored=value/);
 });
 
