@@ -249,6 +249,12 @@ html.embed-hides-header #top-bar { display: none; }
   pointer-events: none;
 }
 #empty-state.hidden { display: none; }
+.empty-logo {
+  width: 58px;
+  height: 58px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
 
 #empty-icon {
   width: auto;
