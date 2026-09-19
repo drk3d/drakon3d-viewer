@@ -158,6 +158,13 @@ const _PREPARE_FALLBACK_TTL_MS = 30 * 60 * 1000;
 let _cloudSaveExpiryTimer = null;
 const _sharePreparation    = _readSharePreparation(_sharedModelId);
 const _sharePrepareToken   = _sharePreparation?.token || null;
+// The first Viewer opened by DkShare carries a short-lived preparation token.
+// It remains the author's workspace, so Save As is useful there. A normal
+// visitor opening the active link gets the read-only review experience.
+const _isInitialShareCreationWindow = _isSharePreparationActive();
+let _isViewingSharedModel = Boolean(_sharedModelId);
+let _refreshedSharePreviewId = null;
+let _refreshedSharePreviewVersion = null;
 // This is deliberately fixed in the published viewer. It keeps links clean
 // (`?share=<id>`) and prevents a link from selecting an arbitrary file source.
 const _sharedModelApi      = 'https://drakon3d-share.lingering-voice-78d0.workers.dev';
@@ -183,6 +190,7 @@ if (_hasPlainPackage || _hasEncryptedPackage || _sharedModelId) {
   if (_sharedModelId) {
     ['btn-open-gdrive', 'btn-open-dropbox']
       .forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+    _configureSharedSaveAsAction();
     // A normal share is read-only. The creator-only action is revealed only
     // after its original, short-lived preparation has completed successfully.
     _configureSharedSaveAction(false);
@@ -341,6 +349,23 @@ function _hideSharedSaveAction() {
   button.dataset.sharedCloudSave = 'false';
 }
 
+function _configureSharedSaveAsAction() {
+  const button = document.getElementById('btn-save-as-panel');
+  if (!button) return;
+  // Keep Save As in the original, short-lived DkShare creation tab. Recipients
+  // only review the active link, so it is intentionally absent for them.
+  const isReadOnlySharedView = _isViewingSharedModel && !_isInitialShareCreationWindow;
+  button.style.display = isReadOnlySharedView ? 'none' : '';
+}
+
+function _restoreSaveAsAfterLocalOpen() {
+  // Loading a valid local model clears the active share in the loader/session
+  // loader. Keep the review restriction if an unsupported file was selected.
+  if (S.activeShareId) return;
+  _isViewingSharedModel = false;
+  _configureSharedSaveAsAction();
+}
+
 function _configureSharedSaveAction(preparationFinished) {
   if (!_sharedModelId || !preparationFinished || !_isSharePreparationActive()) {
     _hideSharedSaveAction();
@@ -462,6 +487,13 @@ async function _saveSharedSessionToCloud() {
         body: preview,
       });
       if (!previewResponse.ok) throw new Error(`HTTP ${previewResponse.status}`);
+      // The thumbnail endpoint has just changed. Tell an already-open Share
+      // dialog to use a unique URL rather than reusing its prior image cache.
+      _refreshedSharePreviewId = _sharedModelId;
+      _refreshedSharePreviewVersion = Date.now();
+      window.dispatchEvent(new CustomEvent('drakon:share-preview-updated', {
+        detail: { shareId: _sharedModelId, version: _refreshedSharePreviewVersion },
+      }));
     } catch (previewError) {
       console.warn('[Drakon Share] Cloud preview refresh failed:', previewError);
     }
@@ -1434,8 +1466,9 @@ function bindUI() {
       if (f.name.toLowerCase().endsWith('.rhv')) {
         await loadSession(f);
       } else {
-        handleFile(f, rhinoLoader, gltfLoader);
+        await handleFile(f, rhinoLoader, gltfLoader);
       }
+      _restoreSaveAsAfterLocalOpen();
     }
   });
 
@@ -1451,7 +1484,11 @@ function bindUI() {
     sessionInput.accept = sessionAccept;
   }
   sessionInput.addEventListener('change', async e => {
-    const f = e.target.files[0]; if (f) { await loadSession(f); }
+    const f = e.target.files[0];
+    if (f) {
+      await loadSession(f);
+      _restoreSaveAsAfterLocalOpen();
+    }
     e.target.value = '';
   });
 
@@ -1555,7 +1592,8 @@ function bindUI() {
       }
       const file = await handle.getFile();
       if (file.name.toLowerCase().endsWith('.rhv')) await loadSession(file, handle);
-      else handleFile(file, rhinoLoader, gltfLoader, handle);
+      else await handleFile(file, rhinoLoader, gltfLoader, handle);
+      _restoreSaveAsAfterLocalOpen();
     } else {
       fileInput.click();
     }
@@ -1705,6 +1743,14 @@ function bindUI() {
   const shareCopyEmbedButton = document.getElementById('btn-copy-embed-code');
   let activeShareDialogUrl = '';
 
+  const sharePreviewUrl = (shareId) => {
+    const previewUrl = `https://share.drakon3d.com/v1/shares/${encodeURIComponent(shareId)}/thumbnail`;
+    if (_refreshedSharePreviewId === shareId && _refreshedSharePreviewVersion) {
+      return `${previewUrl}?v=${encodeURIComponent(_refreshedSharePreviewVersion)}`;
+    }
+    return previewUrl;
+  };
+
   const closeShareDialog = () => shareDialog?.classList.add('hidden');
   const copyShareText = async (value, button, copiedKey) => {
     try {
@@ -1735,14 +1781,13 @@ function bindUI() {
     const shareId = S.activeShareId;
     if (!shareId) return;
     activeShareDialogUrl = `https://share.drakon3d.com/s/${encodeURIComponent(shareId)}`;
-    const previewUrl = `https://share.drakon3d.com/v1/shares/${encodeURIComponent(shareId)}/thumbnail`;
     const message = `View this Drakon3D model: ${activeShareDialogUrl}`;
     document.getElementById('share-whatsapp-link').href = `https://wa.me/?text=${encodeURIComponent(message)}`;
     document.getElementById('share-email-link').href = `mailto:?subject=${encodeURIComponent('Drakon3D model')}&body=${encodeURIComponent(message)}`;
     document.getElementById('share-facebook-link').href = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(activeShareDialogUrl)}`;
     document.getElementById('share-dialog-url').textContent = activeShareDialogUrl;
     shareDialogPreview.hidden = false;
-    shareDialogPreviewImage.src = previewUrl;
+    shareDialogPreviewImage.src = sharePreviewUrl(shareId);
     shareDialogActions.classList.remove('hidden');
     shareEmbedPanel.classList.add('hidden');
     shareHideHeader.checked = false;
@@ -1757,6 +1802,12 @@ function bindUI() {
   shareDialog?.addEventListener('mousedown', event => { if (event.target === shareDialog) closeShareDialog(); });
   shareDialogPreviewImage?.addEventListener('error', () => { shareDialogPreview.hidden = true; });
   shareDialogPreviewImage?.addEventListener('load', () => { shareDialogPreview.hidden = false; });
+  window.addEventListener('drakon:share-preview-updated', event => {
+    const shareId = event.detail?.shareId;
+    if (!shareId || shareId !== S.activeShareId || !shareDialogPreviewImage) return;
+    shareDialogPreview.hidden = false;
+    shareDialogPreviewImage.src = sharePreviewUrl(shareId);
+  });
   document.getElementById('btn-native-share')?.addEventListener('click', async () => {
     if (typeof navigator.share === 'function') {
       try {
@@ -3741,7 +3792,8 @@ function bindUI() {
       const f = files[0];
       const name = f.name.toLowerCase();
       if (name.endsWith('.rhv')) {
-        loadSession(f, await resolveDropHandle());
+        await loadSession(f, await resolveDropHandle());
+        _restoreSaveAsAfterLocalOpen();
       } else if (name.endsWith('.hdr')) {
         const { showLoading, hideLoading } = await import('./helpers.js');
         showLoading('Loading custom HDR background…');
@@ -3815,7 +3867,8 @@ function bindUI() {
           hideLoading();
         }
       } else {
-        handleFile(f, rhinoLoader, gltfLoader, await resolveDropHandle());
+        await handleFile(f, rhinoLoader, gltfLoader, await resolveDropHandle());
+        _restoreSaveAsAfterLocalOpen();
       }
     }
   });
