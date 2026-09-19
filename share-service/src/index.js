@@ -656,7 +656,10 @@ async function getThumbnail(id, env, ctx) {
   const headers = new Headers();
   preview.writeHttpMetadata(headers);
   headers.set('Content-Type', 'image/png');
-  headers.set('Cache-Control', 'public, max-age=600');
+  // A preview can be refreshed by the creator while their short-lived Cloud
+  // save is active. Revalidate it on each use so account cards and the share
+  // dialog do not keep showing the previous capture for ten minutes.
+  headers.set('Cache-Control', 'public, max-age=0, must-revalidate');
   headers.set('X-Content-Type-Options', 'nosniff');
   return new Response(preview.body, { headers });
 }
