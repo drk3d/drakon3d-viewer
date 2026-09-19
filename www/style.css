@@ -92,6 +92,11 @@ input[type="file"] { display: none; }
   overflow: visible;  /* must be visible so dropdown menus appear below */
 }
 
+/* Keep the entire header clearly distinct from the 3D viewport in dark mode. */
+[data-theme="dark"] #top-bar {
+  background: #282828;
+}
+
 /* Embed-only presentation: leave the canvas at its native full size while
    removing the Viewer header and all of its controls. */
 html.embed-hides-header #top-bar { display: none; }
