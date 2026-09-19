@@ -28,7 +28,7 @@ function setToolbarModelState(loaded) {
   center?.classList.toggle('no-model', !loaded);
   layerBtn?.classList.toggle('no-model', !loaded);
   bottomBar?.classList.toggle('no-model', !loaded);
-  syncGroupSelectionAvailability(loaded ? S.currentModel : null);
+  if (!loaded) syncGroupSelectionAvailability(null);
 }
 
 function applyLoadedDisplayMode() {
@@ -2625,6 +2625,11 @@ export function postProcessModel(model, addEdgesFlag, colorsAreSRGBStoredAsLinea
     child.castShadow    = S.shadowsEnabled;
     child.receiveShadow = S.shadowsEnabled;
   });
+
+  // 3DM group membership is restored onto the generated objects during the
+  // traversal above, so this must run after it — never when the raw scene first
+  // enters the Viewer.
+  syncGroupSelectionAvailability(model);
 }
 
 // ── Clear / dispose current model ─────────────────────────────────────────────
