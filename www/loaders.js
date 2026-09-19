@@ -8,7 +8,7 @@ import { fitCameraToObject, fitCameraToBox } from './camera.js';
 import { renderLayerUI, updateLayerVisibility } from './layers.js';
 import { createAnnotationSprites } from './annotations.js';
 import { renderNamedViewsUI } from './camera.js';
-import { resetSettingsToDefault } from './session.js?v=drakon-2.1';
+import { resetSettingsToDefault } from './session.js?v=drakon-2.2';
 import { showLoading, hideLoading, setProgress, setFileName, setActiveShareId, showModelInfo, showModal, showToast, syncGroupSelectionAvailability } from './helpers.js?v=drakon-2.0';
 import { t } from './i18n.js?v=drakon-1.6';
 import { destroyClippingCap } from './clip-cap.js';
@@ -2638,7 +2638,7 @@ export function postProcessModel(model, addEdgesFlag, colorsAreSRGBStoredAsLinea
   // material recogniser only after that work has completed, so the Select menu
   // uses exactly the same Drakon/Matrix/RhinoGold/Panther detection as the
   // rest of the Viewer without introducing a loader ↔ material-module cycle.
-  void import('./material-library.js?v=drakon-2.1').then(({ syncGemSelectionAvailability }) => {
+  void import('./material-library.js?v=drakon-2.2').then(({ syncGemSelectionAvailability }) => {
     if (S.currentModel === model) syncGemSelectionAvailability(model);
   }).catch(() => {});
 }

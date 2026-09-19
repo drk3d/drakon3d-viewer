@@ -91,6 +91,18 @@ const CATALOGUE_PRESETS = [...METAL_PRESETS, ...GEM_PRESETS];
 const METAL_NAME_PATTERN = /\b(?:gold|silver|platinum|palladium|steel|titanium|brass|bronze|copper)\b/i;
 const GEM_NAME_PATTERN = /\b(?:almandite|amethyst|aquamarine|aventurine|chalcedony|citrine|diamond|emerald|garnet|hiddenite|jade|kunzite|lapis\s+lazuli|malachite|opal|pearl|precious\s+beryl|quartz|ruby|sapphire|topaz|tourmaline|turquoise)\b/i;
 
+function isUnplacedInstanceDefinitionMesh(object) {
+  // Rhino's loader can keep one definition member at the document origin in
+  // addition to its placed InstanceReference copies. The source member has
+  // isInstanceDefinitionObject but no instance container; it is not document
+  // geometry and must not be treated as a material/gem target.
+  if (object?.userData?.attributes?.isInstanceDefinitionObject !== true) return false;
+  for (let parent = object.parent; parent; parent = parent.parent) {
+    if (typeof parent.userData?.instanceLayerIndex === 'number') return false;
+  }
+  return true;
+}
+
 function isModelMesh(object) {
   return object?.isMesh
     && object.name !== 'rhino-edges'
@@ -98,7 +110,8 @@ function isModelMesh(object) {
     && object.name !== 'rhino-outline'
     && object.name !== 'selection-outline'
     && object.name !== 'ground-plane'
-    && !object.userData?.isGemWireOverlay;
+    && !object.userData?.isGemWireOverlay
+    && !isUnplacedInstanceDefinitionMesh(object);
 }
 
 function isEffectivelyVisible(object) {

@@ -1,6 +1,6 @@
 import { S } from './state.js';
 import { t } from './i18n.js?v=drakon-1.6';
-import { GEM_PRESETS, METAL_PRESETS } from './material-library.js?v=drakon-2.1';
+import { GEM_PRESETS, METAL_PRESETS } from './material-library.js?v=drakon-2.2';
 import { isLegacyGem } from './legacy-gems.js';
 
 // Densities are sourced from Drakon's Factory .rmtl materials. The Viewer

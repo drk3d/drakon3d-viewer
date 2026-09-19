@@ -4,7 +4,7 @@ import { applyDisplayMode, ensureOwnMaterial } from './display.js';
 import { History } from './history.js';
 import { bindSliderDblClickInput } from './helpers.js';
 import { t } from './i18n.js?v=drakon-1.6';
-import { renderObjectMaterialsPanel } from './material-library.js?v=drakon-2.1';
+import { renderObjectMaterialsPanel } from './material-library.js?v=drakon-2.2';
 import { renderWeightPanel } from './weight.js';
 
 // ── Pointer hit-test / selection ─────────────────────────────────────────────

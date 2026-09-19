@@ -22,10 +22,10 @@ import { setupLights, updateSunLight, updateShadowCasting, addGroundPlane, remov
 import { switchToOrtho, switchToPersp, switchToTwoPoint, apply2PointConstraints, installTwoPointDragHandler, setViewPreset, setWalkthroughMode, triggerCameraTransition, fitCameraToBox, fitCameraToObject, fitCameraToSelected, saveCustomView, renderNamedViewsUI, updateAdaptiveClipping } from './camera.js';
 import { applySceneBackground, applyFileBackground, applyDisplayMode, applyEnvironmentPreset, applyLayerColorsToModel, recreateAllEdges, setEdgeAngleUniform, findMeshesNeedingEdges, countTriangles, buildEdgesFor, updateGemWireResolutions } from './display.js';
 import { renderLayerUI, updateLayerVisibility } from './layers.js';
-import { isDetectedGem, renderMaterialsPanel, syncGemSelectionAvailability } from './material-library.js?v=drakon-2.1';
+import { isDetectedGem, renderMaterialsPanel, syncGemSelectionAvailability } from './material-library.js?v=drakon-2.2';
 import { createAnnotationSprites } from './annotations.js';
-import { saveSession, loadSession, exportPackage, buildSessionBuffer } from './session.js?v=drakon-2.1';
-import { handleFile, clearCurrentModel } from './loaders.js?v=drakon-2.1';
+import { saveSession, loadSession, exportPackage, buildSessionBuffer } from './session.js?v=drakon-2.2';
+import { handleFile, clearCurrentModel } from './loaders.js?v=drakon-2.2';
 import * as GoogleDrive from './cloud/google-drive.js';
 import * as OneDrive from './cloud/onedrive.js';
 import * as Dropbox from './cloud/dropbox.js';
@@ -4530,12 +4530,23 @@ function isEffectivelyVisible(object) {
   return true;
 }
 
+function isUnplacedInstanceDefinitionMesh(object) {
+  // See material-library.js: an instance-definition source mesh may remain at
+  // the origin even though only its placed copies belong to the document.
+  if (object?.userData?.attributes?.isInstanceDefinitionObject !== true) return false;
+  for (let parent = object.parent; parent; parent = parent.parent) {
+    if (typeof parent.userData?.instanceLayerIndex === 'number') return false;
+  }
+  return true;
+}
+
 function isSelectableModelObject(object) {
   return Boolean(
     object
     && (object.isMesh || object.isLine || object.isLineSegments)
     && !NON_SELECTABLE_MODEL_OBJECT_NAMES.has(object.name)
     && !object.userData?.isGemWireOverlay
+    && !isUnplacedInstanceDefinitionMesh(object)
     && isEffectivelyVisible(object)
   );
 }
