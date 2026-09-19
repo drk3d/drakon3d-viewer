@@ -979,7 +979,7 @@ export async function loadSession(file, fileHandle = null) {
       view = null;
 
       // 1. Load the packed geometry first
-      const { loadGeometryFromGLB } = await import('./loaders.js?v=drakon-1.9');
+      const { loadGeometryFromGLB } = await import('./loaders.js?v=drakon-2.0');
       await loadGeometryFromGLB(glbBuffer, sourceFileName, glbBuffer.byteLength);
     } else {
       // Legacy JSON-only session file
