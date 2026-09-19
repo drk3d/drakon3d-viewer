@@ -127,6 +127,7 @@ let barContrastFrameCount = 0;
 // ── Bootstrap ─────────────────────────────────────────────────────────────
 document.getElementById('loading')?.classList.remove('hidden');
 initThemeSync();
+const _showOpenCloudOnLaunch = new URLSearchParams(window.location.search).get('openCloud') === '1';
 window.addEventListener('drakon:change-display-mode', (event) => {
   const { mode, force = false } = event.detail || {};
   if (mode) changeDisplayMode(mode, force);
@@ -469,6 +470,17 @@ export function setToolbarModelState(loaded) {
 
 function init() {
   const container = document.getElementById('canvas-container');
+
+  const openCloudButton = document.getElementById('btn-open-cloud');
+  if (_showOpenCloudOnLaunch) {
+    openCloudButton?.classList.remove('hidden');
+    const cleanUrl = new URL(window.location.href);
+    cleanUrl.searchParams.delete('openCloud');
+    window.history.replaceState(window.history.state, '', cleanUrl);
+  }
+  openCloudButton?.addEventListener('click', () => {
+    window.open('https://www.drakon3d.com/account/cloud', '_blank', 'noopener,noreferrer');
+  });
 
   // Disable model-dependent toolbar buttons until a model is loaded
   setToolbarModelState(false);

@@ -143,7 +143,7 @@ async function createShare(request, env, origin) {
 
   return json({
     id,
-    url: shareUrl(env, id),
+    url: shareLaunchUrl(env, id),
     prepareUrl: sharePrepareUrl(env, id, prepareToken),
     expiresAt: expiresAt.toISOString(),
     activeLinks: confirmed.activeCount,
@@ -402,9 +402,16 @@ function shareUrl(env, id) {
   return viewerUrl.toString();
 }
 
+function shareLaunchUrl(env, id) {
+  const url = new URL(shareUrl(env, id));
+  url.searchParams.set('openCloud', '1');
+  return url.toString();
+}
+
 function sharePrepareUrl(env, id, token) {
   const viewerUrl = new URL(requiredViewerOrigin(env));
   viewerUrl.searchParams.set('share', id);
+  viewerUrl.searchParams.set('openCloud', '1');
   // Fragments are not sent in HTTP requests or referrer headers. The viewer
   // exchanges this short-lived token for the initial model and its one-time
   // compact RHV replacement.
@@ -543,6 +550,9 @@ async function getShareLandingPage(id, request, env, ctx) {
   // Embed controls are declared on the existing public share URL. Preserve
   // only the known presentation flags when that URL redirects into Viewer.
   const landingUrl = new URL(request.url);
+  if (landingUrl.searchParams.get('openCloud') === '1') {
+    viewerUrl.searchParams.set('openCloud', '1');
+  }
   if (landingUrl.searchParams.get('embed') === '1') {
     viewerUrl.searchParams.set('embed', '1');
     if (landingUrl.searchParams.get('header') === '0') {

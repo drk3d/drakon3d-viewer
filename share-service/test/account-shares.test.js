@@ -86,12 +86,12 @@ test('an embedded public share forwards only its presentation flags into Viewer'
   });
 
   const response = await worker.fetch(new Request(
-    `https://worker.example/s/${SHARE_ID}?embed=1&header=0&file=0&viewport=full&ignored=value`,
+    `https://worker.example/s/${SHARE_ID}?openCloud=1&embed=1&header=0&file=0&viewport=full&ignored=value`,
   ), environment, { waitUntil() {} });
   const html = await response.text();
 
   assert.equal(response.status, 200);
-  assert.match(html, new RegExp(`share=${SHARE_ID}\\u0026release=20260919-3\\u0026embed=1\\u0026header=0\\u0026embedVersion=2\\u0026file=0\\u0026viewport=full`));
+  assert.match(html, new RegExp(`share=${SHARE_ID}\\u0026release=20260919-3\\u0026openCloud=1\\u0026embed=1\\u0026header=0\\u0026embedVersion=2\\u0026file=0\\u0026viewport=full`));
   assert.doesNotMatch(html, /ignored=value/);
 });
 

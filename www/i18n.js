@@ -77,6 +77,7 @@ export const TRANSLATIONS = {
 
     'file.open':          'Open',
     'file.open_local':    'Open (Local)',
+    'file.open_cloud':    'Open (Cloud)',
     'file.open_gdrive':   'Google Drive',
     'file.open_onedrive': 'OneDrive',
     'file.open_dropbox':  'Dropbox',
@@ -352,6 +353,7 @@ export const TRANSLATIONS = {
 
     'file.open':          '열기',
     'file.open_local':    '로컬 파일 열기',
+    'file.open_cloud':    'Cloud 열기',
     'file.open_gdrive':   'Google 드라이브',
     'file.open_onedrive': 'OneDrive',
     'file.open_dropbox':  'Dropbox',
@@ -627,6 +629,7 @@ export const TRANSLATIONS = {
 
     'file.open':          'Ouvrir',
     'file.open_local':    'Ouvrir (Local)',
+    'file.open_cloud':    'Ouvrir (Cloud)',
     'file.open_gdrive':   'Google Drive',
     'file.open_onedrive': 'OneDrive',
     'file.open_dropbox':  'Dropbox',
@@ -863,6 +866,7 @@ export const TRANSLATIONS = {
 
     'file.open':          'Öffnen',
     'file.open_local':    'Öffnen (Lokal)',
+    'file.open_cloud':    'Öffnen (Cloud)',
     'file.open_gdrive':   'Google Drive',
     'file.open_onedrive': 'OneDrive',
     'file.open_dropbox':  'Dropbox',
@@ -1099,6 +1103,7 @@ export const TRANSLATIONS = {
 
     'file.open':          'Abrir',
     'file.open_local':    'Abrir (Local)',
+    'file.open_cloud':    'Abrir (Cloud)',
     'file.open_gdrive':   'Google Drive',
     'file.open_onedrive': 'OneDrive',
     'file.open_dropbox':  'Dropbox',
@@ -1335,6 +1340,7 @@ export const TRANSLATIONS = {
 
     'file.open':          'Apri',
     'file.open_local':    'Apri (Locale)',
+    'file.open_cloud':    'Apri (Cloud)',
     'file.open_gdrive':   'Google Drive',
     'file.open_onedrive': 'OneDrive',
     'file.open_dropbox':  'Dropbox',
@@ -1571,6 +1577,7 @@ export const TRANSLATIONS = {
 
     'file.open':          '開く',
     'file.open_local':    'ローカルを開く',
+    'file.open_cloud':    'Cloud を開く',
     'file.open_gdrive':   'Google ドライブ',
     'file.open_onedrive': 'OneDrive',
     'file.open_dropbox':  'Dropbox',
@@ -1807,6 +1814,7 @@ export const TRANSLATIONS = {
 
     'file.open':          '打开',
     'file.open_local':    '打开本地文件',
+    'file.open_cloud':    '打开 Cloud',
     'file.open_gdrive':   'Google 云端硬盘',
     'file.open_onedrive': 'OneDrive',
     'file.open_dropbox':  'Dropbox',
@@ -2043,6 +2051,7 @@ export const TRANSLATIONS = {
 
     'file.open':          '開啟',
     'file.open_local':    '開啟本機檔案',
+    'file.open_cloud':    '開啟 Cloud',
     'file.open_gdrive':   'Google 雲端硬碟',
     'file.open_onedrive': 'OneDrive',
     'file.open_dropbox':  'Dropbox',
@@ -2279,6 +2288,7 @@ export const TRANSLATIONS = {
 
     'file.open':          'Abrir',
     'file.open_local':    'Abrir (Local)',
+    'file.open_cloud':    'Abrir (Cloud)',
     'file.open_gdrive':   'Google Drive',
     'file.open_onedrive': 'OneDrive',
     'file.open_dropbox':  'Dropbox',
@@ -2515,6 +2525,7 @@ export const TRANSLATIONS = {
 
     'file.open':          'Otevřít',
     'file.open_local':    'Otevřít (Lokálně)',
+    'file.open_cloud':    'Otevřít (Cloud)',
     'file.open_gdrive':   'Google Drive',
     'file.open_onedrive': 'OneDrive',
     'file.open_dropbox':  'Dropbox',
@@ -2751,6 +2762,7 @@ export const TRANSLATIONS = {
 
     'file.open':          'Otwórz',
     'file.open_local':    'Otwórz (Lokalnie)',
+    'file.open_cloud':    'Otwórz (Cloud)',
     'file.open_gdrive':   'Google Drive',
     'file.open_onedrive': 'OneDrive',
     'file.open_dropbox':  'Dropbox',
