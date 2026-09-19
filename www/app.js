@@ -17,15 +17,15 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { initI18n, setLang, applyI18n, t, currentLang } from './i18n.js?v=drakon-1.8';
 
 import { S } from './state.js';
-import { updateSliderFill, updateAllSliderFills, updateSelectIcon, showLoading, hideLoading, showToast, bindSliderDblClickInput, beginSave, setActiveShareId } from './helpers.js';
+import { updateSliderFill, updateAllSliderFills, updateSelectIcon, showLoading, hideLoading, showToast, bindSliderDblClickInput, beginSave, setActiveShareId, syncGroupSelectionAvailability } from './helpers.js?v=drakon-2.0';
 import { setupLights, updateSunLight, updateShadowCasting, addGroundPlane, removeGroundPlane, computeVisibleBoundingBox } from './lighting.js';
 import { switchToOrtho, switchToPersp, switchToTwoPoint, apply2PointConstraints, installTwoPointDragHandler, setViewPreset, setWalkthroughMode, triggerCameraTransition, fitCameraToBox, fitCameraToObject, fitCameraToSelected, saveCustomView, renderNamedViewsUI, updateAdaptiveClipping } from './camera.js';
 import { applySceneBackground, applyFileBackground, applyDisplayMode, applyEnvironmentPreset, applyLayerColorsToModel, recreateAllEdges, setEdgeAngleUniform, findMeshesNeedingEdges, countTriangles, buildEdgesFor, updateGemWireResolutions } from './display.js';
 import { renderLayerUI, updateLayerVisibility } from './layers.js';
 import { isDetectedGem, renderMaterialsPanel } from './material-library.js';
 import { createAnnotationSprites } from './annotations.js';
-import { saveSession, loadSession, exportPackage, buildSessionBuffer } from './session.js?v=drakon-1.8';
-import { handleFile, clearCurrentModel } from './loaders.js?v=drakon-1.8';
+import { saveSession, loadSession, exportPackage, buildSessionBuffer } from './session.js?v=drakon-1.9';
+import { handleFile, clearCurrentModel } from './loaders.js?v=drakon-1.9';
 import * as GoogleDrive from './cloud/google-drive.js';
 import * as OneDrive from './cloud/onedrive.js';
 import * as Dropbox from './cloud/dropbox.js';
@@ -689,6 +689,7 @@ export function setToolbarModelState(loaded) {
     layerBtn?.classList.add('no-model');
     bottomBar?.classList.add('no-model');
   }
+  syncGroupSelectionAvailability(loaded ? S.currentModel : null);
 }
 
 function init() {

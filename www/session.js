@@ -869,7 +869,7 @@ export async function loadSession(file, fileHandle = null) {
   const sourceFileName = file?.name || 'session.rhv';
   const { showLoading, hideLoading, setActiveShareId } = await import('./helpers.js');
   setActiveShareId(null);
-  showLoading('Loading session…');
+  showLoading();
 
   // Suppress history recording for the duration of restore — dispatched
   // input/change events during settings playback would otherwise fill the
@@ -979,7 +979,7 @@ export async function loadSession(file, fileHandle = null) {
       view = null;
 
       // 1. Load the packed geometry first
-      const { loadGeometryFromGLB } = await import('./loaders.js');
+      const { loadGeometryFromGLB } = await import('./loaders.js?v=drakon-1.9');
       await loadGeometryFromGLB(glbBuffer, sourceFileName, glbBuffer.byteLength);
     } else {
       // Legacy JSON-only session file

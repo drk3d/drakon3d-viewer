@@ -266,6 +266,46 @@ export function updateSelectIcon(mode) {
   if (iconNone)   iconNone.style.display   = mode === 'none'   ? '' : 'none';
 }
 
+// Group selection is meaningful only when the document contains native Rhino
+// group membership.  Keep the menu in sync with the current document instead
+// of leaving a non-functional option behind after opening a different file.
+export function syncGroupSelectionAvailability(model = S.currentModel) {
+  const groupItem = document.querySelector('#select-dropdown .dropdown-item[data-select="group"]');
+  if (!groupItem) return false;
+
+  let hasGroups = false;
+  model?.traverse?.(object => {
+    if (hasGroups) return;
+    const rawGroups = object?.userData?.attributes?.groupIndices
+      ?? object?.userData?.attributes?.groupIds
+      ?? object?.userData?.groupIndices;
+    if (!rawGroups || typeof rawGroups[Symbol.iterator] !== 'function') return;
+    hasGroups = Array.from(rawGroups).some(groupIndex => Number.isInteger(Number(groupIndex)));
+  });
+
+  groupItem.classList.toggle('hidden', !hasGroups);
+
+  // A previously selected Group mode cannot carry into a document without
+  // groups. Fall back to normal single selection and refresh its visual state.
+  if (!hasGroups && S.selectMode === 'group') {
+    S.selectMode = 'single';
+    document.querySelectorAll('#select-dropdown .dropdown-item[data-select]').forEach(item => {
+      item.classList.toggle('active', item.dataset.select === 'single');
+    });
+    const singleItem = document.querySelector('#select-dropdown .dropdown-item[data-select="single"]');
+    const trigger = document.getElementById('btn-select-dropdown');
+    const label = singleItem?.querySelector('span')?.textContent?.split(' ')[0];
+    if (trigger && label) {
+      const triggerLabel = trigger.querySelector('span');
+      if (triggerLabel) triggerLabel.textContent = `Select: ${label}`;
+      trigger.title = `Selection Mode (${label})`;
+    }
+    updateSelectIcon('single');
+  }
+
+  return hasGroups;
+}
+
 export function isPageVisuallyDark() {
   try {
     const panel = document.getElementById('settings-right-panel') || document.body;

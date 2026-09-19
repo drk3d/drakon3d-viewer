@@ -8,8 +8,8 @@ import { fitCameraToObject, fitCameraToBox } from './camera.js';
 import { renderLayerUI, updateLayerVisibility } from './layers.js';
 import { createAnnotationSprites } from './annotations.js';
 import { renderNamedViewsUI } from './camera.js';
-import { resetSettingsToDefault } from './session.js?v=drakon-1.8';
-import { showLoading, hideLoading, setProgress, setFileName, setActiveShareId, showModelInfo, showModal, showToast } from './helpers.js';
+import { resetSettingsToDefault } from './session.js?v=drakon-1.9';
+import { showLoading, hideLoading, setProgress, setFileName, setActiveShareId, showModelInfo, showModal, showToast, syncGroupSelectionAvailability } from './helpers.js?v=drakon-2.0';
 import { t } from './i18n.js?v=drakon-1.6';
 import { destroyClippingCap } from './clip-cap.js';
 import { DRAKON_VIEWER_OBJECT_TYPE_KEY, readRhinoUserString } from './drakon-objects.js';
@@ -28,6 +28,7 @@ function setToolbarModelState(loaded) {
   center?.classList.toggle('no-model', !loaded);
   layerBtn?.classList.toggle('no-model', !loaded);
   bottomBar?.classList.toggle('no-model', !loaded);
+  syncGroupSelectionAvailability(loaded ? S.currentModel : null);
 }
 
 function applyLoadedDisplayMode() {
