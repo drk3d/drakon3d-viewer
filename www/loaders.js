@@ -2662,7 +2662,11 @@ export function clearCurrentModel() {
     }
   }
 
+  // The initial share load starts with no model, then calls this helper before
+  // its geometry is installed. Keep the instruction hidden for that brief
+  // transition. A real close/replacement has a current model and restores it.
   if (!S.currentModel) return;
+  document.documentElement.classList.remove('shared-link-loading');
 
   S.clippingToggleOn = false;
   S.clippingHasBeenInitialized = false;

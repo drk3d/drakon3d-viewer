@@ -243,6 +243,9 @@ if (_hasPlainPackage || _hasEncryptedPackage || _sharedModelId) {
         return;
       }
       if (_sharedModelId) alert(`Could not open this Drakon share link. ${e.message || ''}`.trim());
+      // The share failed before a model could replace the empty state, so this
+      // is now an ordinary empty Viewer and should show its opening guidance.
+      document.documentElement.classList.remove('shared-link-loading');
       document.getElementById('loading')?.classList.add('hidden');
     }
   })();

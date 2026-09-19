@@ -254,6 +254,9 @@ html.embed-hides-header #top-bar { display: none; }
   pointer-events: none;
 }
 #empty-state.hidden { display: none; }
+/* A `?share=` session already has a model on its way.  The inline startup
+   marker is set before the empty state paints, avoiding an Open File flash. */
+.shared-link-loading #empty-state .empty-sub { display: none; }
 .empty-logo {
   width: 58px;
   height: 58px;

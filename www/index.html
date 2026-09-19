@@ -47,7 +47,14 @@
   <meta name="theme-color" content="#0c0b09"/>
 
   <link rel="stylesheet" href="libs/coloris.min.css">
-  <link rel="stylesheet" href="style.css?v=drakon-1.8">
+  <link rel="stylesheet" href="style.css?v=drakon-1.9">
+  <script>
+    // A shared model is about to load. Keep the branded empty-state heading,
+    // but do not briefly offer local file-opening instructions in its place.
+    if (new URLSearchParams(window.location.search).has('share')) {
+      document.documentElement.classList.add('shared-link-loading');
+    }
+  </script>
   <!-- Fonts: use the OS system-font stack from style.css (no webfont download) -->
   <script src="libs/coloris.min.js"></script>
   <script src="libs/rhino3dm.min.js"></script>
@@ -1200,6 +1207,6 @@
       document.getElementById('top-bar')?.style.setProperty('display', 'none', 'important');
     }
   </script>
-  <script type="module" src="app.js?v=drakon-2.9"></script>
+  <script type="module" src="app.js?v=drakon-3.0"></script>
 </body>
 </html>
