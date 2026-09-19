@@ -22,10 +22,10 @@ import { setupLights, updateSunLight, updateShadowCasting, addGroundPlane, remov
 import { switchToOrtho, switchToPersp, switchToTwoPoint, apply2PointConstraints, installTwoPointDragHandler, setViewPreset, setWalkthroughMode, triggerCameraTransition, fitCameraToBox, fitCameraToObject, fitCameraToSelected, saveCustomView, renderNamedViewsUI, updateAdaptiveClipping } from './camera.js';
 import { applySceneBackground, applyFileBackground, applyDisplayMode, applyEnvironmentPreset, applyLayerColorsToModel, recreateAllEdges, setEdgeAngleUniform, findMeshesNeedingEdges, countTriangles, buildEdgesFor, updateGemWireResolutions } from './display.js';
 import { renderLayerUI, updateLayerVisibility } from './layers.js';
-import { isDetectedGem, renderMaterialsPanel } from './material-library.js';
+import { isDetectedGem, renderMaterialsPanel, syncGemSelectionAvailability } from './material-library.js?v=drakon-2.1';
 import { createAnnotationSprites } from './annotations.js';
-import { saveSession, loadSession, exportPackage, buildSessionBuffer } from './session.js?v=drakon-2.0';
-import { handleFile, clearCurrentModel } from './loaders.js?v=drakon-2.0';
+import { saveSession, loadSession, exportPackage, buildSessionBuffer } from './session.js?v=drakon-2.1';
+import { handleFile, clearCurrentModel } from './loaders.js?v=drakon-2.1';
 import * as GoogleDrive from './cloud/google-drive.js';
 import * as OneDrive from './cloud/onedrive.js';
 import * as Dropbox from './cloud/dropbox.js';
@@ -690,6 +690,7 @@ export function setToolbarModelState(loaded) {
     bottomBar?.classList.add('no-model');
   }
   syncGroupSelectionAvailability(loaded ? S.currentModel : null);
+  if (!loaded) syncGemSelectionAvailability(null);
 }
 
 function init() {
@@ -2633,7 +2634,7 @@ function bindUI() {
   document.getElementById('btn-select-gems')?.addEventListener('click', () => {
     document.getElementById('select-dropdown')?.classList.add('hidden');
     document.getElementById('find-panel')?.classList.add('hidden');
-    selectObjectsByName('Gem');
+    selectDetectedGems();
   });
 
   document.getElementById('btn-invert-selection')?.addEventListener('click', () => {
@@ -4516,6 +4517,47 @@ async function exportGLB(writeHandle = null, customFileName = null) {
   );
 }
 
+const NON_SELECTABLE_MODEL_OBJECT_NAMES = new Set([
+  'rhino-edges', 'gem-wires', 'rhino-outline', 'selection-outline', 'ground-plane'
+]);
+
+function isEffectivelyVisible(object) {
+  // A mesh may keep its own visible flag while its layer/instance parent is
+  // hidden. It is not rendered in that state and must not be selected.
+  for (let current = object; current; current = current.parent) {
+    if (!current.visible) return false;
+  }
+  return true;
+}
+
+function isSelectableModelObject(object) {
+  return Boolean(
+    object
+    && (object.isMesh || object.isLine || object.isLineSegments)
+    && !NON_SELECTABLE_MODEL_OBJECT_NAMES.has(object.name)
+    && !object.userData?.isGemWireOverlay
+    && isEffectivelyVisible(object)
+  );
+}
+
+function selectDetectedGems() {
+  clearSelection();
+  if (!S.currentModel) {
+    updatePropertiesPanel();
+    return;
+  }
+
+  S.currentModel.traverse(child => {
+    // Gems are always mesh geometry. Limiting the operation to visible model
+    // meshes prevents hidden helpers — including the invisible centre square
+    // in Shaded/Wire — from being included in the Gems selection.
+    if (!child.isMesh || !isSelectableModelObject(child) || !isDetectedGem(child)) return;
+    S.selectedObjects.push(child);
+    addSelectionOutline(child);
+  });
+  updatePropertiesPanel();
+}
+
 function selectObjectsByName(query) {
   const normalizedQuery = String(query || '').trim().toLowerCase();
   clearSelection();
@@ -4525,12 +4567,9 @@ function selectObjectsByName(query) {
   }
 
   S.currentModel.traverse(child => {
-    if (!(child.isMesh || child.isLine || child.isLineSegments)) return;
-    if (child.name === 'rhino-edges' || child.name === 'gem-wires' || child.name === 'rhino-outline' ||
-        child.name === 'selection-outline' || child.name === 'ground-plane') return;
+    if (!isSelectableModelObject(child)) return;
     const name = child.userData?.attributes?.name || child.name || '';
-    if (name.toLowerCase().includes(normalizedQuery)
-        || (normalizedQuery === 'gem' && isDetectedGem(child))) {
+    if (name.toLowerCase().includes(normalizedQuery)) {
       S.selectedObjects.push(child);
       addSelectionOutline(child);
     }

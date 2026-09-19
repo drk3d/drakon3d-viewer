@@ -8,7 +8,7 @@ import { fitCameraToObject, fitCameraToBox } from './camera.js';
 import { renderLayerUI, updateLayerVisibility } from './layers.js';
 import { createAnnotationSprites } from './annotations.js';
 import { renderNamedViewsUI } from './camera.js';
-import { resetSettingsToDefault } from './session.js?v=drakon-2.0';
+import { resetSettingsToDefault } from './session.js?v=drakon-2.1';
 import { showLoading, hideLoading, setProgress, setFileName, setActiveShareId, showModelInfo, showModal, showToast, syncGroupSelectionAvailability } from './helpers.js?v=drakon-2.0';
 import { t } from './i18n.js?v=drakon-1.6';
 import { destroyClippingCap } from './clip-cap.js';
@@ -28,7 +28,10 @@ function setToolbarModelState(loaded) {
   center?.classList.toggle('no-model', !loaded);
   layerBtn?.classList.toggle('no-model', !loaded);
   bottomBar?.classList.toggle('no-model', !loaded);
-  if (!loaded) syncGroupSelectionAvailability(null);
+  if (!loaded) {
+    syncGroupSelectionAvailability(null);
+    document.getElementById('btn-select-gems')?.classList.add('hidden');
+  }
 }
 
 function applyLoadedDisplayMode() {
@@ -2630,6 +2633,14 @@ export function postProcessModel(model, addEdgesFlag, colorsAreSRGBStoredAsLinea
   // traversal above, so this must run after it — never when the raw scene first
   // enters the Viewer.
   syncGroupSelectionAvailability(model);
+
+  // Legacy-gem metadata is also attached during the traversal above. Load the
+  // material recogniser only after that work has completed, so the Select menu
+  // uses exactly the same Drakon/Matrix/RhinoGold/Panther detection as the
+  // rest of the Viewer without introducing a loader ↔ material-module cycle.
+  void import('./material-library.js?v=drakon-2.1').then(({ syncGemSelectionAvailability }) => {
+    if (S.currentModel === model) syncGemSelectionAvailability(model);
+  }).catch(() => {});
 }
 
 // ── Clear / dispose current model ─────────────────────────────────────────────

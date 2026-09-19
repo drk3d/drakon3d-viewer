@@ -4,7 +4,7 @@ import { setupLights, updateGroundAppearance, applyFileSunSettings } from './lig
 import { isPageVisuallyDark, updateSliderFill } from './helpers.js';
 import { BACKGROUND_PRESETS } from './background-presets.js';
 import { createGemstoneMaterial, gemstoneKindFromNames, gemstoneWhiteFallbackColorFromNames } from './gem-material.js';
-import { catalogueMaterialOverrideFromNames } from './material-library.js';
+import { catalogueMaterialOverrideFromNames } from './material-library.js?v=drakon-2.1';
 import { isDrakonGemType } from './drakon-objects.js';
 import { isLegacyGem } from './legacy-gems.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';

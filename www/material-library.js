@@ -97,7 +97,8 @@ function isModelMesh(object) {
     && object.name !== 'gem-wires'
     && object.name !== 'rhino-outline'
     && object.name !== 'selection-outline'
-    && object.name !== 'ground-plane';
+    && object.name !== 'ground-plane'
+    && !object.userData?.isGemWireOverlay;
 }
 
 function isEffectivelyVisible(object) {
@@ -147,11 +148,34 @@ function isDetectedMetal(object) {
 }
 
 export function isDetectedGem(object) {
+  // The Viewer has a few internal meshes (selection/ground/visual helpers).
+  // They must never become gems merely because an internal label happens to
+  // contain the word "Gem".
+  if (!isModelMesh(object)) return false;
+
   return object.userData?.customMaterial?.materialCategory === 'gem'
     || isDrakonGemType(object.userData?.drakonObjectType)
     || isLegacyGem(object)
     || /\bgem\b/i.test(object.userData?.attributes?.name || object.name || '')
     || materialNamesFor(object).some(name => GEM_NAME_PATTERN.test(name));
+}
+
+// The Gems action is relevant only when the document itself contains a gem.
+// isDetectedGem covers current Drakon gems, archived Drakon/Panther gems,
+// Matrix blocks, RhinoGold meshes, and the recognised material-name fallbacks.
+// Keep the menu item's state in this module so it uses the exact same
+// recognition rules as Materials, Weight, and the Gems selection action.
+export function syncGemSelectionAvailability(model = S.currentModel) {
+  const gemButton = document.getElementById('btn-select-gems');
+  if (!gemButton) return false;
+
+  let hasGems = false;
+  model?.traverse?.(object => {
+    if (!hasGems && isDetectedGem(object)) hasGems = true;
+  });
+
+  gemButton.classList.toggle('hidden', !hasGems);
+  return hasGems;
 }
 
 function makeMetalOverride(preset) {
