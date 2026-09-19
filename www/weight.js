@@ -1,5 +1,5 @@
 import { S } from './state.js';
-import { t } from './i18n.js';
+import { t } from './i18n.js?v=drakon-1.6';
 import { GEM_PRESETS, METAL_PRESETS } from './material-library.js';
 import { isLegacyGem } from './legacy-gems.js';
 

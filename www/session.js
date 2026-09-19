@@ -5,7 +5,7 @@ import { switchToPersp, getCustomViews, fitCameraToBox } from './camera.js';
 import { computeVisibleBoundingBox } from './lighting.js';
 import { updateSliderFill, isPageVisuallyDark, showToast } from './helpers.js';
 import { History } from './history.js';
-import { t } from './i18n.js';
+import { t } from './i18n.js?v=drakon-1.6';
 
 // ── .rhv format versioning ───────────────────────────────────────────────────
 // Full contract in docs/rhv-format.md. Two producers write this format — this
@@ -1147,7 +1147,7 @@ export async function loadSession(file, fileHandle = null) {
         }
         
         const { updateClippingPlane, setupClippingHelper } = await import('./tools.js');
-        const { t } = await import('./i18n.js');
+        const { t } = await import('./i18n.js?v=drakon-1.6');
         
         updateClippingPlane();
         S.clippingHasBeenInitialized = true;

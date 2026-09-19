@@ -98,7 +98,7 @@ class HistoryManager {
         });
         const toggleBtn = document.getElementById('btn-clip-toggle');
         if (toggleBtn) {
-          const m = await import('./i18n.js');
+          const m = await import('./i18n.js?v=drakon-1.6');
           toggleBtn.classList.toggle('active', S.clippingToggleOn);
           toggleBtn.textContent = S.clippingToggleOn ? m.t('clip.on') : m.t('clip.off');
         }

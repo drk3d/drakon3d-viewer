@@ -29,7 +29,7 @@
 // every later gesture. Every branch below is written to preserve that.
 // ─────────────────────────────────────────────────────────────────────────────
 import { S } from './state.js';
-import { t } from './i18n.js';
+import { t } from './i18n.js?v=drakon-1.6';
 import { showToast } from './helpers.js';
 
 const PREF_KEY = 'drakon3d_pen_only_measure';
