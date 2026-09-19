@@ -71,9 +71,41 @@ export async function loadLastFileHandle() {
 
 // ── Object identity key (for session serialisation) ──────────────────────────
 
+// Earlier sessions used name + layer. That is not an object identity: a ring
+// can have many prongs, beads or stone meshes with the same name on one layer.
+// Their material records then overwrote each other in customMaterials. Prefer
+// Rhino's stable object id; when an imported format has no id, stamp a small
+// key into glTF extras so it survives every RHV round trip.
+function getLegacyObjectKey(obj) {
+  const attributes = obj.userData?.attributes || {};
+  return `${attributes.name || 'obj'}_L${attributes.layerIndex ?? 0}`;
+}
+
+function createSessionObjectKey() {
+  if (typeof globalThis.crypto?.randomUUID === 'function') return `viewer:${globalThis.crypto.randomUUID()}`;
+  return `viewer:${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
 export function getObjectKey(obj) {
-  const a = obj.userData.attributes || {};
-  return (a.name || 'obj') + '_L' + (a.layerIndex ?? 0);
+  const userData = obj.userData || (obj.userData = {});
+  const attributes = userData.attributes || {};
+  const rhinoId = attributes.id;
+  if (typeof rhinoId === 'string' && rhinoId.trim()) return `rhino:${rhinoId}`;
+  if (Number.isSafeInteger(rhinoId)) return `rhino:${rhinoId}`;
+
+  if (typeof userData.sessionObjectKey === 'string' && userData.sessionObjectKey.startsWith('viewer:')) {
+    return userData.sessionObjectKey;
+  }
+  const key = createSessionObjectKey();
+  userData.sessionObjectKey = key;
+  return key;
+}
+
+function getSavedObjectState(records, object) {
+  if (!records) return undefined;
+  // Keep existing RHV files readable. A legacy collision cannot be untangled
+  // retroactively, but any new save upgrades each object to its unique key.
+  return records[getObjectKey(object)] ?? records[getLegacyObjectKey(object)];
 }
 
 // (No GLB-level mesh compression. We tried meshopt FILTER/QUANTIZE and Draco;
@@ -1224,14 +1256,16 @@ export async function loadSession(file, fileHandle = null) {
         if (!child.isMesh || !child.userData.originalMaterial) return;
         if (['rhino-outline', 'rhino-edges', 'selection-outline'].includes(child.name)) return;
         const key = getObjectKey(child);
-        if (data.hiddenKeys?.includes(key)) {
+        const legacyKey = getLegacyObjectKey(child);
+        if (data.hiddenKeys?.includes(key) || data.hiddenKeys?.includes(legacyKey)) {
           child.visible = false;
           S.hiddenObjects.add(child);
         } else {
           child.visible = true;
         }
-        if (data.customMaterials?.[key]) {
-          child.userData.customMaterial = { ...data.customMaterials[key] };
+        const savedMaterial = getSavedObjectState(data.customMaterials, child);
+        if (savedMaterial) {
+          child.userData.customMaterial = { ...savedMaterial };
           if (child.userData.customMaterial.mapTexture !== null && child.userData.customMaterial.mapTexture !== undefined) {
             const orig = child.userData.renderedMaterial || child.userData.originalMaterial;
             if (orig && orig.map) {

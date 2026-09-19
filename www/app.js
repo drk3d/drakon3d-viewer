@@ -24,7 +24,7 @@ import { applySceneBackground, applyFileBackground, applyDisplayMode, applyEnvir
 import { renderLayerUI, updateLayerVisibility } from './layers.js';
 import { isDetectedGem, renderMaterialsPanel } from './material-library.js';
 import { createAnnotationSprites } from './annotations.js';
-import { saveSession, loadSession, exportPackage, buildSessionBuffer } from './session.js';
+import { saveSession, loadSession, exportPackage, buildSessionBuffer } from './session.js?v=drakon-1.7';
 import { handleFile, clearCurrentModel } from './loaders.js?v=drakon-1.8';
 import * as GoogleDrive from './cloud/google-drive.js';
 import * as OneDrive from './cloud/onedrive.js';
