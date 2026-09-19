@@ -5,14 +5,17 @@
 export const DEFAULT_KEYGEN_ACCOUNT_ID = 'f301b769-0700-43e5-bce6-a4af9e55d29b';
 export const DEFAULT_KEYGEN_PRODUCT_ID = '859745b0-e758-44b7-9380-5c275f315884';
 
-// These IDs mirror the production Drakon licensing policies. The legacy
-// Commercial 1.0 policy is deliberately absent: it is not valid in current
-// Drakon releases and must not gain public sharing access.
+// These IDs mirror the production Drakon licensing policies. Commercial 1.0
+// remains an active commercial licence, so it receives the same public-share
+// allowance as Commercial 2.0.
 const POLICY_IDS = Object.freeze({
   trial: '4fece003-a155-4dfa-8f79-9c74919d5763',
   educational: '016f151a-9be8-44fe-a01e-2d0c6a7d6ba2',
   lab: '3787f0f4-32b4-4d85-a82c-85a409e0f192',
-  commercial: 'f9158572-603b-47d5-a843-e29913671919',
+  commercial: Object.freeze([
+    'f9158572-603b-47d5-a843-e29913671919', // Commercial 2.0
+    'de789532-945b-4de9-a0a3-2babfeea63c5', // Commercial 1.0
+  ]),
 });
 
 const DEFAULT_LIMITS = Object.freeze({
@@ -71,7 +74,7 @@ export function resolveLicenseSharePolicy(license, configuration) {
   if (policyId === POLICY_IDS.trial) key = 'trial';
   else if (policyId === POLICY_IDS.educational) key = 'educational';
   else if (policyId === POLICY_IDS.lab) key = 'lab';
-  else if (policyId === POLICY_IDS.commercial) {
+  else if (POLICY_IDS.commercial.includes(policyId)) {
     key = truthyMetadata(license?.attributes?.metadata?.pro) ? 'commercialPro' : 'commercial';
   }
   if (!key) return null;
